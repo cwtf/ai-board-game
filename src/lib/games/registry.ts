@@ -1,13 +1,6 @@
-export interface GameMeta {
-  id: 'splendor' | 'exploding-kittens';
-  name: string;
-  description: string;
-  minPlayers: number;
-  maxPlayers: number;
-  hiddenInformation: boolean;
-  estimatedAITurnTokens: number;
-  docPath: string;
-}
+import type { GameMeta } from './shared/types';
+
+export type { GameMeta } from './shared/types';
 
 export const games: GameMeta[] = [
   {

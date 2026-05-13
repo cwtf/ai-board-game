@@ -64,11 +64,11 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 > Spec: DESIGN.md §2.4 (GameAdapter), §2.5 (AI move flow).
 
-29. [scaffold] `src/lib/games/shared/types.ts`: `GameAdapter<State, Move>`, `MoveRecord`, helpers.
-30. [scaffold] `src/lib/games/shared/rng.ts`: seedable mulberry32. `createRng(seed: string)`.
-31. [scaffold] `src/lib/games/shared/shuffle.ts`: Fisher-Yates with injected RNG.
-32. [scaffold] `src/lib/games/shared/loop.ts`: generic turn loop. Handles AI invocation, retry (max 3), random-legal fallback, logging. Exposes a store/observable.
-33. [test] Determinism: same seed → same shuffle. Loop unit tests with a mock adapter (mock provider returns scripted moves).
+29. [x] [scaffold] `src/lib/games/shared/types.ts`: `GameAdapter<State, Move>`, `MoveRecord`, helpers.
+30. [x] [scaffold] `src/lib/games/shared/rng.ts`: seedable mulberry32. `createRng(seed: string)`.
+31. [x] [scaffold] `src/lib/games/shared/shuffle.ts`: Fisher-Yates with injected RNG.
+32. [x] [scaffold] `src/lib/games/shared/loop.ts`: generic turn loop. Handles AI invocation, retry (max 3), random-legal fallback, logging. Exposes a store/observable.
+33. [x] [test] Determinism: same seed → same shuffle. Loop unit tests with a mock adapter (mock provider returns scripted moves).
 
 ## Phase 5 — Splendor engine
 
