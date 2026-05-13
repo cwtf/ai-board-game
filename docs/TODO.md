@@ -74,11 +74,11 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 > **Read [docs/games/splendor.md](docs/games/splendor.md) before starting.**
 
-34. [engine] `src/lib/games/splendor/data/cards.ts`: 90 cards (40/30/20) per the rulebook list.
-35. [engine] `src/lib/games/splendor/data/nobles.ts`: 10 nobles.
-36. [engine] `src/lib/games/splendor/state.ts`: types per docs/games/splendor.md §5, `init()` factory.
-37. [engine] `src/lib/games/splendor/rules.ts`: `legalMoves`, `applyMove`, `currentPlayer`, `isTerminal`, `winner`. Pure functions.
-38. [test] Per docs/games/splendor.md §8 edge cases:
+34. [x] [engine] `src/lib/games/splendor/data/cards.ts`: 90 cards (40/30/20) per the rulebook list.
+35. [x] [engine] `src/lib/games/splendor/data/nobles.ts`: 10 nobles.
+36. [x] [engine] `src/lib/games/splendor/state.ts`: types per docs/games/splendor.md §5, `init()` factory.
+37. [x] [engine] `src/lib/games/splendor/rules.ts`: `legalMoves`, `applyMove`, `currentPlayer`, `isTerminal`, `winner`. Pure functions.
+38. [x] [test] Per docs/games/splendor.md §8 edge cases:
     - Token conservation.
     - Can't buy what you can't afford (including with gold).
     - 2-of-a-kind requires ≥4 in supply.
@@ -86,8 +86,8 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
     - Final-round trigger.
     - Token discard down to 10.
     - Noble auto-claim at most one per turn.
-39. [ai] `src/lib/games/splendor/ai-adapter.ts`: `systemPrompt`, `serializeForAI` (compact JSON + enumerated legal moves with IDs from §6), `parseAIMove` (validates moveId + sub-decisions).
-40. [test] Adapter round-trip: every legal move serialises to a unique ID, parses back to the same move.
+39. [x] [ai] `src/lib/games/splendor/ai-adapter.ts`: `systemPrompt`, `serializeForAI` (compact JSON + enumerated legal moves with IDs from §6), `parseAIMove` (validates moveId + sub-decisions).
+40. [x] [test] Adapter round-trip: every legal move serialises to a unique ID, parses back to the same move.
 
 ## Phase 6 — Splendor UI
 
