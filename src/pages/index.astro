@@ -1,4 +1,5 @@
 ---
+import GameGrid from '@/components/games/GameGrid.svelte';
 import Header from '@/components/shell/Header.svelte';
 import '../styles/global.css';
 ---
@@ -14,21 +15,66 @@ import '../styles/global.css';
   </head>
   <body class="bg-neutral-950 text-neutral-100">
     <Header client:load />
-    <main
-      class="mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-6 py-16"
-    >
-      <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
-        Phase 1 scaffold
-      </p>
-      <h1
-        class="mt-4 max-w-3xl text-4xl font-semibold tracking-normal sm:text-6xl"
-      >
-        Play board games against the AI you bring.
-      </h1>
-      <p class="mt-6 max-w-2xl text-lg text-neutral-300">
-        The shared Astro, Svelte, Tailwind, and TypeScript foundation is ready.
-        Provider settings and the game registry arrive next.
-      </p>
+    <main class="mx-auto min-h-screen max-w-6xl px-6 py-12">
+      <section class="border-b border-neutral-800 pb-10">
+        <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
+          Local-first BYOK
+        </p>
+        <h1
+          class="mt-4 max-w-3xl text-4xl font-semibold tracking-normal sm:text-6xl"
+        >
+          Play board games against the AI you bring.
+        </h1>
+        <p class="mt-6 max-w-2xl text-lg text-neutral-300">
+          Pick a game, configure a provider, and keep your API key in your own
+          browser. The game engines run locally; AI turns go only to the
+          provider you select.
+        </p>
+        <div class="mt-6 flex flex-wrap gap-3 text-sm">
+          <a
+            class="rounded-md bg-emerald-500 px-4 py-2 font-medium text-neutral-950 hover:bg-emerald-400"
+            href="/settings"
+          >
+            Configure provider
+          </a>
+          <a
+            class="rounded-md border border-neutral-700 px-4 py-2 text-neutral-200 hover:border-neutral-500"
+            href="/docs/DESIGN.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View design
+          </a>
+        </div>
+      </section>
+
+      <section class="py-10">
+        <div class="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <h2 class="text-2xl font-semibold tracking-normal">Games</h2>
+            <p class="mt-2 text-sm text-neutral-400">
+              Play buttons unlock when the selected provider is configured.
+            </p>
+          </div>
+        </div>
+        <GameGrid client:load />
+      </section>
     </main>
+    <footer
+      class="border-t border-neutral-800 px-6 py-6 text-sm text-neutral-500"
+    >
+      <div class="mx-auto flex max-w-6xl flex-wrap gap-4">
+        <a class="hover:text-neutral-300" href="/settings">Settings</a>
+        <a
+          class="hover:text-neutral-300"
+          href="/docs/TODO.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Roadmap
+        </a>
+        <span>v0.0.1</span>
+      </div>
+    </footer>
   </body>
 </html>

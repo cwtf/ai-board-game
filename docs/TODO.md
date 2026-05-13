@@ -56,9 +56,9 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 > Spec: DESIGN.md §3.
 
-26. [scaffold] `src/lib/games/registry.ts`: exports `GameMeta[]`. Seeded with Splendor and Exploding Kittens entries pointing at `docs/games/*.md`.
-27. [ui] `src/pages/index.astro`: hero strip, provider status pill, game grid driven from registry.
-28. [ui] Game card component: title, description, player count, hidden-info badge, "Play" button, "View rules" link → `docPath`. Disabled "Play" when no key configured.
+26. [x] [scaffold] `src/lib/games/registry.ts`: exports `GameMeta[]`. Seeded with Splendor and Exploding Kittens entries pointing at `docs/games/*.md`.
+27. [x] [ui] `src/pages/index.astro`: hero strip, provider status pill, game grid driven from registry.
+28. [x] [ui] Game card component: title, description, player count, hidden-info badge, "Play" button, "View rules" link → `docPath`. Disabled "Play" when no key configured.
 
 ## Phase 4 — Shared game framework
 
