@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import TokenUsageBadge from '@/components/ai/TokenUsageBadge.svelte';
+  import SplendorCardArt from '@/components/games/splendor/SplendorCardArt.svelte';
+  import SplendorNobleArt from '@/components/games/splendor/SplendorNobleArt.svelte';
   import { getProvider, listProviders } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import { createGameLoop, type GameLoop, type LoopSnapshot } from '@/lib/games/shared/loop';
@@ -583,19 +585,7 @@
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {#each state.noblesInPlay as noble (noble.id)}
               <article class="rounded-md border border-amber-300/40 bg-neutral-900 p-3">
-                <div class="flex items-center justify-between">
-                  <span class="font-medium text-amber-100">{noble.id}</span>
-                  <span class="text-sm text-amber-200">{noble.prestige} prestige</span>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  {#each GEMS as gem (gem)}
-                    {#if noble.cost[gem]}
-                      <span class={`rounded-full border px-2 py-1 text-xs ${gemClasses[gem]}`}>
-                        {gemLabels[gem]} {noble.cost[gem]}
-                      </span>
-                    {/if}
-                  {/each}
-                </div>
+                <SplendorNobleArt {noble} />
               </article>
             {/each}
           </div>
@@ -622,28 +612,9 @@
                 {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
                   {#if card}
                     <article
-                      class="min-h-56 rounded-md border bg-neutral-900 p-3 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
+                      class="rounded-md border bg-neutral-900 p-2 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
                     >
-                      <div class="flex items-start justify-between gap-2">
-                        <div>
-                          <div class={`inline-flex rounded-full border px-2 py-1 text-xs ${gemClasses[card.bonus]}`}>
-                            {gemLabels[card.bonus]}
-                          </div>
-                          <h3 class="mt-2 font-medium text-white">{card.id}</h3>
-                        </div>
-                        <span class="rounded-md bg-neutral-800 px-2 py-1 text-sm text-neutral-100">
-                          {card.prestige}
-                        </span>
-                      </div>
-                      <div class="mt-4 flex flex-wrap gap-2">
-                        {#each GEMS as gem (gem)}
-                          {#if card.cost[gem]}
-                            <span class={`rounded-full border px-2 py-1 text-xs ${gemClasses[gem]}`}>
-                              {gemLabels[gem]} {card.cost[gem]}
-                            </span>
-                          {/if}
-                        {/each}
-                      </div>
+                      <SplendorCardArt {card} />
                       <div class="mt-4 flex flex-wrap gap-2">
                         <button
                           class="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
@@ -670,7 +641,7 @@
                       </div>
                     </article>
                   {:else}
-                    <div class="min-h-56 rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
+                    <div class="aspect-[5/7] rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
                   {/if}
                 {/each}
               </div>
@@ -745,7 +716,9 @@
                   {#each player.reserved as card (card.id)}
                     <div class="rounded-md border border-neutral-800 bg-neutral-900 p-2">
                       <div class="flex items-center justify-between gap-2">
-                        <span class="text-sm text-neutral-200">{card.id}</span>
+                        <div class="w-16 shrink-0">
+                          <SplendorCardArt {card} compact />
+                        </div>
                         {#if index === currentPlayer}
                           <button
                             class="rounded-md bg-emerald-500 px-2 py-1 text-xs font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
