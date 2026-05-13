@@ -33,24 +33,24 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 > Spec: DESIGN.md §2.4 (AI provider interface), §2.6 (BYOK).
 
-8. [ui] Shell: `src/components/shell/Header.svelte` (title, settings link, provider status pill).
-9. [scaffold] `src/lib/storage/keys.ts`: typed get/set/clear for `byok.keys.v1`. SSR-safe.
-10. [ui] `src/pages/settings.astro` + island: per-provider masked input, save/clear, "test connection". Default provider + model picker.
-11. [ui] Security notice on settings page (verbatim text from DESIGN §2.6).
-12. [scaffold] `src/lib/ai/types.ts`: define `AIProvider`, `ChatMessage`, `CompleteParams`, `CompleteResult`, `TokenUsage`, `ProviderId`.
-13. [ai] `src/lib/ai/providers/openai.ts`: `complete()` against `/v1/chat/completions` with JSON response format. Surface usage. Map errors.
-14. [ai] `src/lib/ai/providers/anthropic.ts`: `/v1/messages` with `anthropic-dangerous-direct-browser-access: true`. JSON output via prompt + schema reminder. **Verify current header name in Anthropic docs before implementing.**
-15. [ai] `src/lib/ai/providers/google.ts`: `generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` with `x-goog-api-key`. JSON mode via `responseMimeType: 'application/json'`.
-16. [ai] `src/lib/ai/providers/deepseek.ts`: DeepSeek chat completion adapter. **Verify current endpoint, browser CORS, and JSON-output support before implementing.**
-17. [ai] `src/lib/ai/providers/kimi.ts`: Kimi/Moonshot chat completion adapter. **Verify current endpoint, browser CORS, and JSON-output support before implementing.**
-18. [ai] `src/lib/ai/providers/glm.ts`: GLM/Zhipu chat completion adapter. **Verify current endpoint, browser CORS, and JSON-output support before implementing.**
-19. [ai] `src/lib/ai/providers/qwen.ts`: Qwen/DashScope chat completion adapter. **Verify current endpoint, browser CORS, and JSON-output support before implementing.**
-20. [ai] `src/lib/ai/providers/llama.ts`: Llama adapter for a user-configured local or hosted Llama-compatible endpoint. **Verify target endpoint shape before implementing.**
-21. [ai] `src/lib/ai/providers/openrouter.ts`: OpenRouter chat completion adapter. **Verify current endpoint, browser CORS, app headers, and JSON-output support before implementing.**
-22. [ai] `src/lib/ai/providers/ollama.ts`: POST `${ollamaUrl}/api/chat` with `format: 'json'`. No API key.
-23. [ai] `src/lib/ai/index.ts`: provider registry, `getProvider(id)`, `listProviders()`.
-24. [test] Vitest for each provider with `fetch` mocked: success, JSON parse, error mapping, abort.
-25. [ui] "Test connection" calls selected provider with `Reply with {"ok":true}`. Show latency and green/red dot.
+8. [x] [ui] Shell: `src/components/shell/Header.svelte` (title, settings link, provider status pill).
+9. [x] [scaffold] `src/lib/storage/keys.ts`: typed get/set/clear for `byok.keys.v1`. SSR-safe.
+10. [x] [ui] `src/pages/settings.astro` + island: per-provider masked input, save/clear, "test connection". Default provider + model picker.
+11. [x] [ui] Security notice on settings page (verbatim text from DESIGN §2.6).
+12. [x] [scaffold] `src/lib/ai/types.ts`: define `AIProvider`, `ChatMessage`, `CompleteParams`, `CompleteResult`, `TokenUsage`, `ProviderId`.
+13. [x] [ai] `src/lib/ai/providers/openai.ts`: `complete()` against `/v1/chat/completions` with JSON response format. Surface usage. Map errors.
+14. [x] [ai] `src/lib/ai/providers/anthropic.ts`: `/v1/messages` with `anthropic-dangerous-direct-browser-access: true`. JSON output via prompt + schema reminder. **Verified current API headers before implementing.**
+15. [x] [ai] `src/lib/ai/providers/google.ts`: `generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` with `x-goog-api-key`. JSON mode via `responseMimeType: 'application/json'`.
+16. [x] [ai] `src/lib/ai/providers/deepseek.ts`: DeepSeek chat completion adapter. **Verified current endpoint and JSON-output support before implementing.**
+17. [x] [ai] `src/lib/ai/providers/kimi.ts`: Kimi/Moonshot chat completion adapter. **Verified current endpoint and JSON-output support before implementing.**
+18. [x] [ai] `src/lib/ai/providers/glm.ts`: GLM/Zhipu chat completion adapter. **Verified current endpoint and JSON-output support before implementing.**
+19. [x] [ai] `src/lib/ai/providers/qwen.ts`: Qwen/DashScope chat completion adapter. **Verified current endpoint and JSON-output support before implementing.**
+20. [x] [ai] `src/lib/ai/providers/llama.ts`: Llama adapter for a user-configured local or hosted Llama-compatible endpoint. 
+21. [x] [ai] `src/lib/ai/providers/openrouter.ts`: OpenRouter chat completion adapter. **Verified current endpoint, app headers, and JSON-output support before implementing.**
+22. [x] [ai] `src/lib/ai/providers/ollama.ts`: POST `${ollamaUrl}/api/chat` with `format: 'json'`. No API key.
+23. [x] [ai] `src/lib/ai/index.ts`: provider registry, `getProvider(id)`, `listProviders()`.
+24. [x] [test] Vitest for each provider with `fetch` mocked: success, JSON parse, error mapping, abort.
+25. [x] [ui] "Test connection" calls selected provider with `Reply with {"ok":true}`. Show latency and green/red dot.
 
 ## Phase 3 — Landing page
 
@@ -165,3 +165,4 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 - No keys are sent to any host other than the selected provider (verified by network inspection during e2e).
 - Information-hiding test for Exploding Kittens passes.
 - CI green; CSP in place; security notice visible on settings page.
+
