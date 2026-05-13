@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import TokenUsageBadge from '@/components/ai/TokenUsageBadge.svelte';
   import SplendorCardArt from '@/components/games/splendor/SplendorCardArt.svelte';
+  import SplendorGemBadge from '@/components/games/splendor/SplendorGemBadge.svelte';
   import SplendorNobleArt from '@/components/games/splendor/SplendorNobleArt.svelte';
   import { getProvider, listProviders } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
@@ -661,12 +662,16 @@
                 disabled={state.tokenPool[gem] === 0 || snapshot?.status === 'thinking'}
                 on:click={() => selectGem(gem)}
               >
-                <span class="block text-sm font-medium">{gemLabels[gem]}</span>
+                <span class="block">
+                  <SplendorGemBadge {gem} label={gemLabels[gem]} />
+                </span>
                 <span class="text-xs opacity-80">Supply {state.tokenPool[gem]}</span>
               </button>
             {/each}
             <div class={`rounded-md border px-3 py-3 ${gemClasses.gold}`}>
-              <span class="block text-sm font-medium">Gold</span>
+              <span class="block">
+                <SplendorGemBadge gem="gold" label="Gold" />
+              </span>
               <span class="text-xs opacity-80">Supply {state.tokenPool.gold}</span>
             </div>
           </div>
@@ -696,16 +701,12 @@
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
                 {#each [...GEMS, 'gold'] as gem (gem)}
-                  <span class={`rounded-full border px-2 py-1 text-xs ${gemClasses[gem]}`}>
-                    {gemLabels[gem]} {player.tokens[gem]}
-                  </span>
+                  <SplendorGemBadge {gem} amount={player.tokens[gem]} />
                 {/each}
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
                 {#each GEMS as gem (gem)}
-                  <span class={`rounded-full border px-2 py-1 text-xs ${gemClasses[gem]}`}>
-                    +{player.bonuses[gem]} {gemLabels[gem]}
-                  </span>
+                  <SplendorGemBadge {gem} amount={player.bonuses[gem]} label="bonus" />
                 {/each}
               </div>
               <div class="mt-3 text-xs text-neutral-500">
@@ -752,7 +753,7 @@
       <div class="mt-4 space-y-3">
         {#each goldRangesFor(state, pendingMove) as range (range.gem)}
           <div class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <span class="text-sm text-neutral-200">{gemLabels[range.gem]}</span>
+            <SplendorGemBadge gem={range.gem} />
             <div class="flex items-center gap-2">
               <button class="rounded-md border border-neutral-700 px-2 py-1" type="button" on:click={() => adjustGold(range.gem, -1)}>-</button>
               <span class="w-8 text-center">{goldDraft[range.gem] ?? range.min}</span>
@@ -797,7 +798,7 @@
       <div class="mt-4 space-y-3">
         {#each [...GEMS, 'gold'] as gem (gem)}
           <div class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <span class="text-sm text-neutral-200">{gemLabels[gem]} ({pendingProjectedTokens[gem]})</span>
+            <SplendorGemBadge {gem} amount={pendingProjectedTokens[gem]} />
             <div class="flex items-center gap-2">
               <button class="rounded-md border border-neutral-700 px-2 py-1" type="button" on:click={() => adjustDiscard(gem, -1)}>-</button>
               <span class="w-8 text-center">{discardDraft[gem] ?? 0}</span>

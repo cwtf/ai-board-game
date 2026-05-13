@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Emerald">
+  <defs>
+    <linearGradient id="emerald-a" x1="12" x2="52" y1="8" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#86efac"/>
+      <stop offset=".42" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#065f46"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#emerald-a)" d="m18 7 28 0 11 12v26L44 57H20L7 45V19z"/>
+  <path fill="#ffffff" fill-opacity=".35" d="M18 7h28L35 20H29z"/>
+  <path fill="#022c22" fill-opacity=".22" d="M7 19h22v38H20L7 45zM35 20h22v25L44 57h-9z"/>
+  <path fill="none" stroke="#bbf7d0" stroke-opacity=".7" stroke-width="2" d="m18 7 28 0 11 12v26L44 57H20L7 45V19z"/>
+</svg>

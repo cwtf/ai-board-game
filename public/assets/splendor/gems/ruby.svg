@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Ruby">
+  <defs>
+    <linearGradient id="ruby-a" x1="11" x2="53" y1="8" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fecdd3"/>
+      <stop offset=".38" stop-color="#ef4444"/>
+      <stop offset="1" stop-color="#7f1d1d"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#ruby-a)" d="m20 7 24 0 14 18-26 32L6 25z"/>
+  <path fill="#ffffff" fill-opacity=".28" d="M20 7h24L33 21h-8z"/>
+  <path fill="#450a0a" fill-opacity=".28" d="m32 57 1-36 25 4z"/>
+  <path fill="none" stroke="#fecaca" stroke-opacity=".75" stroke-width="2" d="m20 7 24 0 14 18-26 32L6 25z"/>
+</svg>

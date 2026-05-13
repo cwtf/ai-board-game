@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sapphire">
+  <defs>
+    <linearGradient id="sapphire-a" x1="13" x2="51" y1="7" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#bae6fd"/>
+      <stop offset=".38" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#sapphire-a)" d="M18 8h28l12 17-26 31L6 25z"/>
+  <path fill="#ffffff" fill-opacity=".32" d="M18 8h28L35 22h-8z"/>
+  <path fill="#082f49" fill-opacity=".24" d="m32 56 3-34 23 3zM6 25h21l5 31z"/>
+  <path fill="none" stroke="#bae6fd" stroke-opacity=".75" stroke-width="2" d="M18 8h28l12 17-26 31L6 25z"/>
+</svg>

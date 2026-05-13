@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Gold">
+  <defs>
+    <radialGradient id="gold-a" cx="24" cy="18" r="42" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fef9c3"/>
+      <stop offset=".45" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#92400e"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="26" fill="url(#gold-a)"/>
+  <circle cx="32" cy="32" r="19" fill="none" stroke="#fde68a" stroke-opacity=".7" stroke-width="4"/>
+  <path fill="#ffffff" fill-opacity=".38" d="M18 24c4-9 18-14 29-4-11-3-20-1-29 4z"/>
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#fef3c7" stroke-opacity=".7" stroke-width="2"/>
+</svg>

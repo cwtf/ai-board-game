@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Diamond">
+  <defs>
+    <linearGradient id="diamond-a" x1="12" x2="52" y1="10" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset=".45" stop-color="#d7dde4"/>
+      <stop offset="1" stop-color="#8e9aaa"/>
+    </linearGradient>
+    <linearGradient id="diamond-b" x1="20" x2="44" y1="14" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#bfccd8" stop-opacity=".4"/>
+    </linearGradient>
+  </defs>
+  <path fill="#f8fafc" d="m17 10 30 0 11 17-26 29L6 27z"/>
+  <path fill="url(#diamond-a)" d="m17 10 30 0 11 17-26 29L6 27z"/>
+  <path fill="url(#diamond-b)" d="M17 10 6 27h18zm30 0 11 17H40zM24 27l8 29 8-29z"/>
+  <path fill="none" stroke="#f8fafc" stroke-opacity=".75" stroke-width="2" d="m17 10 30 0 11 17-26 29L6 27z"/>
+</svg>

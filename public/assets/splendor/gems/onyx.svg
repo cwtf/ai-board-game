@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Onyx">
+  <defs>
+    <linearGradient id="onyx-a" x1="16" x2="50" y1="8" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#71717a"/>
+      <stop offset=".45" stop-color="#18181b"/>
+      <stop offset="1" stop-color="#030712"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#onyx-a)" d="M16 10h32l10 15-26 31L6 25z"/>
+  <path fill="#ffffff" fill-opacity=".18" d="M16 10h32L34 22h-8z"/>
+  <path fill="#000000" fill-opacity=".38" d="m32 56 2-34 24 3z"/>
+  <path fill="none" stroke="#a1a1aa" stroke-opacity=".65" stroke-width="2" d="M16 10h32l10 15-26 31L6 25z"/>
+</svg>
