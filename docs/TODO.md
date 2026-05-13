@@ -21,13 +21,13 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 ## Phase 1 — Project scaffolding
 
-1. [scaffold] `npm create astro@latest` with TypeScript strict, Tailwind, Svelte (or React). Configure `output: 'static'`.
-2. [scaffold] Add ESLint + Prettier with Astro/Svelte/TS configs. Add `pnpm` lockfile if switching.
-3. [scaffold] Add `tsconfig.json` paths: `@/lib/*`, `@/components/*`, `@/games/*`.
-4. [infra] `.github/workflows/ci.yml`: install, lint, typecheck, unit test on PR and main.
-5. [infra] `.github/dependabot.yml` (weekly, npm).
-6. [infra] Deployment workflow only if non-localhost hosting was chosen.
-7. [scaffold] `README.md` (1-paragraph what-it-is, quickstart, BYOK setup, screenshot placeholder). Verify `DESIGN.md`, `TODO.md`, `docs/games/*.md` are committed.
+1. [x] [scaffold] `npm create astro@latest` with TypeScript strict, Tailwind, Svelte. Configured `output: 'static'`.
+2. [x] [scaffold] Added ESLint + Prettier with Astro/Svelte/TS configs. Kept npm/package-lock because no package-manager switch was needed.
+3. [x] [scaffold] Added `tsconfig.json` paths: `@/lib/*`, `@/components/*`, `@/games/*`.
+4. [x] [infra] `.github/workflows/ci.yml`: install, audit, lint, typecheck, unit test, and build on PR and main.
+5. [x] [infra] `.github/dependabot.yml` (weekly, npm).
+6. [x] [infra] Deployment workflow skipped because Phase 0 chose localhost-only hosting for v1.
+7. [x] [scaffold] `README.md` (1-paragraph what-it-is, quickstart, BYOK setup, screenshot placeholder). Verified `DESIGN.md`, `TODO.md`, `docs/games/*.md` are present.
 
 ## Phase 2 — Core shell and BYOK plumbing
 
