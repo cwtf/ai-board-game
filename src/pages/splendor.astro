@@ -1,5 +1,6 @@
 ---
 import Header from '@/components/shell/Header.svelte';
+import SplendorGame from '@/components/games/splendor/SplendorGame.svelte';
 import '../styles/global.css';
 ---
 
@@ -14,23 +15,8 @@ import '../styles/global.css';
   </head>
   <body class="min-h-screen bg-neutral-950 text-neutral-100">
     <Header client:load />
-    <main class="mx-auto max-w-4xl px-6 py-16">
-      <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
-        Coming in Phase 6
-      </p>
-      <h1 class="mt-4 text-4xl font-semibold tracking-normal">Splendor</h1>
-      <p class="mt-4 max-w-2xl text-neutral-300">
-        The game route is ready. The Splendor engine and board UI will land in
-        the upcoming engine and UI phases.
-      </p>
-      <a
-        class="mt-6 inline-flex rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-        href="/docs/games/splendor.md"
-        target="_blank"
-        rel="noreferrer"
-      >
-        View rules
-      </a>
+    <main>
+      <SplendorGame client:load />
     </main>
   </body>
 </html>

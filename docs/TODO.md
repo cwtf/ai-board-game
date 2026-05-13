@@ -91,14 +91,14 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 ## Phase 6 — Splendor UI
 
-41. [ui] `src/pages/splendor.astro` mounts a Svelte/React island.
-42. [ui] Board layout: tier rows (4 face-up + deck count), token supply, nobles row.
-43. [ui] Player panels: tokens, bonuses, reserved cards, prestige.
-44. [ui] Move composer: click-to-take tokens, click-to-buy, click-to-reserve. Legal-move highlighting.
-45. [ui] Token discard modal when over the limit; gold-allocation modal when buying with mixed payment.
-46. [ui] End-of-game modal: scores, winner.
-47. [ui] Wire AI move flow via `loop.ts`. "Thinking…" indicator with provider/model + abort button.
-48. [ui] TokenUsageBadge: per-turn and session totals.
+41. [x] [ui] `src/pages/splendor.astro` mounts a Svelte/React island.
+42. [x] [ui] Board layout: tier rows (4 face-up + deck count), token supply, nobles row.
+43. [x] [ui] Player panels: tokens, bonuses, reserved cards, prestige.
+44. [x] [ui] Move composer: click-to-take tokens, click-to-buy, click-to-reserve. Legal-move highlighting.
+45. [x] [ui] Token discard modal when over the limit; gold-allocation modal when buying with mixed payment.
+46. [x] [ui] End-of-game modal: scores, winner.
+47. [x] [ui] Wire AI move flow via `loop.ts`. "Thinking…" indicator with provider/model + abort button.
+48. [x] [ui] TokenUsageBadge: per-turn and session totals.
 49. [test] Playwright e2e: human-vs-AI quick game with a mocked provider returning scripted moves; assert end state.
 
 ## Phase 7 — Exploding Kittens engine
