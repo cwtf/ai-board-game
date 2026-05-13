@@ -27,7 +27,7 @@
   let imageFailed = false;
 
   function imageSrc(noble: Noble): string {
-    return `/assets/splendor/nobles/${noble.id}.webp`;
+    return `/assets/splendor/nobles/${noble.id}.png`;
   }
 
   function imageAlt(noble: Noble): string {

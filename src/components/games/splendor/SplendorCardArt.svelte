@@ -28,7 +28,7 @@
   let imageFailed = false;
 
   function imageSrc(card: Card): string {
-    return `/assets/splendor/cards/${card.id}.webp`;
+    return `/assets/splendor/cards/${card.id}.png`;
   }
 
   function imageAlt(card: Card): string {
