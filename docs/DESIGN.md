@@ -13,7 +13,7 @@ Adding a new game means adding a doc under `docs/games/`, implementing one adapt
 
 ### Goals
 - Zero-backend BYOK: API keys stay client-side and are sent only to the AI provider the user selects.
-- Pluggable AI providers: OpenAI, Anthropic, Google Gemini, optional Ollama (local).
+- Pluggable AI providers: OpenAI, Anthropic, Google Gemini, DeepSeek, Kimi, GLM, Qwen, Llama, OpenRouter, and Ollama.
 - Game-agnostic architecture — adding a new game = implementing one interface and adding a route.
 - Two playable games at v1: Splendor, Exploding Kittens.
 - Desktop-first; usable on mobile but not optimised for it in v1.
@@ -33,7 +33,7 @@ Browser
  ├── Static site (HTML/CSS/JS bundles, served locally or from CDN)
  ├── Game engine (TypeScript, in-browser)
  ├── AI adapter (TypeScript, in-browser)
- └── direct HTTPS → chosen AI provider (OpenAI / Anthropic / Google / localhost Ollama)
+ └── direct HTTPS → chosen AI provider or local endpoint
 ```
 
 No server-side code, no proxy. The user's key never transits any infrastructure operated by this project.
@@ -88,6 +88,12 @@ Alternatives if Astro isn't preferred: SvelteKit (with static adapter), or Next.
 │   │   │   │   ├── openai.ts
 │   │   │   │   ├── anthropic.ts
 │   │   │   │   ├── google.ts
+│   │   │   │   ├── deepseek.ts
+│   │   │   │   ├── kimi.ts
+│   │   │   │   ├── glm.ts
+│   │   │   │   ├── qwen.ts
+│   │   │   │   ├── llama.ts
+│   │   │   │   ├── openrouter.ts
 │   │   │   │   └── ollama.ts
 │   │   │   ├── index.ts                 # Registry + dispatch
 │   │   │   ├── types.ts                 # Shared types
@@ -117,7 +123,17 @@ Alternatives if Astro isn't preferred: SvelteKit (with static adapter), or Next.
 
 ```ts
 // src/lib/ai/types.ts
-export type ProviderId = 'openai' | 'anthropic' | 'google' | 'ollama';
+export type ProviderId =
+  | 'openai'
+  | 'anthropic'
+  | 'google'
+  | 'deepseek'
+  | 'kimi'
+  | 'glm'
+  | 'qwen'
+  | 'llama'
+  | 'openrouter'
+  | 'ollama';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -225,6 +241,13 @@ State is updated via an immutable reducer. Game UI subscribes to a store and re-
     openai?: string;
     anthropic?: string;
     google?: string;
+    deepseek?: string;
+    kimi?: string;
+    glm?: string;
+    qwen?: string;
+    llama?: string;
+    openrouter?: string;
+    llamaUrl?: string;           // local or hosted Llama-compatible endpoint
     ollamaUrl?: string;          // e.g. http://localhost:11434
     selectedProvider?: ProviderId;
     selectedModel?: Record<ProviderId, string>;
@@ -239,6 +262,7 @@ State is updated via an immutable reducer. Game UI subscribes to a store and re-
 - Mitigations:
   - Strict CSP via `<meta http-equiv="Content-Security-Policy">`:
     `default-src 'self'; script-src 'self'; connect-src 'self' https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com http://localhost:11434; img-src 'self' data:; style-src 'self' 'unsafe-inline';`
+    Expand `connect-src` during Phase 2 to include only the verified endpoint origins for DeepSeek, Kimi, GLM, Qwen, Llama, and OpenRouter.
   - No third-party scripts. No analytics, no external font CDNs.
   - Dependabot enabled.
   - `npm audit` gate in CI.
@@ -250,9 +274,10 @@ State is updated via an immutable reducer. Game UI subscribes to a store and re-
 - **OpenAI**: standard CORS on `https://api.openai.com`.
 - **Anthropic**: requires header `anthropic-dangerous-direct-browser-access: true`. Provider module sets this. Verify current docs before implementing — header name has historically been the subject of revision.
 - **Google Gemini**: REST endpoint `https://generativelanguage.googleapis.com/v1beta/...` accepts API key via `x-goog-api-key` header. Direct browser calls work.
+- **DeepSeek, Kimi, GLM, Qwen, Llama, OpenRouter**: adapter modules normalise each provider's chat-completion shape to the shared interface. Verify current endpoints, browser CORS, required headers, and JSON-output support in Phase 2 before implementing each module.
 - **Ollama**: user-run, localhost. CORS depends on user config; document the `OLLAMA_ORIGINS` env var as a setup step.
 
-All four provider modules normalise to the `AIProvider` interface so game code never sees these differences.
+All provider modules normalise to the `AIProvider` interface so game code never sees these differences.
 
 ## 3. Landing page
 
@@ -285,10 +310,10 @@ Disabled state: if no key is configured, "Play" buttons are disabled with a tool
 | Provider API change breaks a module | Each provider isolated; integration test per provider. |
 | Cost surprise for the user | Show token usage per turn and total per session. Default to cheaper models. |
 
-Open questions to confirm before code generation:
-1. Include Ollama support in v1, or defer to v1.1? (Default: include — it's a small adapter and pairs naturally with a localhost-first build.)
-2. Passphrase encryption in v1 or v1.1? (Default: v1.1; v1 ships plain `localStorage` with the security notice. Lower priority on localhost.)
-3. Hosting: localhost only, or also ship to Cloudflare/GitHub Pages? (Default: localhost only for v1.)
+Phase 0 decisions are recorded in [DECISIONS.md](DECISIONS.md):
+1. Include OpenAI, Anthropic, Google Gemini, DeepSeek, Kimi, GLM, Qwen, Llama, OpenRouter, and Ollama support in v1.
+2. Defer passphrase encryption to v1.1; v1 ships plain `localStorage` with the security notice.
+3. Target localhost-only hosting for v1.
 
 ## 6. Adding a new game
 
