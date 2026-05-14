@@ -43,20 +43,18 @@ PROMPTS_FILE = SCRIPT_DIR / "asset-prompts.md"
 # Where images get written. cards/ and nobles/ subfolders are created automatically.
 OUTPUT_ROOT = REPO_ROOT / "public" / "assets" / "splendor"
 
-# fal.ai model endpoint. fal-ai/flux/dev is a general text-to-image model with
-# custom image sizes and PNG output support.
-FAL_ENDPOINT = "fal-ai/flux/dev"
+# fal.ai model endpoint. openai/gpt-image-2 is OpenAI's newest GPT Image model
+# available through fal.ai.
+FAL_ENDPOINT = "openai/gpt-image-2"
 
 # Image sizes. fal accepts named sizes or {"width": int, "height": int}.
-CARD_SIZE: dict[str, int] | str = {"width": 1024, "height": 1434}   # 5:7
+CARD_SIZE: dict[str, int] | str = {"width": 1024, "height": 1440}   # near 5:7
 NOBLE_SIZE: dict[str, int] | str = {"width": 1280, "height": 1024}  # 5:4
 
-# fal generation options.
-NUM_INFERENCE_STEPS = 28
-GUIDANCE_SCALE = 3.5
-ACCELERATION = "regular"  # "none" | "regular" | "high"
+# GPT Image 2 generation options.
+QUALITY = "high"  # "auto" | "low" | "medium" | "high"
 OUTPUT_FORMAT = "png"
-ENABLE_SAFETY_CHECKER = True
+SYNC_MODE = False
 
 # Concurrency and retries
 MAX_WORKERS = 4
@@ -125,12 +123,10 @@ def build_arguments(rel_path: str, prompt: str) -> dict[str, Any]:
     return {
         "prompt": prompt,
         "image_size": get_size(rel_path),
-        "num_inference_steps": NUM_INFERENCE_STEPS,
-        "guidance_scale": GUIDANCE_SCALE,
         "num_images": 1,
-        "enable_safety_checker": ENABLE_SAFETY_CHECKER,
+        "quality": QUALITY,
         "output_format": OUTPUT_FORMAT,
-        "acceleration": ACCELERATION,
+        "sync_mode": SYNC_MODE,
     }
 
 
