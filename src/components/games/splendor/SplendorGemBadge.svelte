@@ -5,6 +5,7 @@
   export let amount: number | undefined = undefined;
   export let label = '';
   export let compact = false;
+  export let board = false;
 
   const gemLabels: Record<GemOrGold, string> = {
     emerald: 'Emerald',
@@ -30,12 +31,12 @@
 </script>
 
 <span
-  class={`inline-flex items-center gap-1 rounded-full border ${compact ? 'px-1.5 py-1 text-[10px]' : 'px-2 py-1 text-xs'} ${gemClasses[gem]}`}
+  class={`inline-flex items-center gap-1 rounded-full border ${compact ? 'px-1.5 py-1 text-[10px]' : board ? 'px-2 py-1 text-xs' : 'px-2 py-1 text-xs'} ${gemClasses[gem]}`}
   title={title}
   aria-label={title}
 >
   <img
-    class={compact ? 'h-4 w-4' : 'h-5 w-5'}
+    class={compact ? 'h-4 w-4' : board ? 'h-5 w-5' : 'h-5 w-5'}
     src={`/assets/splendor/gems/${gem}.svg`}
     alt=""
     aria-hidden="true"

@@ -13,9 +13,9 @@ import '../styles/global.css';
     <meta name="generator" content={Astro.generator} />
     <title>Splendor | AI Board Game Platform</title>
   </head>
-  <body class="min-h-screen bg-neutral-950 text-neutral-100">
+  <body class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100">
     <Header client:load />
-    <main>
+    <main class="min-h-0 flex-1 overflow-hidden">
       <SplendorGame client:load />
     </main>
   </body>

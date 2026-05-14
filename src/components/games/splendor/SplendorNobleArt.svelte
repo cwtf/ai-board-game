@@ -38,7 +38,11 @@
     class="pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-b from-neutral-950/80 via-transparent to-neutral-950/90 p-3"
   >
     <div class="flex items-center justify-between gap-2">
-      <span class="font-medium text-amber-100 drop-shadow">{noble.id}</span>
+      {#if imageFailed}
+        <span class="font-medium text-amber-100 drop-shadow">{noble.id}</span>
+      {:else}
+        <span aria-hidden="true"></span>
+      {/if}
       <span
         class="rounded-md bg-neutral-950/85 px-2 py-1 text-sm font-semibold text-amber-100 ring-1 ring-amber-200/20"
       >

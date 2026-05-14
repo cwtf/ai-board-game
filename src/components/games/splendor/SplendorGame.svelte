@@ -34,6 +34,8 @@
 
   type Modal = 'gold' | 'discard' | 'noble' | null;
 
+  const TABLE_WIDTH = 1600;
+  const TABLE_HEIGHT = 900;
   const providers = listProviders();
   const gemLabels: Record<GemOrGold, string> = {
     emerald: 'Emerald',
@@ -66,6 +68,11 @@
   let nobleDraft = '';
   let message = '';
   let aiController: ReturnType<typeof createAbortController> | undefined;
+  let viewportEl: globalThis.HTMLElement;
+  let tableScale = 1;
+  let tableOffsetX = 0;
+  let tableOffsetY = 0;
+  let handledPointerSelection = false;
 
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
@@ -94,6 +101,21 @@
 
   function refreshKeys() {
     keys = getStoredKeys();
+  }
+
+  function resizeTable() {
+    if (!viewportEl) {
+      return;
+    }
+
+    const scale = Math.min(
+      viewportEl.clientWidth / TABLE_WIDTH,
+      viewportEl.clientHeight / TABLE_HEIGHT,
+      1,
+    );
+    tableScale = scale;
+    tableOffsetX = Math.max(0, (viewportEl.clientWidth - TABLE_WIDTH * scale) / 2);
+    tableOffsetY = Math.max(0, (viewportEl.clientHeight - TABLE_HEIGHT * scale) / 2);
   }
 
   function createAbortController() {
@@ -212,6 +234,19 @@
     if (!findTakeMove(selectedGems)) {
       selectedGems = [gem];
     }
+  }
+
+  function selectGemFromPointer(gem: Gem) {
+    handledPointerSelection = true;
+    selectGem(gem);
+  }
+
+  function selectGemFromClick(gem: Gem) {
+    if (handledPointerSelection) {
+      handledPointerSelection = false;
+      return;
+    }
+    selectGem(gem);
   }
 
   function beginMove(move: SplendorMove) {
@@ -487,8 +522,10 @@
 
   onMount(() => {
     refreshKeys();
+    resizeTable();
     window.addEventListener('storage', refreshKeys);
     window.addEventListener('byok-keys-changed', refreshKeys);
+    window.addEventListener('resize', resizeTable);
     startGame();
   });
 
@@ -496,6 +533,7 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', refreshKeys);
       window.removeEventListener('byok-keys-changed', refreshKeys);
+      window.removeEventListener('resize', resizeTable);
     }
     unsubscribe?.();
     aiController?.abort();
@@ -503,184 +541,199 @@
 </script>
 
 {#if state}
-  <section class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-    <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-3xl font-semibold tracking-normal text-white">Splendor</h1>
-        <p class="mt-1 text-sm text-neutral-400">
-          Turn {state.turn + 1}, player {currentPlayer + 1}
-          {state.finalRoundTriggered ? ' - final round' : ''}
-        </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <label class="text-xs text-neutral-400">
-          Players
-          <select
-            class="ml-2 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
-            bind:value={playerCount}
-            disabled={snapshot?.status === 'thinking'}
-          >
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-            <option value={4}>4</option>
-          </select>
-        </label>
-        <label class="text-xs text-neutral-400">
-          Seed
-          <input
-            class="ml-2 w-36 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
-            bind:value={seed}
-            disabled={snapshot?.status === 'thinking'}
-          />
-        </label>
-        <button
-          class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 hover:border-neutral-500"
-          type="button"
-          on:click={startGame}
-          disabled={snapshot?.status === 'thinking'}
-        >
-          New game
-        </button>
-      </div>
-    </div>
-
-    {#if !configured}
-      <div class="mb-4 rounded-md border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-        Configure a provider in settings to let players 2-{playerCount} take AI turns.
-        Until then, the board still accepts local human moves.
-      </div>
-    {/if}
-
-    {#if snapshot?.warning || message}
-      <div class="mb-4 rounded-md border border-rose-400/40 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
-        {message || snapshot?.warning}
-      </div>
-    {/if}
-
-    <div class="mb-4 flex flex-wrap items-center gap-3">
-      <TokenUsageBadge
-        lastUsage={lastUsage as TokenUsage | undefined}
-        totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
-      />
-      {#if snapshot?.status === 'thinking'}
-        <div class="flex items-center gap-3 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm text-sky-100">
-          <span>Player {currentPlayer + 1} thinking with {selectedProvider.label} ({selectedModel})</span>
-          <button
-            class="rounded-md border border-sky-300/50 px-2 py-1 text-xs hover:bg-sky-300/10"
-            type="button"
-            on:click={abortAI}
-          >
-            Abort
-          </button>
-        </div>
-      {/if}
-    </div>
-
-    <div class="grid gap-5 xl:grid-cols-[1fr_360px]">
-      <div class="space-y-5">
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-lg font-semibold tracking-normal">Nobles</h2>
-            <span class="text-xs text-neutral-500">{state.noblesInPlay.length} available</span>
-          </div>
-          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {#each state.noblesInPlay as noble (noble.id)}
-              <article class="rounded-md border border-amber-300/40 bg-neutral-900 p-3">
-                <SplendorNobleArt {noble} />
-              </article>
-            {/each}
-          </div>
-        </section>
-
-        <section class="space-y-4">
-          {#each [3, 2, 1] as tier (tier)}
-            <div class="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-              <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 class="text-lg font-semibold tracking-normal">Tier {tier}</h2>
-                <button
-                  class="rounded-md border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600 {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 text-amber-100 hover:bg-amber-300/10' : 'border-neutral-800 text-neutral-600'}"
-                  type="button"
-                  disabled={!legalReserveDeck(tier as Tier) || snapshot?.status === 'thinking'}
-                  on:click={() => {
-                    const move = legalReserveDeck(tier as Tier);
-                    if (move) beginMove(move);
-                  }}
-                >
-                  Reserve deck ({state.decks[deckKey(tier as Tier)].length})
-                </button>
-              </div>
-              <div class="grid gap-3 md:grid-cols-4">
-                {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
-                  {#if card}
-                    <article
-                      class="rounded-md border bg-neutral-900 p-2 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
-                    >
-                      <SplendorCardArt {card} />
-                      <div class="mt-4 flex flex-wrap gap-2">
-                        <button
-                          class="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
-                          type="button"
-                          disabled={!legalBuy(card, 'board') || snapshot?.status === 'thinking'}
-                          on:click={() => {
-                            const move = legalBuy(card, 'board');
-                            if (move) beginMove(move);
-                          }}
-                        >
-                          Buy
-                        </button>
-                        <button
-                          class="rounded-md border border-amber-300/60 px-3 py-1.5 text-sm text-amber-100 disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
-                          type="button"
-                          disabled={!legalReserve(card) || snapshot?.status === 'thinking'}
-                          on:click={() => {
-                            const move = legalReserve(card);
-                            if (move) beginMove(move);
-                          }}
-                        >
-                          Reserve
-                        </button>
-                      </div>
-                    </article>
-                  {:else}
-                    <div class="aspect-[5/7] rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
-                  {/if}
-                {/each}
-              </div>
+  <section bind:this={viewportEl} class="h-full w-full overflow-hidden bg-neutral-950 p-2">
+    <div
+      class="flex origin-top-left h-full flex-col overflow-hidden"
+      style={`width: ${TABLE_WIDTH}px; height: ${TABLE_HEIGHT}px; transform: translate(${tableOffsetX}px, ${tableOffsetY}px) scale(${tableScale});`}
+    >
+    <div class="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_360px]">
+      <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
+        <section class="flex min-h-0 flex-col gap-2">
+          <div class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
+            <h1 class="text-2xl font-semibold tracking-normal text-white">Splendor</h1>
+            <p class="text-xs text-neutral-400">
+              Turn {state.turn + 1}, player {currentPlayer + 1}
+              {state.finalRoundTriggered ? ' - final round' : ''}
+            </p>
+            <div class="mt-2">
+              <TokenUsageBadge
+                lastUsage={lastUsage as TokenUsage | undefined}
+                totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
+              />
             </div>
-          {/each}
+          </div>
+
+          <section class="min-h-0 flex-1 rounded-md border border-neutral-800 bg-neutral-950 p-2">
+            <div class="mb-1 flex items-center justify-between">
+              <h2 class="text-sm font-semibold tracking-normal">Nobles</h2>
+              <span class="text-xs text-neutral-500">{state.noblesInPlay.length} available</span>
+            </div>
+            <div class="flex flex-col gap-2 overflow-hidden">
+              {#each state.noblesInPlay as noble (noble.id)}
+                <article class="rounded-md border border-amber-300/40 bg-neutral-900 p-1">
+                  <SplendorNobleArt {noble} />
+                </article>
+              {/each}
+            </div>
+          </section>
         </section>
+
+        <div class="flex min-h-0 flex-col gap-2">
+          <section class="grid min-h-0 flex-1 grid-rows-[repeat(3,minmax(0,1fr))] gap-2">
+            {#each [3, 2, 1] as tier (tier)}
+              <div class="min-h-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-2">
+                <div class="mb-1.5 flex h-8 items-center justify-between gap-2">
+                  <h2 class="text-sm font-semibold tracking-normal">Tier {tier}</h2>
+                  <button
+                    class="rounded-md border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600 {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 text-amber-100 hover:bg-amber-300/10' : 'border-neutral-800 text-neutral-600'}"
+                    type="button"
+                    disabled={!legalReserveDeck(tier as Tier) || snapshot?.status === 'thinking'}
+                    on:click={() => {
+                      const move = legalReserveDeck(tier as Tier);
+                      if (move) beginMove(move);
+                    }}
+                  >
+                    Reserve deck ({state.decks[deckKey(tier as Tier)].length})
+                  </button>
+                </div>
+                <div class="grid h-[calc(100%-2.375rem)] grid-cols-4 items-start justify-items-center gap-2 overflow-hidden">
+                  {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
+                    {#if card}
+                      <article
+                        class="relative w-44 rounded-md border bg-neutral-900 p-1 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
+                      >
+                        <SplendorCardArt {card} board />
+                        <div class="absolute bottom-1.5 right-1.5 flex flex-col gap-1">
+                          <button
+                            class="rounded-md bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
+                            type="button"
+                            disabled={!legalBuy(card, 'board') || snapshot?.status === 'thinking'}
+                            on:click={() => {
+                              const move = legalBuy(card, 'board');
+                              if (move) beginMove(move);
+                            }}
+                          >
+                            Buy
+                          </button>
+                          <button
+                            class="rounded-md border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
+                            type="button"
+                            disabled={!legalReserve(card) || snapshot?.status === 'thinking'}
+                            on:click={() => {
+                              const move = legalReserve(card);
+                              if (move) beginMove(move);
+                            }}
+                          >
+                            Reserve
+                          </button>
+                        </div>
+                      </article>
+                    {:else}
+                      <div class="aspect-[5/7] w-44 rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
+                    {/if}
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </section>
+        </div>
       </div>
 
-      <aside class="space-y-5">
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-          <h2 class="text-lg font-semibold tracking-normal">Token Supply</h2>
-          <div class="mt-3 grid grid-cols-2 gap-2">
+      <aside class="flex min-h-0 flex-col gap-2">
+        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
+          <div class="flex flex-wrap justify-end gap-2">
+            <label class="text-xs text-neutral-400">
+              Players
+              <select
+                class="ml-2 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
+                bind:value={playerCount}
+                disabled={snapshot?.status === 'thinking'}
+              >
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+              </select>
+            </label>
+            <label class="text-xs text-neutral-400">
+              Seed
+              <input
+                class="ml-2 w-32 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
+                bind:value={seed}
+                disabled={snapshot?.status === 'thinking'}
+              />
+            </label>
+            <button
+              class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-100 hover:border-neutral-500"
+              type="button"
+              on:click={startGame}
+              disabled={snapshot?.status === 'thinking'}
+            >
+              New game
+            </button>
+          </div>
+
+          {#if !configured}
+            <div class="mt-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-100">
+              Configure a provider for AI turns.
+            </div>
+          {/if}
+
+          {#if snapshot?.warning || message}
+            <div class="mt-2 rounded-md border border-rose-400/40 bg-rose-400/10 px-2 py-1.5 text-xs text-rose-100">
+              {message || snapshot?.warning}
+            </div>
+          {/if}
+
+          {#if snapshot?.status === 'thinking'}
+            <div class="mt-2 flex items-center justify-between gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-1.5 text-xs text-sky-100">
+              <span>Player {currentPlayer + 1} thinking</span>
+              <button
+                class="rounded-md border border-sky-300/50 px-2 py-1 text-xs hover:bg-sky-300/10"
+                type="button"
+                on:click={abortAI}
+              >
+                Abort
+              </button>
+            </div>
+          {/if}
+        </section>
+
+        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
+          <h2 class="text-sm font-semibold tracking-normal">Token Supply</h2>
+          <div class="mt-2 grid grid-cols-3 gap-1.5">
             {#each GEMS as gem (gem)}
               <button
-                class={`rounded-md border px-3 py-3 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
+                class={`flex min-h-16 w-full flex-col items-start justify-between rounded-md border px-2 py-1.5 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
                 type="button"
                 disabled={state.tokenPool[gem] === 0 || snapshot?.status === 'thinking'}
-                on:click={() => selectGem(gem)}
+                on:pointerdown|preventDefault={() => selectGemFromPointer(gem)}
+                on:click={() => selectGemFromClick(gem)}
               >
-                <span class="block">
+                <span class="pointer-events-none block">
                   <SplendorGemBadge {gem} label={gemLabels[gem]} />
                 </span>
-                <span class="text-xs opacity-80">Supply {state.tokenPool[gem]}</span>
+                <span class="pointer-events-none text-[10px] opacity-80">Supply {state.tokenPool[gem]}</span>
               </button>
             {/each}
-            <div class={`rounded-md border px-3 py-3 ${gemClasses.gold}`}>
+            <div class={`flex min-h-16 w-full flex-col items-start justify-between rounded-md border px-2 py-1.5 ${gemClasses.gold}`}>
               <span class="block">
                 <SplendorGemBadge gem="gold" label="Gold" />
               </span>
-              <span class="text-xs opacity-80">Supply {state.tokenPool.gold}</span>
+              <span class="text-[10px] opacity-80">Supply {state.tokenPool.gold}</span>
             </div>
           </div>
-          <div class="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <div class="text-sm text-neutral-300">
-              {selectedGems.length ? selectedGems.map((gem) => gemLabels[gem]).join(', ') : 'Select tokens to take'}
+          <div class="mt-2 rounded-md border border-neutral-800 bg-neutral-900 p-2">
+            <div class="flex min-h-7 flex-wrap items-center gap-1 text-xs text-neutral-300">
+              {#if selectedGems.length}
+                {#each selectedGems as gem, index (`${gem}-${index}`)}
+                  <SplendorGemBadge {gem} compact />
+                {/each}
+              {:else}
+                Select tokens to take
+              {/if}
             </div>
             <button
-              class="mt-3 w-full rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
+              class="mt-2 w-full rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
               type="button"
               disabled={!takeMove || snapshot?.status === 'thinking'}
               on:click={() => {
@@ -692,37 +745,37 @@
           </div>
         </section>
 
-        <section class="space-y-3">
+        <section class="grid min-h-0 flex-1 grid-rows-4 gap-2">
           {#each state.players as player, index (index)}
-            <article class="rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-4">
+            <article class="min-h-0 rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2">
               <div class="flex items-center justify-between gap-2">
-                <h2 class="font-semibold tracking-normal">Player {index + 1}</h2>
-                <span class="text-sm text-neutral-300">{player.prestige} prestige</span>
+                <h2 class="text-sm font-semibold tracking-normal">Player {index + 1}</h2>
+                <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
               </div>
-              <div class="mt-3 flex flex-wrap gap-2">
+              <div class="mt-1.5 flex flex-wrap gap-1">
                 {#each [...GEMS, 'gold'] as gem (gem)}
-                  <SplendorGemBadge {gem} amount={player.tokens[gem]} />
+                  <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
                 {/each}
               </div>
-              <div class="mt-3 flex flex-wrap gap-2">
+              <div class="mt-1.5 flex flex-wrap gap-1">
                 {#each GEMS as gem (gem)}
-                  <SplendorGemBadge {gem} amount={player.bonuses[gem]} label="bonus" />
+                  <SplendorGemBadge {gem} amount={player.bonuses[gem]} compact />
                 {/each}
               </div>
-              <div class="mt-3 text-xs text-neutral-500">
+              <div class="mt-1.5 text-[10px] text-neutral-500">
                 Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
               </div>
               {#if player.reserved.length}
-                <div class="mt-3 space-y-2">
+                <div class="mt-1.5 flex gap-1.5 overflow-hidden">
                   {#each player.reserved as card (card.id)}
-                    <div class="rounded-md border border-neutral-800 bg-neutral-900 p-2">
-                      <div class="flex items-center justify-between gap-2">
-                        <div class="w-16 shrink-0">
+                    <div class="rounded-md border border-neutral-800 bg-neutral-900 p-1">
+                      <div class="flex items-center gap-1.5">
+                        <div class="w-10 shrink-0">
                           <SplendorCardArt {card} compact />
                         </div>
                         {#if index === currentPlayer}
                           <button
-                            class="rounded-md bg-emerald-500 px-2 py-1 text-xs font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
+                            class="rounded-md bg-emerald-500 px-1.5 py-1 text-[10px] font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
                             type="button"
                             disabled={!legalBuy(card, 'reserved') || snapshot?.status === 'thinking'}
                             on:click={() => {
@@ -742,6 +795,7 @@
           {/each}
         </section>
       </aside>
+    </div>
     </div>
   </section>
 {/if}

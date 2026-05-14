@@ -8,6 +8,7 @@
 
   export let card: Card;
   export let compact = false;
+  export let board = false;
 
   const gemLabels: Record<GemOrGold, string> = {
     emerald: 'Emerald',
@@ -45,32 +46,30 @@
   {/if}
 
   <div
-    class="pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-b from-neutral-950/80 via-transparent to-neutral-950/90 {compact ? 'p-1.5' : 'p-3'}"
+    class="pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-b from-neutral-950/80 via-transparent to-neutral-950/90 {compact ? 'p-1.5' : board ? 'p-2' : 'p-3'}"
   >
     <div class="flex items-start justify-between gap-2">
       <div>
-        <div
-          class="inline-flex"
-        >
-          <SplendorGemBadge gem={card.bonus} label={compact ? '' : 'bonus'} {compact} />
+        <div class="inline-flex">
+          <SplendorGemBadge gem={card.bonus} {compact} {board} />
         </div>
-        {#if !compact}
+        {#if imageFailed && !compact}
           <h3 class="mt-2 text-sm font-medium text-white drop-shadow">
             {card.id}
           </h3>
         {/if}
       </div>
       <span
-        class="rounded-md bg-neutral-950/85 px-2 py-1 text-sm font-semibold text-neutral-100 ring-1 ring-white/10"
+        class="rounded-md bg-neutral-950/85 px-2 py-1 {compact ? 'text-xs' : 'text-sm'} font-semibold text-neutral-100 ring-1 ring-white/10"
       >
         {card.prestige}
       </span>
     </div>
 
-    <div class="flex flex-wrap gap-1.5">
+    <div class="flex flex-col items-start gap-1.5">
       {#each GEMS as gem (gem)}
         {#if card.cost[gem]}
-          <SplendorGemBadge {gem} amount={card.cost[gem]} {compact} />
+          <SplendorGemBadge {gem} amount={card.cost[gem]} {compact} {board} />
         {/if}
       {/each}
     </div>

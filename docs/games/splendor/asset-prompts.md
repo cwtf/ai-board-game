@@ -12,7 +12,7 @@ Expected output paths match the UI:
 Use this base prompt for every development card, then append the per-card subject line from the table.
 
 ```text
-Original modern trading-card illustration for a board game about merchants, commodities, and prestige. Vertical 5:7 card art, modern trading and merchant theme, cinematic editorial illustration, premium board-game asset, crisp details, realistic materials, rich but restrained color, no fantasy crowns, no medieval costumes, no official Splendor references, no logos, no readable text, no numerals, no watermark. Leave the lower 18 percent visually quiet for UI overlays. Use the subject line exactly as art direction, not as visible text.
+Original modern trading-card illustration for a board game about merchants, commodities, and prestige. Vertical 5:7 card art, modern trading and merchant theme, cinematic editorial illustration, premium board-game asset, crisp details, realistic materials, rich but restrained color, no fantasy crowns, no medieval costumes, no official Splendor references, no logos, no readable text, no numerals, no watermark. Use the subject line exactly as art direction, not as visible text.
 ```
 
 Negative prompt:
