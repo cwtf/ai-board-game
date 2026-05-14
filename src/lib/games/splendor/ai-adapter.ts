@@ -98,9 +98,12 @@ export const splendorAdapter: GameAdapter<SplendorState, SplendorMove> = {
   systemPrompt() {
     return [
       'You are playing Splendor.',
-      'Each turn you receive the full public game state and a list of legal moves with IDs.',
-      'Respond with one JSON object containing moveId and any required sub-decisions.',
-      'Do not include prose outside the JSON.',
+      'Each turn you receive the public game state from your perspective and an enumerated list of legal moves with IDs.',
+      'Choose exactly one legal move by ID. Respond with one JSON object containing moveId and any required sub-decisions such as goldUsedFor, discard, or noble.',
+      'Do not include prose, markdown, or explanation outside the JSON.',
+      'Strategy priorities: buy affordable prestige cards when they improve your position; build permanent bonuses that reduce the cost of visible tier 2 and tier 3 cards; pursue nobles when you already have most of their required bonuses; reserve high-value cards you can soon buy or that an opponent is close to buying; take tokens that move you toward a near-term purchase.',
+      'Avoid taking random tokens with no purchase plan, overusing gold when matching gems can pay, reserving low-impact cards, or ignoring an immediate winning or blocking move.',
+      'When multiple moves look similar, prefer the move that increases prestige soonest, then the move that improves future discounts toward expensive cards.',
     ].join(' ');
   },
   serializeForAI(state, player, moves) {

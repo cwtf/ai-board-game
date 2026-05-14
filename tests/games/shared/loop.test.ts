@@ -111,6 +111,21 @@ describe('game loop', () => {
     expect(snapshots.length).toBe(2);
   });
 
+  it('accepts human moves that match a legal move ID without sharing object identity', () => {
+    const loop = createGameLoop({
+      adapter,
+      initialState: adapter.init({
+        playerCount: 2,
+        aiPlayerIndices: [1],
+      }),
+      aiPlayers: { 1: { provider: providerWithReplies([]), model: 'mock' } },
+    });
+
+    loop.playHumanMove({ id: 'ADD_TWO', amount: 2 });
+
+    expect(loop.getSnapshot().state.scores).toEqual([2, 0]);
+  });
+
   it('runs an AI move and records usage', async () => {
     const provider = providerWithReplies(['{"moveId":"ADD_TWO"}']);
     const loop = createGameLoop({

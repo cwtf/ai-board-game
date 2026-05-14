@@ -21,6 +21,11 @@
     {};
   let testing: ProviderId | null = null;
 
+  $: selectedProviderId = keys.selectedProvider ?? providers[0].id;
+  $: activeProvider =
+    providers.find((provider) => provider.id === selectedProviderId) ??
+    providers[0];
+
   function refresh() {
     keys = getStoredKeys();
     draftKeys = Object.fromEntries(
@@ -154,146 +159,123 @@
     </p>
   </div>
 
-  <div class="mb-6 flex flex-wrap gap-3">
-    {#each providers as provider (provider.id)}
-      <button
-        class={`rounded-md border px-3 py-2 text-sm ${
-          keys.selectedProvider === provider.id
-            ? 'border-emerald-400 bg-emerald-400/10 text-emerald-100'
-            : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500'
-        }`}
-        type="button"
-        on:click={() => setSelectedProvider(provider.id)}
-      >
-        {provider.label}
-      </button>
-    {/each}
-  </div>
-
-  <div class="grid gap-4">
-    {#each providers as provider (provider.id)}
-      <article class="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <div
-          class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
-        >
-          <div>
-            <h2 class="text-lg font-semibold">{provider.label}</h2>
-            <p class="mt-1 text-sm text-neutral-400">
-              Default model:
-              <span class="text-neutral-200">{provider.defaultModel}</span>
-            </p>
-          </div>
-          <div class="flex items-center gap-2 text-sm">
-            {#if testState[provider.id]}
-              <span
-                class={`h-2.5 w-2.5 rounded-full ${
-                  testState[provider.id]?.ok ? 'bg-emerald-400' : 'bg-red-400'
-                }`}
-              ></span>
-              <span
-                class={testState[provider.id]?.ok
-                  ? 'text-emerald-200'
-                  : 'text-red-200'}
-              >
-                {testState[provider.id]?.message}
-              </span>
-            {/if}
-          </div>
-        </div>
-
-        <div class="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-          {#if provider.requiresApiKey}
-            <label class="grid gap-2 text-sm">
-              <span class="text-neutral-300">API key</span>
-              <input
-                class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
-                type="password"
-                autocomplete="off"
-                bind:value={draftKeys[provider.id]}
-                placeholder="Paste key"
-              />
-            </label>
-          {:else}
-            <div
-              class="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-400"
-            >
-              No API key required by default.
-            </div>
-          {/if}
-
-          {#if provider.id === 'llama' || provider.id === 'ollama'}
-            <label class="grid gap-2 text-sm">
-              <span class="text-neutral-300"
-                >{provider.endpointLabel ?? 'Endpoint URL'}</span
-              >
-              <input
-                class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
-                type="url"
-                bind:value={draftUrls[provider.id]}
-                placeholder={provider.defaultEndpointUrl ??
-                  'https://example.com/v1'}
-              />
-            </label>
-          {:else}
-            <label class="grid gap-2 text-sm">
-              <span class="text-neutral-300">Model</span>
-              <select
-                class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
-                value={selectedModelFor(provider.id, keys)}
-                on:change={(event) =>
-                  setSelectedModel(provider.id, event.currentTarget.value)}
-              >
-                {#each provider.availableModels as model (model)}
-                  <option value={model}>{model}</option>
-                {/each}
-              </select>
-            </label>
-          {/if}
-
-          <div class="flex gap-2">
-            <button
-              class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              disabled={testing === provider.id}
-              on:click={() => saveProvider(provider.id)}
-            >
-              Save
-            </button>
-            <button
-              class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-              type="button"
-              on:click={() => testProvider(provider.id)}
-            >
-              {testing === provider.id ? 'Testing...' : 'Test'}
-            </button>
-            <button
-              class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-              type="button"
-              on:click={() => clearProvider(provider.id)}
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-
-        {#if provider.id === 'llama' || provider.id === 'ollama'}
-          <label class="mt-4 grid gap-2 text-sm lg:max-w-md">
-            <span class="text-neutral-300">Model</span>
-            <select
-              class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
-              value={selectedModelFor(provider.id, keys)}
-              on:change={(event) =>
-                setSelectedModel(provider.id, event.currentTarget.value)}
-            >
-              {#each provider.availableModels as model (model)}
-                <option value={model}>{model}</option>
-              {/each}
-            </select>
-          </label>
+  <article class="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div>
+        <h2 class="text-lg font-semibold">{activeProvider.label}</h2>
+        <p class="mt-1 text-sm text-neutral-400">
+          Default model:
+          <span class="text-neutral-200">{activeProvider.defaultModel}</span>
+        </p>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        {#if testState[activeProvider.id]}
+          <span
+            class={`h-2.5 w-2.5 rounded-full ${
+              testState[activeProvider.id]?.ok ? 'bg-emerald-400' : 'bg-red-400'
+            }`}
+          ></span>
+          <span
+            class={testState[activeProvider.id]?.ok
+              ? 'text-emerald-200'
+              : 'text-red-200'}
+          >
+            {testState[activeProvider.id]?.message}
+          </span>
         {/if}
-      </article>
-    {/each}
-  </div>
+      </div>
+    </div>
+
+    <div class="mt-5 grid gap-4 lg:grid-cols-2">
+      <label class="grid gap-2 text-sm">
+        <span class="text-neutral-300">Provider</span>
+        <select
+          class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
+          value={activeProvider.id}
+          on:change={(event) =>
+            setSelectedProvider(event.currentTarget.value as ProviderId)}
+        >
+          {#each providers as provider (provider.id)}
+            <option value={provider.id}>{provider.label}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="grid gap-2 text-sm">
+        <span class="text-neutral-300">Model</span>
+        <select
+          class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
+          value={selectedModelFor(activeProvider.id, keys)}
+          on:change={(event) =>
+            setSelectedModel(activeProvider.id, event.currentTarget.value)}
+        >
+          {#each activeProvider.availableModels as model (model)}
+            <option value={model}>{model}</option>
+          {/each}
+        </select>
+      </label>
+
+      {#if activeProvider.requiresApiKey}
+        <label class="grid gap-2 text-sm">
+          <span class="text-neutral-300">API key</span>
+          <input
+            class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
+            type="password"
+            autocomplete="off"
+            bind:value={draftKeys[activeProvider.id]}
+            placeholder="Paste key"
+          />
+        </label>
+      {:else}
+        <div
+          class="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm text-neutral-400"
+        >
+          No API key required by default.
+        </div>
+      {/if}
+
+      {#if activeProvider.id === 'llama' || activeProvider.id === 'ollama'}
+        <label class="grid gap-2 text-sm">
+          <span class="text-neutral-300">
+            {activeProvider.endpointLabel ?? 'Endpoint URL'}
+          </span>
+          <input
+            class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
+            type="url"
+            bind:value={draftUrls[activeProvider.id]}
+            placeholder={activeProvider.defaultEndpointUrl ??
+              'https://example.com/v1'}
+          />
+        </label>
+      {/if}
+    </div>
+
+    <div class="mt-5 flex flex-wrap gap-2">
+      <button
+        class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+        type="button"
+        disabled={testing === activeProvider.id}
+        on:click={() => saveProvider(activeProvider.id)}
+      >
+        Save
+      </button>
+      <button
+        class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-60"
+        type="button"
+        disabled={testing === activeProvider.id}
+        on:click={() => testProvider(activeProvider.id)}
+      >
+        {testing === activeProvider.id ? 'Testing...' : 'Test'}
+      </button>
+      <button
+        class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
+        type="button"
+        on:click={() => clearProvider(activeProvider.id)}
+      >
+        Clear
+      </button>
+    </div>
+  </article>
 
   <button
     class="mt-6 rounded-md border border-red-400/50 px-3 py-2 text-sm text-red-200 hover:border-red-300"

@@ -49,6 +49,24 @@ function isProviderError(error: unknown): error is AIProviderError {
   return Boolean(error && typeof error === 'object' && 'code' in error);
 }
 
+function moveId(move: unknown): string | undefined {
+  if (!move || typeof move !== 'object' || !('id' in move)) {
+    return undefined;
+  }
+
+  const id = (move as { id?: unknown }).id;
+  return typeof id === 'string' ? id : undefined;
+}
+
+function isLegalHumanMove<Move>(move: Move, legalMoves: Move[]): boolean {
+  if (legalMoves.includes(move)) {
+    return true;
+  }
+
+  const id = moveId(move);
+  return Boolean(id && legalMoves.some((candidate) => moveId(candidate) === id));
+}
+
 export function createGameLoop<State, Move>({
   adapter,
   initialState,
@@ -185,7 +203,7 @@ export function createGameLoop<State, Move>({
       }
 
       const legalMoves = adapter.legalMoves(state, player);
-      if (!legalMoves.includes(move)) {
+      if (!isLegalHumanMove(move, legalMoves)) {
         throw new Error('Move is not legal for the current player.');
       }
 

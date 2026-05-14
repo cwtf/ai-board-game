@@ -4,6 +4,19 @@ import { legalMoves } from '@/lib/games/splendor/rules';
 import { init } from '@/lib/games/splendor/state';
 
 describe('Splendor AI adapter', () => {
+  it('gives the model a JSON-only contract and Splendor strategy priorities', () => {
+    const prompt = splendorAdapter.systemPrompt();
+
+    expect(prompt).toContain('Respond with one JSON object');
+    expect(prompt).toContain('moveId');
+    expect(prompt).toContain('Do not include prose');
+    expect(prompt).toContain('buy affordable prestige cards');
+    expect(prompt).toContain('visible tier 2 and tier 3 cards');
+    expect(prompt).toContain('pursue nobles');
+    expect(prompt).toContain('reserve high-value cards');
+    expect(prompt).toContain('near-term purchase');
+  });
+
   it('serializes legal moves with unique IDs', () => {
     const state = init({ seed: 'adapter', playerCount: 2 });
     const moves = legalMoves(state);

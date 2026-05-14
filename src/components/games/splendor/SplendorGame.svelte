@@ -213,6 +213,29 @@
     );
   }
 
+  function canCompleteTakeMove(gems: Gem[]): boolean {
+    const normalized = normalizeGemSelection(gems);
+    if (normalized.length === 0) {
+      return false;
+    }
+    if (findTakeMove(normalized)) {
+      return true;
+    }
+    if (normalized.length >= 3) {
+      return false;
+    }
+    if (new Set(normalized).size !== normalized.length) {
+      return false;
+    }
+
+    return legalMoves.some(
+      (move) =>
+        move.kind === 'take' &&
+        move.gems.length > normalized.length &&
+        normalized.every((gem) => move.gems.includes(gem)),
+    );
+  }
+
   function normalizeGemSelection(gems: Gem[]): Gem[] {
     return [...gems].sort((left, right) => GEMS.indexOf(left) - GEMS.indexOf(right));
   }
@@ -230,10 +253,8 @@
         ? selectedGems.filter((item) => item !== gem)
         : [...selectedGems, gem];
 
-    selectedGems = normalizeGemSelection(next.length > 3 ? [gem] : next);
-    if (!findTakeMove(selectedGems)) {
-      selectedGems = [gem];
-    }
+    const normalized = normalizeGemSelection(next.length > 3 ? [gem] : next);
+    selectedGems = canCompleteTakeMove(normalized) ? normalized : [gem];
   }
 
   function selectGemFromPointer(gem: Gem) {
@@ -584,19 +605,31 @@
               <div class="min-h-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-2">
                 <div class="mb-1.5 flex h-8 items-center justify-between gap-2">
                   <h2 class="text-sm font-semibold tracking-normal">Tier {tier}</h2>
+                  <span class="text-xs text-neutral-500">{state.decks[deckKey(tier as Tier)].length} in deck</span>
+                </div>
+                <div class="grid h-[calc(100%-2.375rem)] grid-cols-5 items-start justify-items-center gap-2 overflow-hidden">
                   <button
-                    class="rounded-md border px-2 py-1 text-xs disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600 {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 text-amber-100 hover:bg-amber-300/10' : 'border-neutral-800 text-neutral-600'}"
+                    class="group relative aspect-[5/7] w-44 overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10' : 'border-neutral-800 opacity-60'}"
                     type="button"
+                    aria-label={`Reserve a face-down tier ${tier} card`}
                     disabled={!legalReserveDeck(tier as Tier) || snapshot?.status === 'thinking'}
                     on:click={() => {
                       const move = legalReserveDeck(tier as Tier);
                       if (move) beginMove(move);
                     }}
                   >
-                    Reserve deck ({state.decks[deckKey(tier as Tier)].length})
+                    <div class="absolute inset-1 rounded-md border border-amber-300/30 bg-[radial-gradient(circle_at_50%_35%,rgba(251,191,36,0.16),transparent_36%),linear-gradient(135deg,rgba(23,23,23,1),rgba(3,7,18,1))]"></div>
+                    <div class="absolute inset-4 rounded-md border border-amber-200/20"></div>
+                    <div class="absolute left-2 right-2 top-2 flex items-center justify-between gap-2 rounded-md bg-neutral-950/75 px-2 py-1 text-[10px] text-amber-100/90 ring-1 ring-amber-200/15">
+                      <span>Deck</span>
+                      <span>{state.decks[deckKey(tier as Tier)].length}</span>
+                    </div>
+                    <div class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
+                      <span class="grid size-10 rotate-45 place-items-center border border-amber-200/45 bg-neutral-950/80 shadow-inner">
+                        <span class="-rotate-45 text-sm font-semibold text-amber-100">{tier}</span>
+                      </span>
+                    </div>
                   </button>
-                </div>
-                <div class="grid h-[calc(100%-2.375rem)] grid-cols-4 items-start justify-items-center gap-2 overflow-hidden">
                   {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
                     {#if card}
                       <article
