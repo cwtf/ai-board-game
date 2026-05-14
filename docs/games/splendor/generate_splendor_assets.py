@@ -67,23 +67,29 @@ DOWNLOAD_TIMEOUT = 120
 # ============================================================================
 
 CARD_BASE = (
-    "Original modern trading-card illustration for a board game about "
-    "merchants, commodities, and prestige. Vertical 5:7 card art, modern "
-    "trading and merchant theme, cinematic editorial illustration, premium "
-    "board-game asset, crisp details, realistic materials, rich but restrained "
-    "color, no fantasy crowns, no medieval costumes, no official Splendor "
-    "references, no logos, no readable text, no numerals, no watermark. Use "
-    "the subject line exactly as art direction, not as visible text."
+    "Original full-bleed vertical 5:7 illustration for a board game about "
+    "merchants, commodities, and prestige. The scene must fill the entire "
+    "canvas edge to edge like a cropped editorial image, with no decorative "
+    "border, no frame, no card template, no inset mat, no rounded corners, no "
+    "badge, and no UI overlay. Modern trading and merchant theme, cinematic "
+    "editorial illustration, premium board-game asset, crisp details, "
+    "realistic materials, rich but restrained color, no fantasy crowns, no "
+    "medieval costumes, no official Splendor references, no logos, no readable "
+    "text, no numerals, no watermark. Use the subject line exactly as art "
+    "direction, not as visible text."
 )
 
 NOBLE_BASE = (
-    "Original square-ish 5:4 portrait tile for a modern board game about "
-    "merchants, finance, and prestige. Contemporary trade patron, investor, "
-    "diplomat, or market-maker, cinematic editorial illustration, premium "
-    "board-game asset, crisp face and clothing detail, tasteful wealth, no "
-    "monarchy costume, no official Splendor references, no logos, no readable "
-    "text, no numerals, no watermark. Use the subject line exactly as art "
-    "direction, not as visible text."
+    "Original full-bleed 5:4 portrait illustration for a modern board game "
+    "about merchants, finance, and prestige. The portrait scene must fill the "
+    "entire canvas edge to edge like a cropped editorial image, with no "
+    "decorative border, no frame, no tile template, no inset mat, no rounded "
+    "corners, no badge, and no UI overlay. Contemporary trade patron, "
+    "investor, diplomat, or market-maker, cinematic editorial illustration, "
+    "premium board-game asset, crisp face and clothing detail, tasteful "
+    "wealth, no monarchy costume, no official Splendor references, no logos, "
+    "no readable text, no numerals, no watermark. Use the subject line exactly "
+    "as art direction, not as visible text."
 )
 
 
