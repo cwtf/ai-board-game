@@ -2,24 +2,27 @@
 Splendor asset generator.
 
 Reads asset-prompts.md, generates an image for each row in the cards and nobles
-tables via OpenAI's image API, and writes them to public/assets/splendor/.
+tables via fal.ai's image API, and writes them to public/assets/splendor/.
 
 - Resumable: skips files that already exist.
 - Saves the exact prompt sent for each image alongside it (.prompt.txt) so you
   can re-roll a specific card later without losing the recipe.
 - Concurrent: runs MAX_WORKERS calls in parallel with exponential-backoff retry.
+
+Requires:
+  pip install fal-client
+  set FAL_KEY=your-api-key
 """
 
+import base64
 import os
 import re
 import sys
 import time
-import base64
-from pathlib import Path
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from openai import OpenAI
-from openai import RateLimitError, APIError, APIConnectionError, APITimeoutError
+from pathlib import Path
+from typing import Any
 
 
 # ============================================================================
@@ -30,9 +33,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[2]
 
 # Paste your API key here. Alternatively leave it empty ("") and set the
-# OPENAI_API_KEY environment variable instead (recommended — keeps the key
+# FAL_KEY environment variable instead (recommended - keeps the key
 # out of source control).
-OPENAI_API_KEY = ""
+FAL_API_KEY = ""
 
 # Path to the markdown file with the prompt tables.
 PROMPTS_FILE = SCRIPT_DIR / "asset-prompts.md"
@@ -40,25 +43,26 @@ PROMPTS_FILE = SCRIPT_DIR / "asset-prompts.md"
 # Where images get written. cards/ and nobles/ subfolders are created automatically.
 OUTPUT_ROOT = REPO_ROOT / "public" / "assets" / "splendor"
 
-# Model. As of 2026 the OpenAI image models are:
-#   "gpt-image-1"         — stable, well-documented
-#   "gpt-image-1.5"       — current flagship (better prompt adherence)
-#   "chatgpt-image-latest" — alias that tracks whatever ChatGPT itself uses
-#   "gpt-image-1-mini"    — ~10x cheaper, use for prompt iteration
-MODEL = "gpt-image-1.5"
+# fal.ai model endpoint. fal-ai/flux/dev is a general text-to-image model with
+# custom image sizes and PNG output support.
+FAL_ENDPOINT = "fal-ai/flux/dev"
 
-# Sizes. OpenAI's image API only supports these three:
-#   "1024x1024" (square), "1024x1536" (portrait 2:3), "1536x1024" (landscape 3:2)
-CARD_SIZE = "1024x1536"   # portrait — closest to your 5:7 spec
-NOBLE_SIZE = "1024x1024"  # square — closest to "square-ish" nobles
+# Image sizes. fal accepts named sizes or {"width": int, "height": int}.
+CARD_SIZE: dict[str, int] | str = {"width": 1024, "height": 1434}   # 5:7
+NOBLE_SIZE: dict[str, int] | str = {"width": 1280, "height": 1024}  # 5:4
 
-# Quality: "low" | "medium" | "high" | "auto"
-QUALITY = "medium"
+# fal generation options.
+NUM_INFERENCE_STEPS = 28
+GUIDANCE_SCALE = 3.5
+ACCELERATION = "regular"  # "none" | "regular" | "high"
+OUTPUT_FORMAT = "png"
+ENABLE_SAFETY_CHECKER = True
 
 # Concurrency and retries
 MAX_WORKERS = 4
 MAX_RETRIES = 5
 RETRY_BACKOFF = 4  # seconds; doubles each retry
+DOWNLOAD_TIMEOUT = 120
 
 # ============================================================================
 # Base prompts (copied from your markdown so the script is self-contained)
@@ -113,11 +117,62 @@ def build_prompt(rel_path: str, subject: str) -> str:
     return f"{base} {subject}"
 
 
-def get_size(rel_path: str) -> str:
+def get_size(rel_path: str) -> dict[str, int] | str:
     return CARD_SIZE if rel_path.startswith("cards/") else NOBLE_SIZE
 
 
-def generate_one(client: OpenAI, rel_path: str, subject: str) -> tuple[str, str]:
+def build_arguments(rel_path: str, prompt: str) -> dict[str, Any]:
+    return {
+        "prompt": prompt,
+        "image_size": get_size(rel_path),
+        "num_inference_steps": NUM_INFERENCE_STEPS,
+        "guidance_scale": GUIDANCE_SCALE,
+        "num_images": 1,
+        "enable_safety_checker": ENABLE_SAFETY_CHECKER,
+        "output_format": OUTPUT_FORMAT,
+        "acceleration": ACCELERATION,
+    }
+
+
+def image_bytes_from_result(result: dict[str, Any]) -> bytes:
+    images = result.get("images")
+    if not images:
+        raise ValueError("fal response did not include images")
+
+    image_url = images[0].get("url")
+    if not image_url:
+        raise ValueError("fal image did not include a URL")
+
+    if image_url.startswith("data:"):
+        _, encoded = image_url.split(",", 1)
+        return base64.b64decode(encoded)
+
+    request = urllib.request.Request(
+        image_url,
+        headers={"User-Agent": "splendor-asset-generator/1.0"},
+    )
+    with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT) as response:
+        return response.read()
+
+
+def status_code_from_error(error: Exception) -> int | None:
+    status = getattr(error, "status_code", None)
+    if isinstance(status, int):
+        return status
+
+    response = getattr(error, "response", None)
+    response_status = getattr(response, "status_code", None)
+    return response_status if isinstance(response_status, int) else None
+
+
+def should_retry(error: Exception) -> bool:
+    status = status_code_from_error(error)
+    if status is None:
+        return True
+    return status == 429 or status >= 500
+
+
+def generate_one(fal_client: Any, rel_path: str, subject: str) -> tuple[str, str]:
     """Generate a single image. Returns (rel_path, status_string)."""
     out_path = OUTPUT_ROOT / rel_path
     prompt_path = out_path.with_suffix(".prompt.txt")
@@ -127,54 +182,48 @@ def generate_one(client: OpenAI, rel_path: str, subject: str) -> tuple[str, str]
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     prompt = build_prompt(rel_path, subject)
-    size = get_size(rel_path)
+    arguments = build_arguments(rel_path, prompt)
 
     last_err: Exception | None = None
     for attempt in range(MAX_RETRIES):
         try:
-            response = client.images.generate(
-                model=MODEL,
-                prompt=prompt,
-                size=size,
-                quality=QUALITY,
-                n=1,
+            result = fal_client.subscribe(
+                FAL_ENDPOINT,
+                arguments=arguments,
             )
-            img_b64 = response.data[0].b64_json
-            if not img_b64:
-                return rel_path, "failed: empty response"
-            out_path.write_bytes(base64.b64decode(img_b64))
+            out_path.write_bytes(image_bytes_from_result(result))
             prompt_path.write_text(prompt, encoding="utf-8")
             return rel_path, "ok"
 
-        except (RateLimitError, APIConnectionError, APITimeoutError) as e:
+        except Exception as e:  # noqa: BLE001 - retry fal queue/download failures
             last_err = e
-            wait = RETRY_BACKOFF * (2 ** attempt)
-            print(f"  [{rel_path}] transient ({type(e).__name__}), sleeping {wait}s")
-            time.sleep(wait)
-
-        except APIError as e:
-            last_err = e
-            # 5xx is worth retrying; 4xx usually isn't
-            status = getattr(e, "status_code", None)
-            if status and 400 <= status < 500:
+            if not should_retry(e):
                 return rel_path, f"failed: {e}"
+            if attempt == MAX_RETRIES - 1:
+                break
             wait = RETRY_BACKOFF * (2 ** attempt)
-            print(f"  [{rel_path}] api error {status}, sleeping {wait}s")
+            print(f"  [{rel_path}] error ({type(e).__name__}), sleeping {wait}s")
             time.sleep(wait)
-
-        except Exception as e:  # noqa: BLE001 — final safety net
-            return rel_path, f"failed: {type(e).__name__}: {e}"
 
     return rel_path, f"failed after {MAX_RETRIES} retries: {last_err}"
 
 
 def main() -> int:
-    api_key = OPENAI_API_KEY.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+    api_key = (
+        FAL_API_KEY.strip()
+        or os.environ.get("FAL_KEY", "").strip()
+        or os.environ.get("FAL_API_KEY", "").strip()
+    )
     if not api_key:
-        print("ERROR: no API key. Set OPENAI_API_KEY at top of script or as env var.")
+        print("ERROR: no API key. Set FAL_KEY as an env var or FAL_API_KEY in the script.")
         return 1
 
-    client = OpenAI(api_key=api_key)
+    os.environ["FAL_KEY"] = api_key
+    try:
+        import fal_client
+    except ImportError:
+        print("ERROR: fal-client is not installed. Run: pip install fal-client")
+        return 1
 
     entries = parse_prompts(PROMPTS_FILE)
     if not entries:
@@ -184,14 +233,14 @@ def main() -> int:
     cards = sum(1 for p, _ in entries if p.startswith("cards/"))
     nobles = sum(1 for p, _ in entries if p.startswith("nobles/"))
     print(f"Found {len(entries)} prompts: {cards} cards, {nobles} nobles")
-    print(f"Model={MODEL} quality={QUALITY} workers={MAX_WORKERS}")
+    print(f"Endpoint={FAL_ENDPOINT} format={OUTPUT_FORMAT} workers={MAX_WORKERS}")
     print(f"Output: {OUTPUT_ROOT.resolve()}\n")
 
     counts = {"ok": 0, "skipped": 0, "failed": 0}
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         futures = {
-            pool.submit(generate_one, client, rel_path, subject): rel_path
+            pool.submit(generate_one, fal_client, rel_path, subject): rel_path
             for rel_path, subject in entries
         }
         for i, future in enumerate(as_completed(futures), 1):
