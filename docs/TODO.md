@@ -76,9 +76,9 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 34. [x] [engine] `src/lib/games/splendor/data/cards.ts`: 90 cards (40/30/20) per the rulebook list.
 35. [x] [engine] `src/lib/games/splendor/data/nobles.ts`: 10 nobles.
-36. [x] [engine] `src/lib/games/splendor/state.ts`: types per docs/games/splendor.md §5, `init()` factory.
-37. [x] [engine] `src/lib/games/splendor/rules.ts`: `legalMoves`, `applyMove`, `currentPlayer`, `isTerminal`, `winner`. Pure functions.
-38. [x] [test] Per docs/games/splendor.md §8 edge cases:
+36. [x] [engine] `src/lib/games/splendor/state.ts`: types per docs/games/splendor.md §5 and §7, `init()` factory with independent tier/noble shuffles, seeded replay, face-up deal order, and player-count token pools.
+37. [x] [engine] `src/lib/games/splendor/rules.ts`: `legalMoves`, `applyMove`, `currentPlayer`, `isTerminal`, `winner`. Pure functions matching docs/games/splendor.md §7 contracts for legal move coverage, action resolution, payment validation, noble claiming, and final-round state.
+38. [x] [test] Per docs/games/splendor.md §9 edge cases:
     - Token conservation.
     - Can't buy what you can't afford (including with gold).
     - 2-of-a-kind requires ≥4 in supply.
@@ -86,15 +86,17 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
     - Final-round trigger.
     - Token discard down to 10.
     - Noble auto-claim at most one per turn.
-39. [x] [ai] `src/lib/games/splendor/ai-adapter.ts`: `systemPrompt`, `serializeForAI` (compact JSON + enumerated legal moves with IDs from §6), `parseAIMove` (validates moveId + sub-decisions).
+    - [ ] Follow-up contract tests from §7: distinct random shuffles per tier/nobles with seeded reproducibility, no source-order preservation assumption, same-slot board refill/null when deck empty, reserve-from-deck draws the front shuffled card, reserve grants no gold when pool is empty, `applyMove` does not mutate input, and `goldUsedFor` cannot overpay or over-allocate gold.
+39. [x] [ai] `src/lib/games/splendor/ai-adapter.ts`: `systemPrompt`, `serializeForAI` (compact JSON + enumerated legal moves with IDs from §6), `parseAIMove` (validates moveId + sub-decisions). See follow-up visibility test for the §7/§8 reserved-card visibility contract.
 40. [x] [test] Adapter round-trip: every legal move serialises to a unique ID, parses back to the same move.
+    - [ ] Follow-up visibility test: AI serialization for player P never exposes opponent deck-reserved card identities, while preserving P's own reserved card identities.
 
 ## Phase 6 — Splendor UI
 
 41. [x] [ui] `src/pages/splendor.astro` mounts a Svelte/React island.
-42. [x] [ui] Board layout: tier rows (4 face-up + deck count), token supply, nobles row.
-43. [x] [ui] Player panels: tokens, bonuses, reserved cards, prestige.
-44. [x] [ui] Move composer: click-to-take tokens, click-to-buy, click-to-reserve. Legal-move highlighting.
+42. [x] [ui] Board layout: tier rows (4 face-up + deck count), token supply, nobles row. Missing card/noble art falls back to a rules-readable layout per docs/games/splendor.md §7.
+43. [x] [ui] Player panels: tokens, bonuses, reserved cards, prestige, token totals, reserve counts, and final-round/winner state.
+44. [x] [ui] Move composer: click-to-take tokens, click-to-buy, click-to-reserve. Legal-move highlighting and affordance markers, including effective costs after bonuses.
 45. [x] [ui] Token discard modal when over the limit; gold-allocation modal when buying with mixed payment.
 46. [x] [ui] End-of-game modal: scores, winner.
 47. [x] [ui] Wire AI move flow via `loop.ts`. "Thinking…" indicator with provider/model + abort button.

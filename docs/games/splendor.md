@@ -48,9 +48,10 @@ On your turn, take **exactly one** of these actions:
 
 ### End-of-turn cleanup
 
+If a buy or reserve action removes a face-up card from the board, immediately refill that same board slot from the matching tier deck before end-of-turn cleanup. If the deck is empty, the slot becomes `null`.
+
 1. **Token limit**: if you hold more than 10 tokens (any type), discard back to the supply until you hold exactly 10. Player chooses which to discard.
-2. **Noble visit**: for each unclaimed noble whose gem-bonus requirement is met by your permanent bonuses, you may claim it. **Base rule: 1 noble per turn maximum**, player's choice if multiple eligible.
-3. **Refill board**: if you bought or reserved a face-up card, draw a replacement from that tier's deck (if any cards remain).
+2. **Noble visit**: for each unclaimed noble whose gem-bonus requirement is met by your permanent bonuses, claim exactly one noble. **Base rule: 1 noble per turn maximum**. If exactly one noble is eligible it is auto-claimed; if multiple nobles are eligible, the player chooses one.
 
 ## 4. End of game
 
@@ -142,15 +143,59 @@ The AI returns:
 
 `parseAIMove` validates that `moveId` is in the legal-move list and that all sub-decisions are well-formed. On failure, returns the specific reason to be echoed back in the retry prompt.
 
-## 7. AI prompt notes
+## 7. Implementation contracts
+
+### Initialization
+
+- Validate `playerCount` is 2-4.
+- If no seed is provided, create a fresh random seed. If a seed is provided, all randomness must be reproducible from that seed for testing and replay.
+- Shuffle tier 1, tier 2, tier 3, and nobles independently. Each shuffle should be an unbiased random permutation of that list; no tier or noble order should be preserved from source data except by chance.
+- Deal the first 4 cards of each shuffled tier to face-up board slots 0-3. The remaining cards stay in that tier deck in shuffled order, with future draws taken from the front.
+- Deal `playerCount + 1` nobles from the shuffled noble list to `noblesInPlay`.
+- Initialize current player to player 0, turn to 0, final-round fields to false/null, each player with no tokens/cards/reserves/nobles, and token pools from the player-count table.
+
+### Legal Move Coverage
+
+`legalMoves()` must include every currently legal move and no illegal moves:
+
+- Take all combinations of up to 3 distinct available standard gems. If only 1 or 2 standard gem colours are available, generate reduced `TAKEN` moves for those colours.
+- Take 2 matching standard gems only when that gem has at least 4 tokens in the supply before the take.
+- Reserve every face-up card and every non-empty tier deck when the player has fewer than 3 reserved cards.
+- Buy every affordable face-up board card and every affordable reserved card.
+- Do not include reserve-from-deck moves for empty decks or reserve moves for players already at 3 reserved cards.
+
+### Action Resolution
+
+- `applyMove()` clones the state and never mutates the input state.
+- Buying or reserving a face-up card immediately refills the same board slot from that tier deck, or writes `null` if the deck is empty.
+- Reserving from a deck draws the front card from the selected shuffled tier deck.
+- Reserving grants 1 gold only if gold remains in the token pool.
+- After the action resolves, enforce token discard down to exactly 10, then resolve noble claiming, then advance the turn.
+- If a player reaches 15 prestige after the action and noble step, set `finalRoundTriggered` and remember the triggering turn before advancing to the next player.
+
+### Payment Validation
+
+- Permanent bonuses reduce each gem cost before tokens are spent.
+- Standard gem tokens pay their matching remaining cost.
+- Gold is wild and may cover any remaining gem cost after bonuses and matching tokens.
+- `goldUsedFor` must not overpay a gem, cannot allocate more gold than the player has, and must reconstruct to a valid exact payment.
+- Paid standard and gold tokens return to the token pool.
+
+### Visibility And UI
+
+- The engine state may store all reserved cards, including cards reserved from decks. AI serialization should hide deck-reserved card identities from opponents and expose them only to the reserving player.
+- The UI should derive and display effective costs after bonuses, token totals, reserve counts, prestige, final-round status, legal affordance markers, and winner/tie state.
+- Missing card or noble art must fall back to a rules-readable layout rather than blocking play.
+
+## 8. AI prompt notes
 
 System prompt sketch (refine during implementation):
 
 > You are playing Splendor. Each turn you receive the full game state and a list of legal moves with short IDs. Respond with a single JSON object containing `moveId` and any required sub-decisions. Do not include prose outside the JSON. Prioritise: securing tier-3 cards, racing to nobles whose requirements you already partially meet, and denying high-value cards that opponents are close to affording. Avoid taking tokens when you cannot make progress toward a near-term purchase.
 
-State serialisation should be compact JSON. Helpful fields per opponent: prestige, bonuses by colour, tokens by colour, reserve size (cards hidden if reserved from deck — but in Splendor, reserved cards' identities are public to the reserver only; opponents see the count only). Verify this against the official rules during implementation.
+State serialisation should be compact JSON. Helpful fields per opponent: prestige, bonuses by colour, tokens by colour, and reserve size. Reserved deck-card identities are shown to the reserving player and hidden from opponents.
 
-## 8. Known edge cases (write tests for these)
+## 9. Known edge cases (write tests for these)
 
 - Taking 3 gems when only 2 distinct colours have tokens: legal to take just those 2 (one of each).
 - Taking 2 of the same when exactly 4 are in supply: legal (supply check is "≥4 before take").
@@ -161,11 +206,11 @@ State serialisation should be compact JSON. Helpful fields per opponent: prestig
 - Token discard when over the limit after reserving (you took a gold): the discard must include enough to land at exactly 10.
 - Multiple nobles eligible: only one is claimed per turn (base rules).
 
-## 9. v1 simplifications
+## 10. v1 simplifications
 
 None planned. Splendor's rules are tractable and worth implementing in full.
 
-## 10. References
+## 11. References
 
 - Official rulebook (Space Cowboys) — primary source for any ambiguity.
 - BoardGameGeek wiki — useful for edge cases and FAQ.
