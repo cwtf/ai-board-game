@@ -26,16 +26,19 @@ from openai import RateLimitError, APIError, APIConnectionError, APITimeoutError
 # CONFIG  <-- EDIT THIS SECTION
 # ============================================================================
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parents[2]
+
 # Paste your API key here. Alternatively leave it empty ("") and set the
 # OPENAI_API_KEY environment variable instead (recommended — keeps the key
 # out of source control).
 OPENAI_API_KEY = ""
 
 # Path to the markdown file with the prompt tables.
-PROMPTS_FILE = Path("asset-prompts.md")
+PROMPTS_FILE = SCRIPT_DIR / "asset-prompts.md"
 
 # Where images get written. cards/ and nobles/ subfolders are created automatically.
-OUTPUT_ROOT = Path("public/assets/splendor")
+OUTPUT_ROOT = REPO_ROOT / "public" / "assets" / "splendor"
 
 # Model. As of 2026 the OpenAI image models are:
 #   "gpt-image-1"         — stable, well-documented
