@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ALL_CARDS } from '@/lib/games/splendor/data/cards';
 import { NOBLES } from '@/lib/games/splendor/data/nobles';
 import {
   applyMove,
@@ -28,6 +29,30 @@ const rubyCard: Card = {
   cost: { ruby: 4 },
   bonus: 'sapphire',
   prestige: 0,
+};
+
+const nextCard: Card = {
+  id: 'test_next',
+  tier: 1,
+  cost: { emerald: 1 },
+  bonus: 'onyx',
+  prestige: 0,
+};
+
+const deckCardA: Card = {
+  id: 'test_deck_a',
+  tier: 2,
+  cost: { sapphire: 1 },
+  bonus: 'emerald',
+  prestige: 1,
+};
+
+const deckCardB: Card = {
+  id: 'test_deck_b',
+  tier: 2,
+  cost: { ruby: 1 },
+  bonus: 'ruby',
+  prestige: 1,
 };
 
 function state(): SplendorState {
@@ -83,6 +108,27 @@ function totalTokens(current: SplendorState): number {
 }
 
 describe('Splendor rules', () => {
+  it('initializes reproducible shuffled tiers and nobles without preserving source order', () => {
+    const left = init({ seed: 'shuffle-contract', playerCount: 3 });
+    const right = init({ seed: 'shuffle-contract', playerCount: 3 });
+    const other = init({ seed: 'shuffle-contract-other', playerCount: 3 });
+
+    expect(left.board).toEqual(right.board);
+    expect(left.decks).toEqual(right.decks);
+    expect(left.noblesInPlay).toEqual(right.noblesInPlay);
+    expect(left.board.tier1.map((card) => card?.id)).not.toEqual(
+      ALL_CARDS.filter((card) => card.tier === 1)
+        .slice(0, 4)
+        .map((card) => card.id),
+    );
+    expect(left.board.tier1.map((card) => card?.id)).not.toEqual(
+      other.board.tier1.map((card) => card?.id),
+    );
+    expect(left.noblesInPlay.map((noble) => noble.id)).not.toEqual(
+      other.noblesInPlay.map((noble) => noble.id),
+    );
+  });
+
   it('conserves tokens when taking gems', () => {
     const before = state();
     const after = applyMove(before, {
@@ -138,6 +184,68 @@ describe('Splendor rules', () => {
     ).toThrow('empty deck');
   });
 
+  it('refills the same board slot after reserving a face-up card', () => {
+    const current = state();
+    current.decks.tier1 = [nextCard];
+
+    const after = applyMove(current, {
+      id: 'RESERVE:1:test_free',
+      kind: 'reserve',
+      source: 'board',
+      tier: 1,
+      cardId: 'test_free',
+    });
+
+    expect(after.board.tier1[0]).toEqual(nextCard);
+    expect(after.decks.tier1).toHaveLength(0);
+    expect(after.players[0].reserved).toContainEqual(freeCard);
+  });
+
+  it('leaves the board slot empty when a face-up reserve exhausts the deck', () => {
+    const current = state();
+
+    const after = applyMove(current, {
+      id: 'RESERVE:1:test_free',
+      kind: 'reserve',
+      source: 'board',
+      tier: 1,
+      cardId: 'test_free',
+    });
+
+    expect(after.board.tier1[0]).toBeNull();
+  });
+
+  it('reserves the front card of the shuffled tier deck', () => {
+    const current = state();
+    current.decks.tier2 = [deckCardA, deckCardB];
+
+    const after = applyMove(current, {
+      id: 'RESERVE:2:DECK',
+      kind: 'reserve',
+      source: 'deck',
+      tier: 2,
+    });
+
+    expect(after.players[0].reserved).toContainEqual(deckCardA);
+    expect(after.decks.tier2).toEqual([deckCardB]);
+  });
+
+  it('does not grant gold when reserving and the gold pool is empty', () => {
+    const current = state();
+    current.tokenPool.gold = 0;
+
+    const after = applyMove(current, {
+      id: 'RESERVE:1:test_free',
+      kind: 'reserve',
+      source: 'board',
+      tier: 1,
+      cardId: 'test_free',
+    });
+
+    expect(after.players[0].tokens.gold).toBe(0);
+    expect(after.tokenPool.gold).toBe(0);
+  });
+
   it('enforces the reserved-card limit', () => {
     const current = state();
     current.players[0].reserved = [
@@ -169,6 +277,19 @@ describe('Splendor rules', () => {
     ).toThrow('Not enough');
   });
 
+  it('does not mutate the input state when applying a move', () => {
+    const before = state();
+    const snapshot = structuredClone(before);
+
+    applyMove(before, {
+      id: 'TAKE3:emerald,sapphire,ruby',
+      kind: 'take',
+      gems: ['emerald', 'sapphire', 'ruby'],
+    });
+
+    expect(before).toEqual(snapshot);
+  });
+
   it('buys using bonuses, tokens, and gold by reconstructing payment', () => {
     const current = state();
     current.board.tier1[0] = rubyCard;
@@ -189,6 +310,36 @@ describe('Splendor rules', () => {
     expect(after.players[0].bonuses.sapphire).toBe(1);
     expect(after.tokenPool.ruby).toBe(5);
     expect(after.tokenPool.gold).toBe(7);
+  });
+
+  it('rejects gold payments that overpay or over-allocate gold', () => {
+    const overpay = state();
+    overpay.board.tier1[0] = rubyCard;
+    overpay.players[0].tokens.gold = 5;
+
+    expect(() =>
+      applyMove(overpay, {
+        id: 'BUY:BOARD:test_ruby',
+        kind: 'buy',
+        source: 'board',
+        cardId: 'test_ruby',
+        goldUsedFor: { ruby: 5 },
+      }),
+    ).toThrow('Invalid gold allocation');
+
+    const overAllocate = state();
+    overAllocate.board.tier1[0] = rubyCard;
+    overAllocate.players[0].tokens.gold = 3;
+
+    expect(() =>
+      applyMove(overAllocate, {
+        id: 'BUY:BOARD:test_ruby',
+        kind: 'buy',
+        source: 'board',
+        cardId: 'test_ruby',
+        goldUsedFor: { ruby: 4 },
+      }),
+    ).toThrow('Not enough gold');
   });
 
   it('requires discard down to 10 after reserving with gold', () => {

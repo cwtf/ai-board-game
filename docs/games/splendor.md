@@ -6,7 +6,7 @@
 
 Engine-building card game for 2–4 players. Players collect gem tokens, use them to buy development cards (which provide permanent gem discounts), and accumulate prestige points. First to 15 prestige triggers the final round.
 
-**Information**: perfect (open). Easy for current LLMs to play competently.
+**Information**: mostly open. Cards reserved from a deck are visible to the reserving player and hidden from opponents.
 
 **Estimated AI turn cost**: ~1–2 KB serialised state, ~200–400 input tokens, ~50 output tokens.
 

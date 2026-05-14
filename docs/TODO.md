@@ -86,10 +86,10 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
     - Final-round trigger.
     - Token discard down to 10.
     - Noble auto-claim at most one per turn.
-    - [ ] Follow-up contract tests from §7: distinct random shuffles per tier/nobles with seeded reproducibility, no source-order preservation assumption, same-slot board refill/null when deck empty, reserve-from-deck draws the front shuffled card, reserve grants no gold when pool is empty, `applyMove` does not mutate input, and `goldUsedFor` cannot overpay or over-allocate gold.
+    - [x] Follow-up contract tests from §7: distinct random shuffles per tier/nobles with seeded reproducibility, no source-order preservation assumption, same-slot board refill/null when deck empty, reserve-from-deck draws the front shuffled card, reserve grants no gold when pool is empty, `applyMove` does not mutate input, and `goldUsedFor` cannot overpay or over-allocate gold.
 39. [x] [ai] `src/lib/games/splendor/ai-adapter.ts`: `systemPrompt`, `serializeForAI` (compact JSON + enumerated legal moves with IDs from §6), `parseAIMove` (validates moveId + sub-decisions). See follow-up visibility test for the §7/§8 reserved-card visibility contract.
 40. [x] [test] Adapter round-trip: every legal move serialises to a unique ID, parses back to the same move.
-    - [ ] Follow-up visibility test: AI serialization for player P never exposes opponent deck-reserved card identities, while preserving P's own reserved card identities.
+    - [x] Follow-up visibility test: AI serialization for player P never exposes opponent deck-reserved card identities, while preserving P's own reserved card identities.
 
 ## Phase 6 — Splendor UI
 
@@ -101,7 +101,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 46. [x] [ui] End-of-game modal: scores, winner.
 47. [x] [ui] Wire AI move flow via `loop.ts`. "Thinking…" indicator with provider/model + abort button.
 48. [x] [ui] TokenUsageBadge: per-turn and session totals.
-49. [test] Playwright e2e: human-vs-AI quick game with a mocked provider returning scripted moves; assert end state.
+49. [test] Playwright e2e: human-vs-AI quick game with a mocked provider returning scripted moves; assert end state. **Blocked until Playwright dependency/config is added.**
 
 ## Phase 7 — Exploding Kittens engine
 

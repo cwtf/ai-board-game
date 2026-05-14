@@ -10,7 +10,7 @@ export const games: GameMeta[] = [
       'Collect gem tokens, buy development cards, and race to prestige before the final round closes.',
     minPlayers: 2,
     maxPlayers: 4,
-    hiddenInformation: false,
+    hiddenInformation: true,
     estimatedAITurnTokens: 400,
     docPath: 'docs/games/splendor.md',
   },

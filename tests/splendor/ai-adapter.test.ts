@@ -44,4 +44,31 @@ describe('Splendor AI adapter', () => {
       ),
     ).toMatchObject({ ok: false });
   });
+
+  it('hides opponent reserved-card identities while preserving the viewer reserve', () => {
+    const state = init({ seed: 'adapter-visibility', playerCount: 2 });
+    state.players[0].reserved = [state.decks.tier1[0]];
+    state.players[1].reserved = [state.decks.tier2[0]];
+
+    const payload = JSON.parse(
+      splendorAdapter.serializeForAI(state, 0, legalMoves(state)),
+    ) as {
+      state: {
+        players: Array<{
+          reserved: unknown[];
+          reserveCount: number;
+        }>;
+      };
+    };
+
+    expect(payload.state.players[0].reserved).toEqual([
+      state.players[0].reserved[0],
+    ]);
+    expect(payload.state.players[0].reserveCount).toBe(1);
+    expect(payload.state.players[1].reserved).toEqual([]);
+    expect(payload.state.players[1].reserveCount).toBe(1);
+    expect(JSON.stringify(payload.state.players[1])).not.toContain(
+      state.players[1].reserved[0].id,
+    );
+  });
 });

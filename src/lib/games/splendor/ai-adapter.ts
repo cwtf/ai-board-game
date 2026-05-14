@@ -52,7 +52,7 @@ function parseGemMap<T extends string>(
   return result;
 }
 
-function publicState(state: SplendorState) {
+function publicState(state: SplendorState, viewer: number) {
   return {
     seed: state.seed,
     current: state.current,
@@ -66,12 +66,13 @@ function publicState(state: SplendorState) {
     noblesInPlay: state.noblesInPlay,
     turn: state.turn,
     finalRoundTriggered: state.finalRoundTriggered,
-    players: state.players.map((player) => ({
+    players: state.players.map((player, index) => ({
       tokens: player.tokens,
       bonuses: player.bonuses,
       prestige: player.prestige,
       cards: player.cards,
-      reserved: player.reserved,
+      reserved: index === viewer ? player.reserved : [],
+      reserveCount: player.reserved.length,
       nobles: player.nobles,
     })),
   };
@@ -84,7 +85,7 @@ export const splendorAdapter: GameAdapter<SplendorState, SplendorMove> = {
     description: 'Splendor',
     minPlayers: 2,
     maxPlayers: 4,
-    hiddenInformation: false,
+    hiddenInformation: true,
     estimatedAITurnTokens: 400,
     docPath: 'docs/games/splendor.md',
   },
@@ -106,7 +107,7 @@ export const splendorAdapter: GameAdapter<SplendorState, SplendorMove> = {
     return JSON.stringify({
       game: 'splendor',
       player,
-      state: publicState(state),
+      state: publicState(state, player),
       legalMoves: moves.map((move) => ({
         id: move.id,
         kind: move.kind,
