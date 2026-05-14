@@ -34,7 +34,7 @@
 
   type Modal = 'gold' | 'discard' | 'noble' | null;
 
-  const TABLE_WIDTH = 1600;
+  const TABLE_WIDTH = 2360;
   const TABLE_HEIGHT = 900;
   const providers = listProviders();
   const gemLabels: Record<GemOrGold, string> = {
@@ -268,6 +268,16 @@
       return;
     }
     selectGem(gem);
+  }
+
+  function removeSelectedGem(index: number) {
+    selectedGems = selectedGems.filter((_, selectedIndex) => selectedIndex !== index);
+    message = '';
+  }
+
+  function clearSelectedGems() {
+    selectedGems = [];
+    message = '';
   }
 
   function beginMove(move: SplendorMove) {
@@ -529,6 +539,14 @@
     );
   }
 
+  function cardsForBonus(cards: Card[], gem: Gem): Card[] {
+    return cards.filter((card) => card.bonus === gem);
+  }
+
+  function playerLabel(index: number): string {
+    return index === 0 ? 'Player 1 (You)' : `Player ${index + 1}`;
+  }
+
   function formatMove(move: SplendorMove): string {
     if (move.kind === 'take') {
       return `Take ${move.gems.map((gem) => gemLabels[gem]).join(', ')}`;
@@ -567,7 +585,7 @@
       class="flex origin-top-left h-full flex-col overflow-hidden"
       style={`width: ${TABLE_WIDTH}px; height: ${TABLE_HEIGHT}px; transform: translate(${tableOffsetX}px, ${tableOffsetY}px) scale(${tableScale});`}
     >
-    <div class="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_360px]">
+    <div class="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_520px_560px]">
       <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
         <section class="flex min-h-0 flex-col gap-2">
           <div class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
@@ -756,13 +774,33 @@
             </div>
           </div>
           <div class="mt-2 rounded-md border border-neutral-800 bg-neutral-900 p-2">
-            <div class="flex min-h-7 flex-wrap items-center gap-1 text-xs text-neutral-300">
+            <div class="flex min-h-7 items-start justify-between gap-2 text-xs text-neutral-300">
+              <div class="flex flex-wrap items-center gap-1">
               {#if selectedGems.length}
                 {#each selectedGems as gem, index (`${gem}-${index}`)}
-                  <SplendorGemBadge {gem} compact />
+                    <button
+                      class="rounded-full transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      title={`Remove ${gemLabels[gem]}`}
+                      disabled={snapshot?.status === 'thinking'}
+                      on:click={() => removeSelectedGem(index)}
+                    >
+                      <SplendorGemBadge {gem} compact />
+                    </button>
                 {/each}
               {:else}
                 Select tokens to take
+              {/if}
+              </div>
+              {#if selectedGems.length}
+                <button
+                  class="shrink-0 rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-300 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  disabled={snapshot?.status === 'thinking'}
+                  on:click={clearSelectedGems}
+                >
+                  Clear
+                </button>
               {/if}
             </div>
             <button
@@ -778,55 +816,129 @@
           </div>
         </section>
 
-        <section class="grid min-h-0 flex-1 grid-rows-4 gap-2">
+        <section class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           {#each state.players as player, index (index)}
-            <article class="min-h-0 rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2">
-              <div class="flex items-center justify-between gap-2">
-                <h2 class="text-sm font-semibold tracking-normal">Player {index + 1}</h2>
-                <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
-              </div>
-              <div class="mt-1.5 flex flex-wrap gap-1">
+            {#if index !== 0}
+              <article class="shrink-0 rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2">
+                <div class="flex items-center justify-between gap-2">
+                  <h2 class="text-sm font-semibold tracking-normal">{playerLabel(index)}</h2>
+                  <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
+                </div>
+                <div class="mt-1.5">
+                  <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Gems</div>
+                  <div class="flex flex-wrap gap-1">
+                    {#each [...GEMS, 'gold'] as gem (gem)}
+                      <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
+                    {/each}
+                  </div>
+                </div>
+                <div class="mt-1.5">
+                  <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Bought card bonuses</div>
+                  <div class="flex flex-wrap gap-1">
+                    {#each GEMS as gem (gem)}
+                      <SplendorGemBadge {gem} amount={player.bonuses[gem]} compact />
+                    {/each}
+                  </div>
+                </div>
+                <div class="mt-1.5 text-[10px] text-neutral-500">
+                  Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
+                </div>
+                <div class="mt-1.5 grid grid-cols-2 gap-1.5 text-[10px] text-neutral-400">
+                  <div class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1">
+                    <span class="text-neutral-500">Cards Bought</span>
+                    <span class="float-right text-neutral-200">{player.cards.length}</span>
+                  </div>
+                  <div class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1">
+                    <span class="text-neutral-500">Cards Reserved</span>
+                    <span class="float-right text-neutral-200">{player.reserved.length}</span>
+                  </div>
+                </div>
+              </article>
+            {/if}
+          {/each}
+        </section>
+      </aside>
+
+      <aside class="min-h-0">
+        {#each [state.players[0]] as player}
+          <article class="flex h-full min-h-0 flex-col rounded-md border {currentPlayer === 0 ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2">
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="text-sm font-semibold tracking-normal">{playerLabel(0)}</h2>
+              <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
+            </div>
+            <div class="mt-1.5">
+              <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Gems</div>
+              <div class="flex flex-wrap gap-1">
                 {#each [...GEMS, 'gold'] as gem (gem)}
                   <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
                 {/each}
               </div>
-              <div class="mt-1.5 flex flex-wrap gap-1">
+            </div>
+            <div class="mt-1.5">
+              <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Bought card bonuses</div>
+              <div class="flex flex-wrap gap-1">
                 {#each GEMS as gem (gem)}
                   <SplendorGemBadge {gem} amount={player.bonuses[gem]} compact />
                 {/each}
               </div>
-              <div class="mt-1.5 text-[10px] text-neutral-500">
-                Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
-              </div>
-              {#if player.reserved.length}
-                <div class="mt-1.5 flex gap-1.5 overflow-hidden">
-                  {#each player.reserved as card (card.id)}
-                    <div class="rounded-md border border-neutral-800 bg-neutral-900 p-1">
-                      <div class="flex items-center gap-1.5">
-                        <div class="w-10 shrink-0">
-                          <SplendorCardArt {card} compact />
-                        </div>
-                        {#if index === currentPlayer}
-                          <button
-                            class="rounded-md bg-emerald-500 px-1.5 py-1 text-[10px] font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
-                            type="button"
-                            disabled={!legalBuy(card, 'reserved') || snapshot?.status === 'thinking'}
-                            on:click={() => {
-                              const move = legalBuy(card, 'reserved');
-                              if (move) beginMove(move);
-                            }}
-                          >
-                            Buy
-                          </button>
+            </div>
+            <div class="mt-1.5 text-[10px] text-neutral-500">
+              Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
+            </div>
+
+            <div class="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
+              {#if player.cards.length}
+                <section class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
+                  <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Bought</h3>
+                  <div class="mt-2 space-y-2">
+                    {#each GEMS as gem (gem)}
+                      {#each [cardsForBonus(player.cards, gem)] as stack}
+                        {#if stack.length}
+                          <div>
+                            <div class="mb-1 flex items-center gap-1.5">
+                              <SplendorGemBadge {gem} amount={stack.length} compact />
+                            </div>
+                            <div class="flex gap-2 overflow-x-auto pb-1">
+                              {#each stack as card (card.id)}
+                                <div class="w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1">
+                                  <SplendorCardArt {card} board />
+                                </div>
+                              {/each}
+                            </div>
+                          </div>
                         {/if}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
+                      {/each}
+                    {/each}
+                  </div>
+                </section>
               {/if}
-            </article>
-          {/each}
-        </section>
+
+              {#if player.reserved.length}
+                <section class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
+                  <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Reserved</h3>
+                  <div class="mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {#each player.reserved as card (card.id)}
+                      <div class="relative w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1">
+                        <SplendorCardArt {card} board />
+                        <button
+                          class="absolute bottom-2 right-2 rounded-md bg-emerald-500 px-2 py-1 text-xs font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
+                          type="button"
+                          disabled={!legalBuy(card, 'reserved') || snapshot?.status === 'thinking'}
+                          on:click={() => {
+                            const move = legalBuy(card, 'reserved');
+                            if (move) beginMove(move);
+                          }}
+                        >
+                          Buy
+                        </button>
+                      </div>
+                    {/each}
+                  </div>
+                </section>
+              {/if}
+            </div>
+          </article>
+        {/each}
       </aside>
     </div>
     </div>
@@ -859,14 +971,24 @@
 
 {#if activeModal === 'noble' && pendingMove && state}
   <div class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4">
-    <div class="w-full max-w-lg rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
+    <div class="w-full max-w-2xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
       <h2 class="text-xl font-semibold tracking-normal">Choose Noble</h2>
-      <div class="mt-4 space-y-2">
+      <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {#each eligibleNoblesAfter(state, pendingMove) as noble (noble.id)}
-          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <span>{noble.id}</span>
-            <input type="radio" bind:group={nobleDraft} value={noble.id} />
-          </label>
+          <button
+            class="rounded-md border bg-neutral-900 p-1 text-left transition {nobleDraft === noble.id ? 'border-amber-300 ring-2 ring-amber-300/30' : 'border-neutral-800 hover:border-amber-300/60'}"
+            type="button"
+            aria-pressed={nobleDraft === noble.id}
+            on:click={() => {
+              nobleDraft = noble.id;
+            }}
+            on:dblclick={() => {
+              nobleDraft = noble.id;
+              confirmNoble();
+            }}
+          >
+            <SplendorNobleArt {noble} />
+          </button>
         {/each}
       </div>
       <div class="mt-5 flex justify-end gap-2">
@@ -919,7 +1041,7 @@
       <div class="mt-4 space-y-2">
         {#each state.players as player, index (index)}
           <div class="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <span>Player {index + 1}</span>
+            <span>{playerLabel(index)}</span>
             <span>{player.prestige} prestige - {player.cards.length} cards</span>
           </div>
         {/each}
