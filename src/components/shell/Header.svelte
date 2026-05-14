@@ -9,6 +9,8 @@
   } from '@/lib/storage/keys';
 
   const providers = listProviders();
+  export let backHref: string | undefined = undefined;
+  export let backLabel = 'Back to home';
   let keys: StoredKeys = {};
 
   function refresh() {
@@ -38,11 +40,19 @@
 </script>
 
 <header class="border-b border-neutral-800 bg-neutral-950/90 text-neutral-100">
-  <div
-    class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4"
-  >
+  <div class="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-4">
+    <div class="flex items-center justify-start">
+      {#if backHref}
+        <a
+          class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
+          href={backHref}
+        >
+          {backLabel}
+        </a>
+      {/if}
+    </div>
     <a href="/" class="text-base font-semibold">AI Board Games</a>
-    <nav class="flex items-center gap-3 text-sm">
+    <nav class="flex items-center justify-end gap-3 text-sm">
       <a class="text-neutral-300 hover:text-white" href="/settings">Settings</a>
       <span
         class={`rounded-full border px-3 py-1 ${

@@ -8,11 +8,13 @@ import {
   winner,
 } from './rules';
 import {
+  GEMS,
   init,
   type Gem,
   type GemOrGold,
   type SplendorMove,
   type SplendorState,
+  type TokenSet,
 } from './state';
 
 interface AIMovePayload {
@@ -78,6 +80,55 @@ function publicState(state: SplendorState, viewer: number) {
   };
 }
 
+function tokenTotal(tokens: Partial<Record<GemOrGold, number>>): number {
+  return Object.values(tokens).reduce((sum, value) => sum + (value ?? 0), 0);
+}
+
+function projectedTokensForMove(
+  state: SplendorState,
+  player: number,
+  move: SplendorMove,
+): TokenSet {
+  const tokens = { ...state.players[player].tokens };
+
+  if (move.kind === 'take') {
+    for (const gem of move.gems) {
+      tokens[gem] += 1;
+    }
+  }
+
+  if (move.kind === 'reserve' && state.tokenPool.gold > 0) {
+    tokens.gold += 1;
+  }
+
+  return tokens;
+}
+
+function discardDownToTen(tokens: TokenSet): Partial<Record<GemOrGold, number>> {
+  let remaining = tokenTotal(tokens) - 10;
+  if (remaining <= 0) {
+    return {};
+  }
+
+  const discard: Partial<Record<GemOrGold, number>> = {};
+  const order: GemOrGold[] = [...GEMS, 'gold'];
+  order.sort((left, right) => tokens[right] - tokens[left]);
+
+  for (const gem of order) {
+    if (remaining === 0) {
+      break;
+    }
+
+    const amount = Math.min(tokens[gem], remaining);
+    if (amount > 0) {
+      discard[gem] = amount;
+      remaining -= amount;
+    }
+  }
+
+  return discard;
+}
+
 export const splendorAdapter: GameAdapter<SplendorState, SplendorMove> = {
   meta: games.find((game) => game.id === 'splendor') ?? {
     id: 'splendor',
@@ -117,6 +168,21 @@ export const splendorAdapter: GameAdapter<SplendorState, SplendorMove> = {
         move,
       })),
     });
+  },
+  prepareAIMove(state, player, move) {
+    if (move.kind === 'buy') {
+      return move;
+    }
+
+    const projected = projectedTokensForMove(state, player, move);
+    if (tokenTotal(projected) <= 10) {
+      return move;
+    }
+
+    return {
+      ...move,
+      discard: discardDownToTen(projected),
+    };
   },
   parseAIMove(response, moves) {
     let payload: AIMovePayload;

@@ -127,6 +127,24 @@ export function createGameLoop<State, Move>({
     emit();
   }
 
+  function prepareAndValidateAIMove(player: number, move: Move):
+    | { ok: true; move: Move }
+    | { ok: false; error: string } {
+    const prepared = adapter.prepareAIMove?.(state, player, move) ?? move;
+    try {
+      adapter.applyMove(state, prepared);
+      return { ok: true, move: prepared };
+    } catch (error) {
+      return {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Move could not be applied.',
+      };
+    }
+  }
+
   async function requestAIMove(
     player: number,
     legalMoves: Move[],
@@ -160,7 +178,24 @@ export function createGameLoop<State, Move>({
       requestUsage = addUsage(requestUsage, result.usage);
       const parsed = adapter.parseAIMove(result.text, legalMoves);
       if (parsed.ok) {
-        return { move: parsed.move, attempts: attempt, usage: requestUsage };
+        const prepared = prepareAndValidateAIMove(player, parsed.move);
+        if (prepared.ok) {
+          return {
+            move: prepared.move,
+            attempts: attempt,
+            usage: requestUsage,
+          };
+        }
+
+        lastError = prepared.error;
+        messages.push(
+          { role: 'assistant' as const, content: result.text },
+          {
+            role: 'user' as const,
+            content: `Invalid move: ${prepared.error}. Return one valid JSON move from the legal move list, including required sub-decisions.`,
+          },
+        );
+        continue;
       }
 
       lastError = parsed.error;
@@ -173,7 +208,20 @@ export function createGameLoop<State, Move>({
       );
     }
 
-    const fallback = legalMoves[rng.int(legalMoves.length)];
+    const fallbackOptions = legalMoves
+      .map((move) => prepareAndValidateAIMove(player, move))
+      .filter(
+        (result): result is { ok: true; move: Move } => result.ok,
+      );
+    if (fallbackOptions.length === 0) {
+      throw new Error(
+        lastError
+          ? `No applicable fallback move after AI errors. ${lastError}`
+          : 'No applicable fallback move after AI errors.',
+      );
+    }
+
+    const fallback = fallbackOptions[rng.int(fallbackOptions.length)].move;
     return {
       move: fallback,
       attempts: maxRetries,

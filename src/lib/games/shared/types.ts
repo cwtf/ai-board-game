@@ -30,6 +30,7 @@ export interface GameAdapter<State, Move> {
   winner(state: State): number | null;
   systemPrompt(): string;
   serializeForAI(state: State, player: number, legalMoves: Move[]): string;
+  prepareAIMove?(state: State, player: number, move: Move): Move;
   parseAIMove(
     response: string,
     legalMoves: Move[],

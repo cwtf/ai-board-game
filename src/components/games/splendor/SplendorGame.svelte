@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import TokenUsageBadge from '@/components/ai/TokenUsageBadge.svelte';
   import SplendorCardArt from '@/components/games/splendor/SplendorCardArt.svelte';
   import SplendorGemBadge from '@/components/games/splendor/SplendorGemBadge.svelte';
@@ -33,7 +33,22 @@
   } from '@/lib/storage/keys';
 
   type Modal = 'gold' | 'discard' | 'noble' | null;
+  type RectSnapshot = {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
+  type MoveAnimationIntent =
+    | { kind: 'card'; playerIndex: number; card: Card; from: RectSnapshot }
+    | { kind: 'noble'; playerIndex: number; noble: Noble; from: RectSnapshot }
+    | { kind: 'gem'; playerIndex: number; gem: GemOrGold; from: RectSnapshot };
+  type FlyingAsset = MoveAnimationIntent & {
+    id: string;
+    style: string;
+  };
 
+  const HUMAN_PLAYER_INDEX = 0;
   const TABLE_WIDTH = 2360;
   const TABLE_HEIGHT = 900;
   const providers = listProviders();
@@ -73,10 +88,24 @@
   let tableOffsetX = 0;
   let tableOffsetY = 0;
   let handledPointerSelection = false;
+  let flyingAssets: FlyingAsset[] = [];
+  const supplyGemElements = new Map<GemOrGold, globalThis.HTMLElement>();
+  const playerGemTargetElements = new Map<string, globalThis.HTMLElement>();
+  const boardCardElements = new Map<string, globalThis.HTMLElement>();
+  const reservedCardElements = new Map<string, globalThis.HTMLElement>();
+  const ownedCardElements = new Map<string, globalThis.HTMLElement>();
+  const nobleElements = new Map<string, globalThis.HTMLElement>();
+  const playerPanelElements = new Map<number, globalThis.HTMLElement>();
+  const playerCardTargetElements = new Map<number, globalThis.HTMLElement>();
+  const playerNobleTargetElements = new Map<number, globalThis.HTMLElement>();
 
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
-  $: legalMoves = state ? splendorAdapter.legalMoves(state, currentPlayer) : [];
+  $: humanCanAct =
+    currentPlayer === HUMAN_PLAYER_INDEX && snapshot?.status !== 'thinking';
+  $: legalMoves = state && humanCanAct
+    ? splendorAdapter.legalMoves(state, HUMAN_PLAYER_INDEX)
+    : [];
   $: selectedProvider =
     providers.find((provider) => provider.id === keys.selectedProvider) ??
     providers[0];
@@ -122,6 +151,261 @@
     return new globalThis.AbortController();
   }
 
+  function trackElement<K>(
+    map: Map<K, globalThis.HTMLElement>,
+    node: globalThis.HTMLElement,
+    key: K,
+  ) {
+    map.set(key, node);
+    return {
+      update(nextKey: K) {
+        if (nextKey !== key) {
+          map.delete(key);
+          key = nextKey;
+          map.set(key, node);
+        }
+      },
+      destroy() {
+        if (map.get(key) === node) {
+          map.delete(key);
+        }
+      },
+    };
+  }
+
+  function registerBoardCard(
+    node: globalThis.HTMLElement,
+    cardId: string,
+  ) {
+    return trackElement(boardCardElements, node, cardId);
+  }
+
+  function registerSupplyGem(
+    node: globalThis.HTMLElement,
+    gem: GemOrGold,
+  ) {
+    return trackElement(supplyGemElements, node, gem);
+  }
+
+  function registerPlayerGemTarget(
+    node: globalThis.HTMLElement,
+    key: string,
+  ) {
+    return trackElement(playerGemTargetElements, node, key);
+  }
+
+  function registerReservedCard(
+    node: globalThis.HTMLElement,
+    key: string,
+  ) {
+    return trackElement(reservedCardElements, node, key);
+  }
+
+  function registerOwnedCard(
+    node: globalThis.HTMLElement,
+    cardId: string,
+  ) {
+    return trackElement(ownedCardElements, node, cardId);
+  }
+
+  function registerNoble(node: globalThis.HTMLElement, nobleId: string) {
+    return trackElement(nobleElements, node, nobleId);
+  }
+
+  function registerPlayerPanel(
+    node: globalThis.HTMLElement,
+    playerIndex: number,
+  ) {
+    return trackElement(playerPanelElements, node, playerIndex);
+  }
+
+  function registerPlayerCardTarget(
+    node: globalThis.HTMLElement,
+    playerIndex: number,
+  ) {
+    return trackElement(playerCardTargetElements, node, playerIndex);
+  }
+
+  function registerPlayerNobleTarget(
+    node: globalThis.HTMLElement,
+    playerIndex: number,
+  ) {
+    return trackElement(playerNobleTargetElements, node, playerIndex);
+  }
+
+  function elementRect(
+    element: globalThis.HTMLElement | undefined,
+  ): RectSnapshot | undefined {
+    if (!element) {
+      return undefined;
+    }
+
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  function centeredTargetRect(
+    target: RectSnapshot,
+    source: RectSnapshot,
+  ): RectSnapshot {
+    const width = Math.max(42, Math.min(source.width, target.width || source.width));
+    const height = width * (source.height / Math.max(1, source.width));
+
+    return {
+      left: target.left + target.width / 2 - width / 2,
+      top: target.top + target.height / 2 - height / 2,
+      width,
+      height,
+    };
+  }
+
+  function animationStyle(from: RectSnapshot, to: RectSnapshot): string {
+    return [
+      `left: ${from.left}px`,
+      `top: ${from.top}px`,
+      `width: ${from.width}px`,
+      `height: ${from.height}px`,
+      `--fly-x: ${to.left - from.left}px`,
+      `--fly-y: ${to.top - from.top}px`,
+      `--fly-scale-x: ${to.width / Math.max(1, from.width)}`,
+      `--fly-scale-y: ${to.height / Math.max(1, from.height)}`,
+    ].join('; ');
+  }
+
+  function cardIds(cards: Card[]): Set<string> {
+    return new Set(cards.map((card) => card.id));
+  }
+
+  function nobleIds(nobles: Noble[]): Set<string> {
+    return new Set(nobles.map((noble) => noble.id));
+  }
+
+  function playerGemTargetKey(playerIndex: number, gem: GemOrGold): string {
+    return `${playerIndex}:${gem}`;
+  }
+
+  function collectMoveAnimationIntents(
+    previous: LoopSnapshot<SplendorState, SplendorMove> | undefined,
+    next: LoopSnapshot<SplendorState, SplendorMove>,
+  ): MoveAnimationIntent[] {
+    if (!previous || previous.state.turn === next.state.turn) {
+      return [];
+    }
+
+    const record = next.log.at(-1);
+    if (!record) {
+      return [];
+    }
+
+    const playerIndex = record.player;
+    const before = previous.state.players[playerIndex];
+    const after = next.state.players[playerIndex];
+    const previousCards = cardIds(before.cards);
+    const previousNobles = nobleIds(before.nobles);
+    const intents: MoveAnimationIntent[] = [];
+
+    if (record.move.kind === 'take') {
+      for (const gem of record.move.gems) {
+        const from = elementRect(supplyGemElements.get(gem));
+        if (from) {
+          intents.push({ kind: 'gem', playerIndex, gem, from });
+        }
+      }
+    }
+
+    const tookReserveGold =
+      record.move.kind === 'reserve' && after.tokens.gold > before.tokens.gold;
+    if (tookReserveGold) {
+      const from = elementRect(supplyGemElements.get('gold'));
+      if (from) {
+        intents.push({ kind: 'gem', playerIndex, gem: 'gold', from });
+      }
+    }
+
+    const boughtCard =
+      record.move.kind === 'buy'
+        ? after.cards.find((card) => !previousCards.has(card.id))
+        : undefined;
+    if (boughtCard) {
+      const sourceKey = `${playerIndex}:${boughtCard.id}`;
+      const from =
+        elementRect(boardCardElements.get(boughtCard.id)) ??
+        elementRect(reservedCardElements.get(sourceKey)) ??
+        elementRect(playerCardTargetElements.get(playerIndex)) ??
+        elementRect(playerPanelElements.get(playerIndex));
+
+      if (from) {
+        intents.push({ kind: 'card', playerIndex, card: boughtCard, from });
+      }
+    }
+
+    const claimedNoble = after.nobles.find(
+      (noble) => !previousNobles.has(noble.id),
+    );
+    if (claimedNoble) {
+      const from =
+        elementRect(nobleElements.get(claimedNoble.id)) ??
+        elementRect(playerPanelElements.get(playerIndex));
+
+      if (from) {
+        intents.push({ kind: 'noble', playerIndex, noble: claimedNoble, from });
+      }
+    }
+
+    return intents;
+  }
+
+  async function queueMoveAnimations(intents: MoveAnimationIntent[]) {
+    if (intents.length === 0) {
+      return;
+    }
+
+    await tick();
+
+    const nextAssets = intents.flatMap((intent) => {
+      const targetElement =
+        intent.kind === 'card'
+          ? ownedCardElements.get(intent.card.id) ??
+            playerCardTargetElements.get(intent.playerIndex) ??
+            playerPanelElements.get(intent.playerIndex)
+          : intent.kind === 'gem'
+            ? playerGemTargetElements.get(
+                playerGemTargetKey(intent.playerIndex, intent.gem),
+              ) ?? playerPanelElements.get(intent.playerIndex)
+          : playerNobleTargetElements.get(intent.playerIndex) ??
+            playerPanelElements.get(intent.playerIndex);
+      const target = elementRect(targetElement);
+
+      if (!target) {
+        return [];
+      }
+
+      const to = centeredTargetRect(target, intent.from);
+      return [
+        {
+          ...intent,
+          id: `${intent.kind}-${intent.kind === 'card' ? intent.card.id : intent.kind === 'noble' ? intent.noble.id : intent.gem}-${Date.now()}-${Math.random()}`,
+          style: animationStyle(intent.from, to),
+        },
+      ];
+    });
+
+    if (nextAssets.length === 0) {
+      return;
+    }
+
+    flyingAssets = [...flyingAssets, ...nextAssets];
+    window.setTimeout(() => {
+      const completed = new Set(nextAssets.map((asset) => asset.id));
+      flyingAssets = flyingAssets.filter((asset) => !completed.has(asset.id));
+    }, 780);
+  }
+
   function aiConfigs(): Record<number, AIPlayerConfig> {
     if (!selectedProvider || !configured) {
       return {};
@@ -147,6 +431,7 @@
     pendingMove = undefined;
     activeModal = null;
     message = '';
+    flyingAssets = [];
 
     const initialState = splendorAdapter.init({
       seed: seed.trim() || 'splendor-table',
@@ -160,7 +445,9 @@
       rng: createRng(`${seed}:splendor-ui`),
     });
     unsubscribe = loop.subscribe((next) => {
+      const moveAnimations = collectMoveAnimationIntents(snapshot, next);
       snapshot = next;
+      void queueMoveAnimations(moveAnimations);
     });
     void runAI();
   }
@@ -241,7 +528,7 @@
   }
 
   function selectGem(gem: Gem) {
-    if (!state || snapshot?.status === 'thinking') {
+    if (!state || !humanCanAct) {
       return;
     }
 
@@ -281,7 +568,7 @@
   }
 
   function beginMove(move: SplendorMove) {
-    if (!loop || !state || snapshot?.status === 'thinking') {
+    if (!loop || !state || !humanCanAct) {
       return;
     }
 
@@ -609,7 +896,10 @@
             </div>
             <div class="flex flex-col gap-2 overflow-hidden">
               {#each state.noblesInPlay as noble (noble.id)}
-                <article class="rounded-md border border-amber-300/40 bg-neutral-900 p-1">
+                <article
+                  class="rounded-md border border-amber-300/40 bg-neutral-900 p-1"
+                  use:registerNoble={noble.id}
+                >
                   <SplendorNobleArt {noble} />
                 </article>
               {/each}
@@ -630,7 +920,7 @@
                     class="group relative aspect-[5/7] w-44 overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10' : 'border-neutral-800 opacity-60'}"
                     type="button"
                     aria-label={`Reserve a face-down tier ${tier} card`}
-                    disabled={!legalReserveDeck(tier as Tier) || snapshot?.status === 'thinking'}
+                    disabled={!legalReserveDeck(tier as Tier) || !humanCanAct}
                     on:click={() => {
                       const move = legalReserveDeck(tier as Tier);
                       if (move) beginMove(move);
@@ -652,13 +942,14 @@
                     {#if card}
                       <article
                         class="relative w-44 rounded-md border bg-neutral-900 p-1 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
+                        use:registerBoardCard={card.id}
                       >
                         <SplendorCardArt {card} board />
                         <div class="absolute bottom-1.5 right-1.5 flex flex-col gap-1">
                           <button
                             class="rounded-md bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
                             type="button"
-                            disabled={!legalBuy(card, 'board') || snapshot?.status === 'thinking'}
+                            disabled={!legalBuy(card, 'board') || !humanCanAct}
                             on:click={() => {
                               const move = legalBuy(card, 'board');
                               if (move) beginMove(move);
@@ -669,7 +960,7 @@
                           <button
                             class="rounded-md border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
                             type="button"
-                            disabled={!legalReserve(card) || snapshot?.status === 'thinking'}
+                            disabled={!legalReserve(card) || !humanCanAct}
                             on:click={() => {
                               const move = legalReserve(card);
                               if (move) beginMove(move);
@@ -756,18 +1047,21 @@
               <button
                 class={`flex min-h-16 w-full flex-col items-start justify-between rounded-md border px-2 py-1.5 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
                 type="button"
-                disabled={state.tokenPool[gem] === 0 || snapshot?.status === 'thinking'}
+                disabled={state.tokenPool[gem] === 0 || !humanCanAct}
                 on:pointerdown|preventDefault={() => selectGemFromPointer(gem)}
                 on:click={() => selectGemFromClick(gem)}
               >
-                <span class="pointer-events-none block">
+                <span
+                  class="pointer-events-none block"
+                  use:registerSupplyGem={gem}
+                >
                   <SplendorGemBadge {gem} label={gemLabels[gem]} />
                 </span>
                 <span class="pointer-events-none text-[10px] opacity-80">Supply {state.tokenPool[gem]}</span>
               </button>
             {/each}
             <div class={`flex min-h-16 w-full flex-col items-start justify-between rounded-md border px-2 py-1.5 ${gemClasses.gold}`}>
-              <span class="block">
+              <span class="block" use:registerSupplyGem={'gold'}>
                 <SplendorGemBadge gem="gold" label="Gold" />
               </span>
               <span class="text-[10px] opacity-80">Supply {state.tokenPool.gold}</span>
@@ -782,7 +1076,7 @@
                       class="rounded-full transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
                       title={`Remove ${gemLabels[gem]}`}
-                      disabled={snapshot?.status === 'thinking'}
+                      disabled={!humanCanAct}
                       on:click={() => removeSelectedGem(index)}
                     >
                       <SplendorGemBadge {gem} compact />
@@ -796,7 +1090,7 @@
                 <button
                   class="shrink-0 rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-300 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
-                  disabled={snapshot?.status === 'thinking'}
+                  disabled={!humanCanAct}
                   on:click={clearSelectedGems}
                 >
                   Clear
@@ -806,7 +1100,7 @@
             <button
               class="mt-2 w-full rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
               type="button"
-              disabled={!takeMove || snapshot?.status === 'thinking'}
+              disabled={!takeMove || !humanCanAct}
               on:click={() => {
                 if (takeMove) beginMove(takeMove);
               }}
@@ -819,7 +1113,10 @@
         <section class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
           {#each state.players as player, index (index)}
             {#if index !== 0}
-              <article class="shrink-0 rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2">
+              <article
+                class="shrink-0 rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2"
+                use:registerPlayerPanel={index}
+              >
                 <div class="flex items-center justify-between gap-2">
                   <h2 class="text-sm font-semibold tracking-normal">{playerLabel(index)}</h2>
                   <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
@@ -828,7 +1125,9 @@
                   <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Gems</div>
                   <div class="flex flex-wrap gap-1">
                     {#each [...GEMS, 'gold'] as gem (gem)}
-                      <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
+                      <span use:registerPlayerGemTarget={playerGemTargetKey(index, gem)}>
+                        <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
+                      </span>
                     {/each}
                   </div>
                 </div>
@@ -840,11 +1139,17 @@
                     {/each}
                   </div>
                 </div>
-                <div class="mt-1.5 text-[10px] text-neutral-500">
+                <div
+                  class="mt-1.5 text-[10px] text-neutral-500"
+                  use:registerPlayerNobleTarget={index}
+                >
                   Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
                 </div>
                 <div class="mt-1.5 grid grid-cols-2 gap-1.5 text-[10px] text-neutral-400">
-                  <div class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1">
+                  <div
+                    class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1"
+                    use:registerPlayerCardTarget={index}
+                  >
                     <span class="text-neutral-500">Cards Bought</span>
                     <span class="float-right text-neutral-200">{player.cards.length}</span>
                   </div>
@@ -861,7 +1166,10 @@
 
       <aside class="min-h-0">
         {#each [state.players[0]] as player}
-          <article class="flex h-full min-h-0 flex-col rounded-md border {currentPlayer === 0 ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2">
+          <article
+            class="flex h-full min-h-0 flex-col rounded-md border {currentPlayer === HUMAN_PLAYER_INDEX ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2"
+            use:registerPlayerPanel={0}
+          >
             <div class="flex items-center justify-between gap-2">
               <h2 class="text-sm font-semibold tracking-normal">{playerLabel(0)}</h2>
               <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
@@ -870,7 +1178,9 @@
               <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Gems</div>
               <div class="flex flex-wrap gap-1">
                 {#each [...GEMS, 'gold'] as gem (gem)}
-                  <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
+                  <span use:registerPlayerGemTarget={playerGemTargetKey(0, gem)}>
+                    <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
+                  </span>
                 {/each}
               </div>
             </div>
@@ -882,14 +1192,20 @@
                 {/each}
               </div>
             </div>
-            <div class="mt-1.5 text-[10px] text-neutral-500">
+            <div
+              class="mt-1.5 text-[10px] text-neutral-500"
+              use:registerPlayerNobleTarget={0}
+            >
               Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
             </div>
 
             <div class="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-              {#if player.cards.length}
-                <section class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
-                  <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Bought</h3>
+              <section
+                class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2"
+                use:registerPlayerCardTarget={0}
+              >
+                <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Bought</h3>
+                {#if player.cards.length}
                   <div class="mt-2 space-y-2">
                     {#each GEMS as gem (gem)}
                       {#each [cardsForBonus(player.cards, gem)] as stack}
@@ -900,7 +1216,10 @@
                             </div>
                             <div class="flex gap-2 overflow-x-auto pb-1">
                               {#each stack as card (card.id)}
-                                <div class="w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1">
+                                <div
+                                  class="w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1"
+                                  use:registerOwnedCard={card.id}
+                                >
                                   <SplendorCardArt {card} board />
                                 </div>
                               {/each}
@@ -910,20 +1229,27 @@
                       {/each}
                     {/each}
                   </div>
-                </section>
-              {/if}
+                {:else}
+                  <div class="mt-2 rounded-md border border-dashed border-neutral-800 px-3 py-4 text-center text-xs text-neutral-600">
+                    No bought cards yet
+                  </div>
+                {/if}
+              </section>
 
               {#if player.reserved.length}
                 <section class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
                   <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Reserved</h3>
                   <div class="mt-2 flex gap-2 overflow-x-auto pb-1">
                     {#each player.reserved as card (card.id)}
-                      <div class="relative w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1">
+                      <div
+                        class="relative w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1"
+                        use:registerReservedCard={`${0}:${card.id}`}
+                      >
                         <SplendorCardArt {card} board />
                         <button
                           class="absolute bottom-2 right-2 rounded-md bg-emerald-500 px-2 py-1 text-xs font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
                           type="button"
-                          disabled={!legalBuy(card, 'reserved') || snapshot?.status === 'thinking'}
+                          disabled={!legalBuy(card, 'reserved') || !humanCanAct}
                           on:click={() => {
                             const move = legalBuy(card, 'reserved');
                             if (move) beginMove(move);
@@ -944,6 +1270,21 @@
     </div>
   </section>
 {/if}
+
+{#each flyingAssets as asset (asset.id)}
+  <div
+    class="splendor-flying-asset pointer-events-none fixed z-50 {asset.kind === 'gem' ? 'rounded-full bg-transparent p-0 shadow-lg' : 'overflow-hidden rounded-md border border-emerald-300/60 bg-neutral-950 p-1 shadow-2xl'}"
+    style={asset.style}
+  >
+    {#if asset.kind === 'card'}
+      <SplendorCardArt card={asset.card} board />
+    {:else if asset.kind === 'noble'}
+      <SplendorNobleArt noble={asset.noble} />
+    {:else}
+      <SplendorGemBadge gem={asset.gem} label={gemLabels[asset.gem]} />
+    {/if}
+  </div>
+{/each}
 
 {#if activeModal === 'gold' && pendingMove?.kind === 'buy' && state}
   <div class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4">
@@ -968,6 +1309,38 @@
     </div>
   </div>
 {/if}
+
+<style>
+  .splendor-flying-asset {
+    animation: splendor-fly-to-pile 760ms cubic-bezier(0.18, 0.78, 0.22, 1)
+      forwards;
+    transform-origin: top left;
+    will-change: transform, opacity;
+  }
+
+  @keyframes splendor-fly-to-pile {
+    0% {
+      opacity: 0.98;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    52% {
+      opacity: 1;
+      transform: translate3d(
+          calc(var(--fly-x) * 0.72),
+          calc(var(--fly-y) * 0.72 - 28px),
+          0
+        )
+        scale(1.05);
+    }
+
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--fly-x), var(--fly-y), 0)
+        scale(var(--fly-scale-x), var(--fly-scale-y));
+    }
+  }
+</style>
 
 {#if activeModal === 'noble' && pendingMove && state}
   <div class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4">

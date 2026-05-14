@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { splendorAdapter } from '@/lib/games/splendor/ai-adapter';
 import { legalMoves } from '@/lib/games/splendor/rules';
-import { init } from '@/lib/games/splendor/state';
+import { init, type GemOrGold } from '@/lib/games/splendor/state';
+
+function tokenTotal(tokens: Partial<Record<GemOrGold, number>>): number {
+  return Object.values(tokens).reduce((sum, value) => sum + (value ?? 0), 0);
+}
 
 describe('Splendor AI adapter', () => {
   it('gives the model a JSON-only contract and Splendor strategy priorities', () => {
@@ -83,5 +87,32 @@ describe('Splendor AI adapter', () => {
     expect(JSON.stringify(payload.state.players[1])).not.toContain(
       state.players[1].reserved[0].id,
     );
+  });
+
+  it('prepares AI token moves with an automatic discard when over the token limit', () => {
+    const state = init({ seed: 'adapter-discard', playerCount: 2 });
+    state.current = 1;
+    state.players[1].tokens = {
+      emerald: 2,
+      sapphire: 2,
+      ruby: 2,
+      diamond: 2,
+      onyx: 1,
+      gold: 0,
+    };
+
+    const move = legalMoves(state, 1).find(
+      (candidate) =>
+        candidate.kind === 'take' &&
+        candidate.gems.length === 3,
+    );
+
+    expect(move).toBeDefined();
+    const prepared = splendorAdapter.prepareAIMove?.(state, 1, move!);
+
+    expect(prepared?.discard).toBeDefined();
+    expect(tokenTotal(prepared?.discard ?? {})).toBe(2);
+    expect(() => splendorAdapter.applyMove(state, prepared!)).not.toThrow();
+    expect(splendorAdapter.applyMove(state, prepared!).current).toBe(0);
   });
 });
