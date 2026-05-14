@@ -88,6 +88,7 @@
   let tableOffsetX = 0;
   let tableOffsetY = 0;
   let handledPointerSelection = false;
+  let gameOverDismissed = false;
   let flyingAssets: FlyingAsset[] = [];
   const supplyGemElements = new Map<GemOrGold, globalThis.HTMLElement>();
   const playerGemTargetElements = new Map<string, globalThis.HTMLElement>();
@@ -137,14 +138,21 @@
       return;
     }
 
+    const style = window.getComputedStyle(viewportEl);
+    const horizontalPadding =
+      Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+    const verticalPadding =
+      Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+    const availableWidth = Math.max(1, viewportEl.clientWidth - horizontalPadding);
+    const availableHeight = Math.max(1, viewportEl.clientHeight - verticalPadding);
     const scale = Math.min(
-      viewportEl.clientWidth / TABLE_WIDTH,
-      viewportEl.clientHeight / TABLE_HEIGHT,
+      availableWidth / TABLE_WIDTH,
+      availableHeight / TABLE_HEIGHT,
       1,
     );
     tableScale = scale;
-    tableOffsetX = Math.max(0, (viewportEl.clientWidth - TABLE_WIDTH * scale) / 2);
-    tableOffsetY = Math.max(0, (viewportEl.clientHeight - TABLE_HEIGHT * scale) / 2);
+    tableOffsetX = Math.max(0, horizontalPadding / 2 + (availableWidth - TABLE_WIDTH * scale) / 2);
+    tableOffsetY = Math.max(0, verticalPadding / 2 + (availableHeight - TABLE_HEIGHT * scale) / 2);
   }
 
   function createAbortController() {
@@ -431,6 +439,7 @@
     pendingMove = undefined;
     activeModal = null;
     message = '';
+    gameOverDismissed = false;
     flyingAssets = [];
 
     const initialState = splendorAdapter.init({
@@ -872,7 +881,7 @@
       class="flex origin-top-left h-full flex-col overflow-hidden"
       style={`width: ${TABLE_WIDTH}px; height: ${TABLE_HEIGHT}px; transform: translate(${tableOffsetX}px, ${tableOffsetY}px) scale(${tableScale});`}
     >
-    <div class="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_520px_560px]">
+    <div class="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_416px_560px]">
       <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
         <section class="flex min-h-0 flex-col gap-2">
           <div class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
@@ -915,9 +924,9 @@
                   <h2 class="text-sm font-semibold tracking-normal">Tier {tier}</h2>
                   <span class="text-xs text-neutral-500">{state.decks[deckKey(tier as Tier)].length} in deck</span>
                 </div>
-                <div class="grid h-[calc(100%-2.375rem)] grid-cols-5 items-start justify-items-center gap-2 overflow-hidden">
+                <div class="grid h-[calc(100%-2.375rem)] grid-cols-5 items-start justify-items-center gap-x-1 gap-y-2 overflow-hidden">
                   <button
-                    class="group relative aspect-[5/7] w-44 overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10' : 'border-neutral-800 opacity-60'}"
+                    class="group relative aspect-[5/7] w-[10.5rem] overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10' : 'border-neutral-800 opacity-60'}"
                     type="button"
                     aria-label={`Reserve a face-down tier ${tier} card`}
                     disabled={!legalReserveDeck(tier as Tier) || !humanCanAct}
@@ -941,7 +950,7 @@
                   {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
                     {#if card}
                       <article
-                        class="relative w-44 rounded-md border bg-neutral-900 p-1 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
+                        class="relative w-[10.5rem] rounded-md border bg-neutral-900 p-1 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
                         use:registerBoardCard={card.id}
                       >
                         <SplendorCardArt {card} board />
@@ -971,7 +980,7 @@
                         </div>
                       </article>
                     {:else}
-                      <div class="aspect-[5/7] w-44 rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
+                      <div class="aspect-[5/7] w-[10.5rem] rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
                     {/if}
                   {/each}
                 </div>
@@ -983,7 +992,7 @@
 
       <aside class="flex min-h-0 flex-col gap-2">
         <section class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
-          <div class="flex flex-wrap justify-end gap-2">
+          <div class="flex flex-wrap justify-end gap-1.5">
             <label class="text-xs text-neutral-400">
               Players
               <select
@@ -999,7 +1008,7 @@
             <label class="text-xs text-neutral-400">
               Seed
               <input
-                class="ml-2 w-32 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
+                class="ml-2 w-28 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
                 bind:value={seed}
                 disabled={snapshot?.status === 'thinking'}
               />
@@ -1042,10 +1051,10 @@
 
         <section class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
           <h2 class="text-sm font-semibold tracking-normal">Token Supply</h2>
-          <div class="mt-2 grid grid-cols-3 gap-1.5">
+          <div class="mt-2 grid grid-cols-3 gap-1">
             {#each GEMS as gem (gem)}
               <button
-                class={`flex min-h-16 w-full flex-col items-start justify-between rounded-md border px-2 py-1.5 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
+                class={`flex min-h-14 w-full flex-col items-start justify-between rounded-md border px-1.5 py-1.5 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
                 type="button"
                 disabled={state.tokenPool[gem] === 0 || !humanCanAct}
                 on:pointerdown|preventDefault={() => selectGemFromPointer(gem)}
@@ -1060,7 +1069,7 @@
                 <span class="pointer-events-none text-[10px] opacity-80">Supply {state.tokenPool[gem]}</span>
               </button>
             {/each}
-            <div class={`flex min-h-16 w-full flex-col items-start justify-between rounded-md border px-2 py-1.5 ${gemClasses.gold}`}>
+            <div class={`flex min-h-14 w-full flex-col items-start justify-between rounded-md border px-1.5 py-1.5 ${gemClasses.gold}`}>
               <span class="block" use:registerSupplyGem={'gold'}>
                 <SplendorGemBadge gem="gold" label="Gold" />
               </span>
@@ -1404,7 +1413,7 @@
   </div>
 {/if}
 
-{#if snapshot?.status === 'terminal' && state}
+{#if snapshot?.status === 'terminal' && state && !gameOverDismissed}
   <div class="fixed inset-0 z-10 flex items-center justify-center bg-neutral-950/80 px-4">
     <div class="w-full max-w-xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
       <h2 class="text-xl font-semibold tracking-normal">Game Over</h2>
@@ -1419,7 +1428,16 @@
           </div>
         {/each}
       </div>
-      <div class="mt-5 flex justify-end">
+      <div class="mt-5 flex justify-end gap-2">
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            gameOverDismissed = true;
+          }}
+        >
+          View board
+        </button>
         <button class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950" type="button" on:click={startGame}>New game</button>
       </div>
     </div>
