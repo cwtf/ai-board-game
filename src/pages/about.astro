@@ -1,0 +1,31 @@
+---
+import Header from '@/components/shell/Header.svelte';
+import '../styles/global.css';
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>About | AI Board Game Platform</title>
+  </head>
+  <body class="min-h-screen bg-neutral-950 text-neutral-100">
+    <Header client:load backHref="/" />
+    <main class="mx-auto max-w-3xl px-6 py-16">
+      <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
+        About
+      </p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-normal">
+        Work in progress
+      </h1>
+      <p class="mt-4 text-neutral-300">
+        This page will describe the project, its local-first BYOK approach, and
+        how the board game engines use AI providers. The details are still being
+        shaped.
+      </p>
+    </main>
+  </body>
+</html>
