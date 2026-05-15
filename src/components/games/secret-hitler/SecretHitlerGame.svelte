@@ -1,10 +1,18 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { getProvider } from '@/lib/ai';
+  import type { ProviderId, TokenUsage } from '@/lib/ai';
+  import {
+    secretHitlerAdapter,
+    type SecretHitlerChatMessage,
+    type SecretHitlerMove,
+    type SecretHitlerState,
+  } from '@/lib/games/secret-hitler/ai-adapter';
   import { createRng } from '@/lib/games/shared/rng';
   import {
     getStoredKeys,
     hasProviderCredentials,
+    providerEndpointFor,
     selectedProfileFor,
     type ProviderModelProfile,
     type StoredKeys,
@@ -37,6 +45,15 @@
     name: string;
     role: Role;
     alive: boolean;
+  }
+
+  interface ChatMessage {
+    id: string;
+    playerId: number;
+    playerName: string;
+    body: string;
+    turn: number;
+    phase: Phase;
   }
 
   type PlayerProfileSelections = Record<number, string>;
@@ -92,6 +109,15 @@
   let message = '';
   let winner = '';
   let turn = 1;
+  let chatDraft = '';
+  let chatMessages: ChatMessage[] = [];
+  let aiThinking = false;
+  let aiWarning = '';
+  let aiController: globalThis.AbortController | undefined;
+  let chatReplyController: globalThis.AbortController | undefined;
+  let lastUsage: TokenUsage | undefined;
+  let totalUsage: TokenUsage = { input: 0, output: 0 };
+  const answeredQuestionKeys = new Set<string>();
   let playerProfileSelections: PlayerProfileSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
   };
@@ -117,9 +143,112 @@
     '';
   $: normalizePlayerProfileSelections(playerCount, defaultProfileId);
   $: normalizeIdentityViewer(playerCount);
+  $: currentActor = players.length
+    ? secretHitlerAdapter.currentPlayer(toAdapterState())
+    : HUMAN_PLAYER_INDEX;
+  $: currentActorProfile = configuredProfileById(
+    playerProfileSelections[currentActor] ?? HUMAN_PROFILE,
+  );
 
   function refreshKeys() {
     keys = getStoredKeys();
+  }
+
+  function toAdapterState(): SecretHitlerState {
+    return {
+      seed,
+      players,
+      president,
+      nominee,
+      previousPresident,
+      previousChancellor,
+      specialReturnPresident,
+      electionTracker,
+      liberalPolicies,
+      fascistPolicies,
+      drawPile,
+      discardPile,
+      presidentHand,
+      chancellorHand,
+      peekedPolicies,
+      votes,
+      phase,
+      investigationResult,
+      winner: winner
+        ? winner.startsWith('Liberals')
+          ? 0
+          : 1
+        : null,
+      winnerText: winner,
+      turn,
+      chatMessages: chatMessages.map(
+        ({ id: _id, ...item }) => item,
+      ) satisfies SecretHitlerChatMessage[],
+    };
+  }
+
+  function loadAdapterState(state: SecretHitlerState) {
+    players = state.players;
+    president = state.president;
+    nominee = state.nominee;
+    previousPresident = state.previousPresident;
+    previousChancellor = state.previousChancellor;
+    specialReturnPresident = state.specialReturnPresident;
+    electionTracker = state.electionTracker;
+    liberalPolicies = state.liberalPolicies;
+    fascistPolicies = state.fascistPolicies;
+    drawPile = state.drawPile;
+    discardPile = state.discardPile;
+    presidentHand = state.presidentHand;
+    chancellorHand = state.chancellorHand;
+    peekedPolicies = state.peekedPolicies;
+    votes = state.votes;
+    phase = state.phase;
+    investigationResult = state.investigationResult;
+    winner = state.winnerText;
+    turn = state.turn;
+    chatMessages = state.chatMessages.map((item, index) => ({
+      id: `chat-${index}-${item.turn}-${item.playerId}-${item.phase}`,
+      ...item,
+    }));
+    message = state.winnerText || messageForState(state);
+    const latestChat = chatMessages.at(-1);
+    if (latestChat) {
+      maybeRequestQuestionReplies(latestChat);
+    }
+  }
+
+  function messageForState(state: SecretHitlerState): string {
+    const statePresident = state.players[state.president]?.name ?? 'President';
+    const stateNominee =
+      state.nominee === null
+        ? 'Chancellor'
+        : (state.players[state.nominee]?.name ?? 'Chancellor');
+
+    switch (state.phase) {
+      case 'nomination':
+        return `${statePresident} nominates a Chancellor.`;
+      case 'voting':
+        return `Vote on ${statePresident} and ${stateNominee}.`;
+      case 'president-discard':
+        return `${statePresident} privately discards one policy.`;
+      case 'chancellor-discard':
+        return `${stateNominee} privately enacts one policy.`;
+      case 'veto':
+        return `${statePresident} responds to ${stateNominee}'s veto request.`;
+      case 'policy-peek':
+        return `${statePresident} privately peeks at the top policies.`;
+      case 'investigate':
+        return state.investigationResult
+          ? `${statePresident} has an investigation result.`
+          : `${statePresident} investigates a player.`;
+      case 'special-election':
+        return `${statePresident} chooses a special election President.`;
+      case 'execution':
+        return `${statePresident} executes a player.`;
+      case 'game-over':
+        return state.winnerText;
+    }
   }
 
   function shuffle<T>(items: T[], salt: string): T[] {
@@ -158,7 +287,10 @@
     const roles = rolesFor(playerCount);
     players = roles.map((role, index) => ({
       id: index,
-      name: `Player ${index + 1}`,
+      name:
+        index === HUMAN_PLAYER_INDEX
+          ? 'Player 1 (You)'
+          : `Player ${index + 1}`,
       role,
       alive: true,
     }));
@@ -182,6 +314,15 @@
     message = 'Nominate a Chancellor.';
     winner = '';
     turn = 1;
+    chatDraft = '';
+    chatMessages = [];
+    answeredQuestionKeys.clear();
+    aiWarning = '';
+    lastUsage = undefined;
+    totalUsage = { input: 0, output: 0 };
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => void runAI(), 0);
+    }
   }
 
   function roleLabel(role: Role): string {
@@ -214,6 +355,247 @@
 
   function profileLabel(profile: ProviderModelProfile): string {
     return `${profile.label} (${getProvider(profile.provider).label})`;
+  }
+
+  function addUsage(left: TokenUsage, right?: TokenUsage): TokenUsage {
+    return {
+      input: left.input + (right?.input ?? 0),
+      output: left.output + (right?.output ?? 0),
+    };
+  }
+
+  function modelProfileForPlayer(playerIndex: number) {
+    const profileId = playerProfileSelections[playerIndex] ?? HUMAN_PROFILE;
+    if (profileId === HUMAN_PROFILE) {
+      return undefined;
+    }
+    return configuredProfileById(profileId);
+  }
+
+  function aiCanAct(playerIndex: number): boolean {
+    return Boolean(modelProfileForPlayer(playerIndex));
+  }
+
+  function createAbortController() {
+    return new globalThis.AbortController();
+  }
+
+  async function requestAIAction(
+    state: SecretHitlerState,
+    player: number,
+    legalMoves: SecretHitlerMove[],
+    profile: ProviderModelProfile,
+    signal?: AbortSignal,
+  ): Promise<SecretHitlerMove> {
+    const providerId = profile.provider as ProviderId;
+    const provider = getProvider(providerId);
+    const messages = [
+      {
+        role: 'user' as const,
+        content: secretHitlerAdapter.serializeForAI(state, player, legalMoves),
+      },
+    ];
+    let lastError = '';
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const result = await provider.complete({
+        apiKey: keys[providerId],
+        endpointUrl: providerEndpointFor(providerId, keys),
+        model: profile.model,
+        system: secretHitlerAdapter.systemPrompt(),
+        messages,
+        responseFormat: 'json',
+        temperature: 0.7,
+        maxTokens: 700,
+        signal,
+      });
+
+      lastUsage = result.usage;
+      totalUsage = addUsage(totalUsage, result.usage);
+      const parsed = secretHitlerAdapter.parseAIMove(result.text, legalMoves);
+      if (parsed.ok) {
+        return parsed.move;
+      }
+
+      lastError = parsed.error;
+      messages.push(
+        { role: 'assistant' as const, content: result.text },
+        {
+          role: 'user' as const,
+          content: `Invalid response: ${parsed.error}. Return exactly one JSON object with a legal moveId from the legalMoves list and optional tableTalk.`,
+        },
+      );
+    }
+
+    throw new Error(lastError || 'AI did not return a valid move.');
+  }
+
+  function playerNameClasses(playerId: number): string {
+    return playerId === HUMAN_PLAYER_INDEX
+      ? 'text-sky-300'
+      : 'text-neutral-200';
+  }
+
+  function isQuestion(body: string): boolean {
+    return body.includes('?') || body.includes('？');
+  }
+
+  function questionKey(item: ChatMessage): string {
+    return `${item.playerId}:${item.turn}:${item.phase}:${item.body}`;
+  }
+
+  function appendChatMessage(author: Player, body: string): ChatMessage {
+    const item = {
+      id: `chat-${Date.now()}-${chatMessages.length}`,
+      playerId: author.id,
+      playerName: author.name,
+      body,
+      turn,
+      phase,
+    };
+    chatMessages = [...chatMessages, item];
+    return item;
+  }
+
+  function parseTableTalkResponse(response: string): string | undefined {
+    try {
+      const payload = JSON.parse(response) as { tableTalk?: unknown };
+      return typeof payload.tableTalk === 'string'
+        ? payload.tableTalk.trim().slice(0, 500)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function requestQuestionReplies(question: string, askerId: number) {
+    const responders = players.filter(
+      (player) =>
+        player.alive &&
+        player.id !== askerId &&
+        Boolean(modelProfileForPlayer(player.id)),
+    );
+    if (responders.length === 0) {
+      return;
+    }
+
+    chatReplyController?.abort();
+    chatReplyController = createAbortController();
+    const signal = chatReplyController.signal;
+
+    for (const responder of responders) {
+      const profile = modelProfileForPlayer(responder.id);
+      if (!profile || signal.aborted) {
+        continue;
+      }
+
+      try {
+        const providerId = profile.provider as ProviderId;
+        const result = await getProvider(providerId).complete({
+          apiKey: keys[providerId],
+          endpointUrl: providerEndpointFor(providerId, keys),
+          model: profile.model,
+          system: [
+            secretHitlerAdapter.systemPrompt(),
+            'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
+            'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
+            'Return exactly one JSON object: {"tableTalk":"your public reply"}.',
+          ].join(' '),
+          messages: [
+            {
+              role: 'user',
+              content: JSON.stringify({
+                game: 'secret-hitler',
+                player: responder.id,
+                questionFrom: players[askerId]?.name ?? 'another player',
+                question,
+                publicChat: chatMessages.slice(-20),
+                responseSchema: { tableTalk: 'brief public reply' },
+              }),
+            },
+          ],
+          responseFormat: 'json',
+          temperature: 0.8,
+          maxTokens: 220,
+          signal,
+        });
+
+        lastUsage = result.usage;
+        totalUsage = addUsage(totalUsage, result.usage);
+        const reply = parseTableTalkResponse(result.text);
+        if (reply) {
+          appendChatMessage(responder, reply);
+        }
+      } catch (error) {
+        if (!signal.aborted) {
+          aiWarning =
+            error instanceof Error ? error.message : 'AI chat reply failed.';
+        }
+      }
+    }
+  }
+
+  function maybeRequestQuestionReplies(item: ChatMessage) {
+    if (!isQuestion(item.body)) {
+      return;
+    }
+
+    const key = questionKey(item);
+    if (answeredQuestionKeys.has(key)) {
+      return;
+    }
+
+    answeredQuestionKeys.add(key);
+    void requestQuestionReplies(item.body, item.playerId);
+  }
+
+  async function runAI() {
+    if (aiThinking || phase === 'game-over' || winner) {
+      return;
+    }
+
+    aiThinking = true;
+    aiWarning = '';
+    aiController?.abort();
+    aiController = createAbortController();
+
+    try {
+      for (let step = 0; step < 30; step += 1) {
+        const state = toAdapterState();
+        if (secretHitlerAdapter.isTerminal(state)) {
+          loadAdapterState(state);
+          break;
+        }
+
+        const player = secretHitlerAdapter.currentPlayer(state);
+        const profile = modelProfileForPlayer(player);
+        if (!profile) {
+          break;
+        }
+
+        const legalMoves = secretHitlerAdapter.legalMoves(state, player);
+        if (legalMoves.length === 0) {
+          aiWarning = `${state.players[player]?.name ?? 'AI player'} has no legal moves.`;
+          break;
+        }
+
+        const move = await requestAIAction(
+          state,
+          player,
+          legalMoves,
+          profile,
+          aiController.signal,
+        );
+        loadAdapterState(secretHitlerAdapter.applyMove(state, move));
+      }
+    } catch (error) {
+      if (!aiController.signal.aborted) {
+        aiWarning =
+          error instanceof Error ? error.message : 'AI request failed.';
+      }
+    } finally {
+      aiThinking = false;
+    }
   }
 
   function normalizePlayerProfileSelections(
@@ -254,6 +636,12 @@
       ...playerProfileSelections,
       [playerIndex]: profileId,
     };
+    aiWarning = '';
+    if (profileId === HUMAN_PROFILE) {
+      aiController?.abort();
+    } else {
+      void runAI();
+    }
   }
 
   function normalizeIdentityViewer(count: number) {
@@ -326,13 +714,28 @@
     votes = Object.fromEntries(alivePlayers.map((item) => [item.id, null]));
     phase = 'voting';
     message = `${presidentName} nominated ${player.name}. Cast votes.`;
+    void runAI();
   }
 
-  function castVote(playerId: number, vote: Exclude<Vote, null>) {
-    if (phase !== 'voting') {
+  function recordVote(playerId: number, vote: Exclude<Vote, null>) {
+    const player = players[playerId];
+    if (phase !== 'voting' || !player?.alive || !(playerId in votes)) {
       return;
     }
     votes = { ...votes, [playerId]: vote };
+  }
+
+  function castHumanVote(vote: Exclude<Vote, null>) {
+    recordVote(HUMAN_PLAYER_INDEX, vote);
+    if (alivePlayers.every((player) => votes[player.id])) {
+      resolveVote();
+      return;
+    }
+    void runAI();
+  }
+
+  function canManuallyVote(player: Player): boolean {
+    return phase === 'voting' && player.id === HUMAN_PLAYER_INDEX && player.alive;
   }
 
   function reshuffleIfNeeded() {
@@ -359,12 +762,18 @@
   }
 
   function resolveVote() {
-    if (phase !== 'voting' || !allVotesCast || nominee === null) {
+    const submitted = alivePlayers.every((player) => votes[player.id]);
+    const passed =
+      alivePlayers.filter((player) => votes[player.id] === 'ja').length >
+      alivePlayers.length / 2;
+
+    if (phase !== 'voting' || !submitted || nominee === null) {
       return;
     }
 
-    if (!governmentPasses) {
+    if (!passed) {
       failElection('Government rejected.');
+      void runAI();
       return;
     }
 
@@ -388,6 +797,7 @@
     chancellorHand = [];
     phase = 'president-discard';
     message = `${presidentName} draws three policies and discards one.`;
+    void runAI();
   }
 
   function failElection(reason: string) {
@@ -445,6 +855,7 @@
     presidentHand = [];
     phase = 'chancellor-discard';
     message = `${nomineeName} receives two policies and enacts one.`;
+    void runAI();
   }
 
   function chancellorEnact(index: number) {
@@ -460,6 +871,7 @@
     discardPile = [...discardPile, ...chancellorHand.filter((_, item) => item !== index)];
     chancellorHand = [];
     enactPolicy(policy);
+    void runAI();
   }
 
   function requestVeto() {
@@ -473,6 +885,7 @@
 
     phase = 'veto';
     message = `${nomineeName} requested a veto. President must approve or reject.`;
+    void runAI();
   }
 
   function approveVeto() {
@@ -483,6 +896,7 @@
     discardPile = [...discardPile, ...chancellorHand];
     chancellorHand = [];
     failElection('Agenda vetoed.');
+    void runAI();
   }
 
   function rejectVeto() {
@@ -492,6 +906,7 @@
 
     phase = 'chancellor-discard';
     message = 'Veto rejected. Chancellor must enact one policy.';
+    void runAI();
   }
 
   function enactPolicy(policy: Policy, opts: { chaos?: boolean } = {}) {
@@ -571,6 +986,7 @@
     }
     message = 'Policy peek resolved.';
     finishLegislativeTurn();
+    void runAI();
   }
 
   function investigate(playerId: number) {
@@ -588,6 +1004,7 @@
       return;
     }
     finishLegislativeTurn();
+    void runAI();
   }
 
   function chooseSpecialPresident(playerId: number) {
@@ -603,6 +1020,7 @@
     phase = 'nomination';
     turn += 1;
     message = `${player.name} is special election President. Presidency returns afterward.`;
+    void runAI();
   }
 
   function executePlayer(playerId: number) {
@@ -633,6 +1051,7 @@
       previousChancellor = null;
     }
     finishLegislativeTurn();
+    void runAI();
   }
 
   function policyClasses(policy: Policy): string {
@@ -679,12 +1098,25 @@
     return 'Ineligible';
   }
 
+  function sendChatMessage() {
+    const body = chatDraft.trim();
+    const author = players[HUMAN_PLAYER_INDEX];
+    if (!body || !author) {
+      return;
+    }
+
+    const item = appendChatMessage(author, body);
+    chatDraft = '';
+    maybeRequestQuestionReplies(item);
+  }
+
   startGame();
 
   onMount(() => {
     refreshKeys();
     window.addEventListener('storage', refreshKeys);
     window.addEventListener('byok-keys-changed', refreshKeys);
+    void runAI();
   });
 
   onDestroy(() => {
@@ -692,11 +1124,13 @@
       window.removeEventListener('storage', refreshKeys);
       window.removeEventListener('byok-keys-changed', refreshKeys);
     }
+    aiController?.abort();
+    chatReplyController?.abort();
   });
 </script>
 
 <section class="h-full overflow-auto bg-neutral-950 px-6 py-6 text-neutral-100">
-  <div class="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[1fr_380px]">
+  <div class="mx-auto grid max-w-[2050px] gap-4 xl:grid-cols-[1fr_520px_360px]">
     <section class="rounded-md border border-neutral-800 bg-neutral-900 p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -749,6 +1183,21 @@
           class="mt-4 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm text-sky-100"
         >
           {message}
+        </div>
+      {/if}
+
+      {#if aiThinking}
+        <div
+          class="mt-3 rounded-md border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-sm text-amber-100"
+        >
+          {players[currentActor]?.name ?? 'AI player'} is thinking with
+          {currentActorProfile?.label ?? 'configured model'}.
+        </div>
+      {:else if aiWarning}
+        <div
+          class="mt-3 rounded-md border border-red-400/40 bg-red-400/10 px-3 py-2 text-sm text-red-100"
+        >
+          {aiWarning}
         </div>
       {/if}
 
@@ -873,31 +1322,50 @@
           <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {#each alivePlayers as player}
               <div class="rounded-md border border-neutral-800 bg-neutral-900 p-2">
-                <div class="text-sm font-medium">{player.name}</div>
-                <div class="mt-2 flex gap-2">
-                  <button
-                    class={`flex-1 rounded-md border px-2 py-1 text-xs ${
-                      votes[player.id] === 'ja'
-                        ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
-                        : 'border-neutral-700 text-neutral-300'
-                    }`}
-                    type="button"
-                    on:click={() => castVote(player.id, 'ja')}
-                  >
-                    Ja
-                  </button>
-                  <button
-                    class={`flex-1 rounded-md border px-2 py-1 text-xs ${
-                      votes[player.id] === 'nein'
-                        ? 'border-red-300 bg-red-400/20 text-red-100'
-                        : 'border-neutral-700 text-neutral-300'
-                    }`}
-                    type="button"
-                    on:click={() => castVote(player.id, 'nein')}
-                  >
-                    Nein
-                  </button>
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-sm font-medium">{player.name}</div>
+                  {#if votes[player.id]}
+                    <span
+                      class="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100"
+                    >
+                      Ballot submitted
+                    </span>
+                  {:else}
+                    <span class="text-[10px] text-neutral-500">Awaiting ballot</span>
+                  {/if}
                 </div>
+                {#if canManuallyVote(player)}
+                  <div class="mt-2 flex gap-2">
+                    <button
+                      class={`flex-1 rounded-md border px-2 py-1 text-xs ${
+                        votes[player.id] === 'ja'
+                          ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
+                          : 'border-neutral-700 text-neutral-300'
+                      }`}
+                      type="button"
+                      on:click={() => castHumanVote('ja')}
+                    >
+                      Ja
+                    </button>
+                    <button
+                      class={`flex-1 rounded-md border px-2 py-1 text-xs ${
+                        votes[player.id] === 'nein'
+                          ? 'border-red-300 bg-red-400/20 text-red-100'
+                          : 'border-neutral-700 text-neutral-300'
+                      }`}
+                      type="button"
+                      on:click={() => castHumanVote('nein')}
+                    >
+                      Nein
+                    </button>
+                  </div>
+                {:else}
+                  <div
+                    class="mt-2 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-center text-xs text-neutral-500"
+                  >
+                    Private ballot controlled by {player.name}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -1073,23 +1541,21 @@
       </section>
     </section>
 
-    <aside class="rounded-md border border-neutral-800 bg-neutral-900 p-4">
+    <aside
+      class="h-[calc(100vh-8rem)] min-h-0 rounded-md border border-neutral-800 bg-neutral-900 p-4"
+    >
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-sm font-semibold">Players</h2>
-        <label class="flex items-center gap-2 text-xs text-neutral-400">
-          Viewing as
-          <select
-            class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-100"
-            bind:value={identityViewer}
-          >
-            {#each players as player (player.id)}
-              <option value={player.id}>{player.name}</option>
-            {/each}
-          </select>
-        </label>
+        <span class="text-xs text-neutral-500">
+          Viewing as {players[HUMAN_PLAYER_INDEX]?.name ?? 'Player 1'}
+        </span>
       </div>
 
-      <div class="mt-3 space-y-2">
+      <div
+        class={`mt-3 grid max-h-[calc(100vh-12rem)] gap-3 overflow-y-auto pr-1 ${
+          players.length > 5 ? 'grid-cols-2' : 'grid-cols-1'
+        }`}
+      >
         {#each players as player}
           {@const visibleRole = visibleRoleFor(identityViewer, player)}
           <div
@@ -1105,12 +1571,14 @@
           >
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class="text-sm font-medium">{player.name}</div>
+                <div class={`text-sm font-medium ${playerNameClasses(player.id)}`}>
+                  {player.name}
+                </div>
                 <div class="text-xs text-neutral-500">
                   {playerStatus(player)}
                 </div>
                 <select
-                  class="mt-2 max-w-56 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
                   value={playerProfileSelections[player.id] ??
                     (player.id === HUMAN_PLAYER_INDEX ? HUMAN_PROFILE : '')}
                   disabled={player.id !== HUMAN_PLAYER_INDEX &&
@@ -1189,6 +1657,76 @@
           </div>
         {/each}
       </div>
+
+    </aside>
+
+    <aside
+      class="flex h-[calc(100vh-8rem)] min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
+    >
+      <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold">Table Chat</h2>
+          <span class="text-xs text-neutral-500">
+            Speaking as {players[HUMAN_PLAYER_INDEX]?.name ?? 'Player 1'}
+          </span>
+        </div>
+
+        <div class="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+          {#if chatMessages.length}
+            {#each chatMessages as item (item.id)}
+              <article
+                class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class={`text-xs font-semibold ${playerNameClasses(item.playerId)}`}>
+                    {item.playerName}
+                  </span>
+                  <span class="text-[10px] uppercase tracking-wide text-neutral-600">
+                    Turn {item.turn}
+                  </span>
+                </div>
+                <p class="mt-1 whitespace-pre-wrap text-sm text-neutral-300">
+                  {item.body}
+                </p>
+              </article>
+            {/each}
+          {:else}
+            <div
+              class="flex h-full min-h-24 items-center justify-center rounded-md border border-dashed border-neutral-800 px-3 py-4 text-center text-sm text-neutral-600"
+            >
+              No table talk yet.
+            </div>
+          {/if}
+        </div>
+
+        <div class="mt-3 shrink-0">
+          <textarea
+            class="h-20 w-full resize-none rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600"
+            maxlength="500"
+            placeholder={`Message as ${players[HUMAN_PLAYER_INDEX]?.name ?? 'Player 1'}`}
+            bind:value={chatDraft}
+            on:keydown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendChatMessage();
+              }
+            }}
+          ></textarea>
+          <div class="mt-2 flex items-center justify-between gap-2">
+            <span class="text-[10px] text-neutral-600">
+              Enter sends. Shift+Enter adds a line.
+            </span>
+            <button
+              class="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
+              type="button"
+              disabled={!chatDraft.trim()}
+              on:click={sendChatMessage}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      </section>
     </aside>
   </div>
 </section>
