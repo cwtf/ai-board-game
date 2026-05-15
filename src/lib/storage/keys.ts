@@ -3,11 +3,21 @@ import type { ProviderId } from '@/lib/ai/types';
 
 export const KEY_STORAGE_KEY = 'byok.keys.v1';
 
+export interface ProviderModelProfile {
+  id: string;
+  label: string;
+  provider: ProviderId;
+  model: string;
+}
+
 export type StoredKeys = Partial<Record<ProviderId, string>> & {
   llamaUrl?: string;
   ollamaUrl?: string;
   selectedProvider?: ProviderId;
   selectedModel?: Partial<Record<ProviderId, string>>;
+  selectedProfileId?: string;
+  modelProfiles?: ProviderModelProfile[];
+  deletedProviders?: ProviderId[];
 };
 
 const providerIds = new Set<ProviderId>(
@@ -61,6 +71,48 @@ function sanitize(value: unknown): StoredKeys {
     }
   }
 
+  if (Array.isArray(raw.modelProfiles)) {
+    stored.modelProfiles = raw.modelProfiles.flatMap((profile) => {
+      if (!profile || typeof profile !== 'object') {
+        return [];
+      }
+
+      const item = profile as Record<string, unknown>;
+      if (
+        typeof item.id !== 'string' ||
+        typeof item.label !== 'string' ||
+        typeof item.provider !== 'string' ||
+        typeof item.model !== 'string' ||
+        !providerIds.has(item.provider as ProviderId)
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          id: item.id,
+          label: item.label,
+          provider: item.provider as ProviderId,
+          model: item.model,
+        },
+      ];
+    });
+  }
+
+  if (
+    typeof raw.selectedProfileId === 'string' &&
+    stored.modelProfiles?.some((profile) => profile.id === raw.selectedProfileId)
+  ) {
+    stored.selectedProfileId = raw.selectedProfileId;
+  }
+
+  if (Array.isArray(raw.deletedProviders)) {
+    stored.deletedProviders = raw.deletedProviders.filter(
+      (provider): provider is ProviderId =>
+        typeof provider === 'string' && providerIds.has(provider as ProviderId),
+    );
+  }
+
   return stored;
 }
 
@@ -111,11 +163,28 @@ export function clearProviderCredentials(provider: ProviderId): StoredKeys {
   return updateStoredKeys((keys) => {
     const next = { ...keys };
     delete next[provider];
+    next.selectedModel = { ...next.selectedModel };
+    delete next.selectedModel[provider];
+    next.modelProfiles = next.modelProfiles?.filter(
+      (profile) => profile.provider !== provider,
+    );
+    if (
+      next.selectedProfileId &&
+      !next.modelProfiles?.some((profile) => profile.id === next.selectedProfileId)
+    ) {
+      delete next.selectedProfileId;
+    }
     if (provider === 'llama') {
       delete next.llamaUrl;
     }
     if (provider === 'ollama') {
       delete next.ollamaUrl;
+    }
+    next.deletedProviders = Array.from(
+      new Set([...(next.deletedProviders ?? []), provider]),
+    );
+    if (next.selectedProvider === provider) {
+      delete next.selectedProvider;
     }
     return next;
   });
@@ -129,6 +198,14 @@ export function selectedModelFor(
     keys.selectedModel?.[provider] ??
     listProviders().find((item) => item.id === provider)?.defaultModel ??
     ''
+  );
+}
+
+export function selectedProfileFor(
+  keys: StoredKeys = getStoredKeys(),
+): ProviderModelProfile | undefined {
+  return keys.modelProfiles?.find(
+    (profile) => profile.id === keys.selectedProfileId,
   );
 }
 
@@ -149,6 +226,10 @@ export function hasProviderCredentials(
   provider: ProviderId,
   keys: StoredKeys = getStoredKeys(),
 ): boolean {
+  if (keys.deletedProviders?.includes(provider)) {
+    return false;
+  }
+
   const meta = listProviders().find((item) => item.id === provider);
   if (!meta) {
     return false;

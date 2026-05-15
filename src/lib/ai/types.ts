@@ -42,6 +42,7 @@ export interface CompleteResult {
 }
 
 export interface ListModelsParams {
+  apiKey?: string;
   endpointUrl?: string;
   signal?: AbortSignal;
 }
@@ -49,6 +50,7 @@ export interface ListModelsParams {
 export interface AIProvider {
   id: ProviderId;
   label: string;
+  platformUrl?: string;
   defaultModel: string;
   availableModels: string[];
   requiresApiKey: boolean;

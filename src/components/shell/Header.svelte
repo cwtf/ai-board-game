@@ -5,6 +5,7 @@
     getStoredKeys,
     hasProviderCredentials,
     selectedModelFor,
+    selectedProfileFor,
     type StoredKeys,
   } from '@/lib/storage/keys';
 
@@ -28,15 +29,17 @@
     };
   });
 
+  $: selectedProfile = selectedProfileFor(keys);
   $: selectedProvider =
-    providers.find((provider) => provider.id === keys.selectedProvider) ??
-    providers[0];
+    providers.find(
+      (provider) =>
+        provider.id === (selectedProfile?.provider ?? keys.selectedProvider),
+    ) ?? providers[0];
   $: configured = selectedProvider
     ? hasProviderCredentials(selectedProvider.id, keys)
     : false;
-  $: selectedModel = selectedProvider
-    ? selectedModelFor(selectedProvider.id, keys)
-    : '';
+  $: selectedModel =
+    selectedProfile?.model ?? selectedModelFor(selectedProvider.id, keys);
 </script>
 
 <header class="border-b border-neutral-800 bg-neutral-950/90 text-neutral-100">

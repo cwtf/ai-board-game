@@ -63,6 +63,7 @@ function mapFetchError(error: unknown): never {
 const ollama: AIProvider = {
   id: 'ollama',
   label: 'Ollama',
+  platformUrl: 'https://ollama.com/library',
   defaultModel: 'llama3.2',
   availableModels: ['llama3.2', 'llama3.1', 'mistral', 'qwen2.5'],
   requiresApiKey: false,

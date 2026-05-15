@@ -5,6 +5,7 @@
   import {
     getStoredKeys,
     hasProviderCredentials,
+    selectedProfileFor,
     type StoredKeys,
   } from '@/lib/storage/keys';
   import GameCard from './GameCard.svelte';
@@ -27,9 +28,12 @@
     };
   });
 
+  $: selectedProfile = selectedProfileFor(keys);
   $: selectedProvider =
-    providers.find((provider) => provider.id === keys.selectedProvider) ??
-    providers[0];
+    providers.find(
+      (provider) =>
+        provider.id === (selectedProfile?.provider ?? keys.selectedProvider),
+    ) ?? providers[0];
   $: canPlay = selectedProvider
     ? hasProviderCredentials(selectedProvider.id, keys)
     : false;

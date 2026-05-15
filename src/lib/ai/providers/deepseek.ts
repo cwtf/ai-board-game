@@ -3,6 +3,7 @@ import { createOpenAICompatibleProvider } from './openai-compatible';
 export default createOpenAICompatibleProvider({
   id: 'deepseek',
   label: 'DeepSeek',
+  platformUrl: 'https://platform.deepseek.com/api_keys',
   baseUrl: 'https://api.deepseek.com',
   defaultModel: 'deepseek-v4-flash',
   availableModels: [
@@ -11,4 +12,5 @@ export default createOpenAICompatibleProvider({
     'deepseek-chat',
     'deepseek-reasoner',
   ],
+  listModels: true,
 });

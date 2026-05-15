@@ -3,6 +3,7 @@ import { createOpenAICompatibleProvider } from './openai-compatible';
 export default createOpenAICompatibleProvider({
   id: 'llama',
   label: 'Llama',
+  platformUrl: 'https://ai.meta.com/llama/',
   defaultModel: 'llama-3.1-8b-instruct',
   availableModels: [
     'llama-3.1-8b-instruct',
@@ -12,4 +13,5 @@ export default createOpenAICompatibleProvider({
   requiresApiKey: false,
   requiresEndpointUrl: true,
   endpointLabel: 'OpenAI-compatible base URL',
+  listModels: true,
 });

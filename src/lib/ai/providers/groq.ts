@@ -3,6 +3,7 @@ import { createOpenAICompatibleProvider } from './openai-compatible';
 export default createOpenAICompatibleProvider({
   id: 'groq',
   label: 'Groq',
+  platformUrl: 'https://console.groq.com/keys',
   baseUrl: 'https://api.groq.com/openai/v1',
   defaultModel: 'llama-3.3-70b-versatile',
   availableModels: [
@@ -11,4 +12,5 @@ export default createOpenAICompatibleProvider({
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
   ],
+  listModels: true,
 });

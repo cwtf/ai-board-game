@@ -3,6 +3,7 @@ import {
   type AIProvider,
   type CompleteParams,
   type CompleteResult,
+  type ListModelsParams,
 } from '../types';
 
 interface AnthropicResponse {
@@ -11,6 +12,17 @@ interface AnthropicResponse {
     input_tokens?: number;
     output_tokens?: number;
   };
+  error?: {
+    type?: string;
+    message?: string;
+  };
+}
+
+interface AnthropicModelsResponse {
+  data?: Array<{
+    id?: string;
+    type?: string;
+  }>;
   error?: {
     type?: string;
     message?: string;
@@ -28,11 +40,11 @@ function jsonSystem(
   return `${system}\n\nRespond only with a valid JSON object. Do not wrap it in Markdown.`;
 }
 
-async function readJson(response: Response): Promise<AnthropicResponse> {
+async function readJson<T>(response: Response): Promise<T> {
   try {
-    return (await response.json()) as AnthropicResponse;
+    return (await response.json()) as T;
   } catch {
-    return {};
+    return {} as T;
   }
 }
 
@@ -56,6 +68,7 @@ function mapFetchError(error: unknown): never {
 const anthropic: AIProvider = {
   id: 'anthropic',
   label: 'Anthropic',
+  platformUrl: 'https://console.anthropic.com/settings/keys',
   defaultModel: 'claude-sonnet-4-20250514',
   availableModels: [
     'claude-sonnet-4-20250514',
@@ -63,6 +76,49 @@ const anthropic: AIProvider = {
     'claude-3-7-sonnet-20250219',
   ],
   requiresApiKey: true,
+  async listModels(params: ListModelsParams = {}): Promise<string[]> {
+    if (!params.apiKey) {
+      throw new AIProviderError('Anthropic API key is required.', {
+        code: 'missing_api_key',
+      });
+    }
+
+    let response: Response;
+    try {
+      response = await fetch('https://api.anthropic.com/v1/models', {
+        method: 'GET',
+        headers: {
+          'x-api-key': params.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        signal: params.signal,
+      });
+    } catch (error) {
+      mapFetchError(error);
+    }
+
+    const payload = await readJson<AnthropicModelsResponse>(response);
+    if (!response.ok) {
+      throw new AIProviderError(
+        payload.error?.message ?? 'Anthropic model list request failed.',
+        {
+          code: payload.error?.type ?? 'provider_error',
+          status: response.status,
+          raw: payload,
+        },
+      );
+    }
+
+    return Array.from(
+      new Set(
+        (payload.data ?? [])
+          .filter((model) => model.type === 'model')
+          .map((model) => model.id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+  },
   async complete(params: CompleteParams): Promise<CompleteResult> {
     if (!params.apiKey) {
       throw new AIProviderError('Anthropic API key is required.', {
@@ -93,7 +149,7 @@ const anthropic: AIProvider = {
       mapFetchError(error);
     }
 
-    const payload = await readJson(response);
+    const payload = await readJson<AnthropicResponse>(response);
     if (!response.ok) {
       throw new AIProviderError(
         payload.error?.message ?? 'Anthropic request failed.',

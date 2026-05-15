@@ -33,6 +33,7 @@
     hasProviderCredentials,
     providerEndpointFor,
     selectedModelFor,
+    selectedProfileFor,
     type StoredKeys,
   } from '@/lib/storage/keys';
 
@@ -116,15 +117,17 @@
     state && humanCanAct
       ? splendorAdapter.legalMoves(state, HUMAN_PLAYER_INDEX)
       : [];
+  $: selectedProfile = selectedProfileFor(keys);
   $: selectedProvider =
-    providers.find((provider) => provider.id === keys.selectedProvider) ??
-    providers[0];
+    providers.find(
+      (provider) =>
+        provider.id === (selectedProfile?.provider ?? keys.selectedProvider),
+    ) ?? providers[0];
   $: configured = selectedProvider
     ? hasProviderCredentials(selectedProvider.id, keys)
     : false;
-  $: selectedModel = selectedProvider
-    ? selectedModelFor(selectedProvider.id, keys)
-    : '';
+  $: selectedModel =
+    selectedProfile?.model ?? selectedModelFor(selectedProvider.id, keys);
   $: aiPlayerIndexes = Array.from(
     { length: Math.max(0, playerCount - 1) },
     (_, index) => index + 1,

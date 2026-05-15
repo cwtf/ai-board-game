@@ -10,6 +10,7 @@
     providerEndpointFor,
     selectedModelFor,
     setStoredKeys,
+    type ProviderModelProfile,
     type StoredKeys,
   } from '@/lib/storage/keys';
 
@@ -27,26 +28,34 @@
   let testing: ProviderId | null = null;
   let loadingModels: ProviderId | null = null;
   let modelListRequest = 0;
+  let profileName = '';
+  let profileNameTouched = false;
+  let modelSearch = '';
+  let modelPickerOpen = false;
+  let successfulTestSignatures: Partial<Record<ProviderId, string>> = {};
 
   $: selectedProviderId = keys.selectedProvider ?? providers[0].id;
   $: activeProvider =
     providers.find((provider) => provider.id === selectedProviderId) ??
     providers[0];
   $: activeModels = modelsFor(activeProvider);
-  $: configuredProviders = providers.filter((provider) =>
-    hasProviderCredentials(provider.id, keys),
+  $: activeModel = selectedModelFor(activeProvider.id, keys);
+  $: visibleModels = filterModels(activeModels, modelSearch, activeModel);
+  $: modelProfiles = keys.modelProfiles ?? [];
+  $: defaultProfile = modelProfiles.find(
+    (profile) => profile.id === keys.selectedProfileId,
   );
-
-  function providerStatus(providerId: ProviderId): {
-    label: string;
-    tone: 'ready' | 'missing';
-  } {
-    if (hasProviderCredentials(providerId, keys)) {
-      return { label: 'Configured', tone: 'ready' };
-    }
-
-    return { label: 'Needs setup', tone: 'missing' };
+  $: suggestedProfileName = defaultProfileLabel(
+    activeProvider.id,
+    selectedModelFor(activeProvider.id, keys),
+  );
+  $: if (!profileNameTouched && profileName !== suggestedProfileName) {
+    profileName = suggestedProfileName;
   }
+  $: activeProfileCanSave =
+    testing !== activeProvider.id &&
+    successfulTestSignatures[activeProvider.id] ===
+      providerDraftSignature(activeProvider.id);
 
   function keyStatus(provider: (typeof providers)[number]): string {
     if (!provider.requiresApiKey) {
@@ -66,6 +75,57 @@
       provider.defaultEndpointUrl ??
       'Missing'
     );
+  }
+
+  function providerLabel(providerId: ProviderId): string {
+    return getProvider(providerId).label;
+  }
+
+  function profileIdFor(providerId: ProviderId, model: string): string {
+    return `${providerId}:${model}`;
+  }
+
+  function defaultProfileLabel(providerId: ProviderId, model: string): string {
+    const provider = getProvider(providerId);
+    return `${provider.label} - ${model}`;
+  }
+
+  function savedProviderShape(providerId: ProviderId): StoredKeys {
+    const provider = getProvider(providerId);
+    const selectedModel =
+      selectedModelFor(providerId, keys) || provider.defaultModel;
+
+    return {
+      ...keys,
+      [providerId]: draftKeys[providerId]?.trim() || undefined,
+      llamaUrl:
+        providerId === 'llama' ? draftUrls.llama?.trim() : keys.llamaUrl,
+      ollamaUrl:
+        providerId === 'ollama' ? draftUrls.ollama?.trim() : keys.ollamaUrl,
+      deletedProviders: keys.deletedProviders?.filter(
+        (deletedProvider) => deletedProvider !== providerId,
+      ),
+      selectedProvider: providerId,
+      selectedModel: {
+        ...keys.selectedModel,
+        [providerId]: selectedModel,
+      },
+    };
+  }
+
+  function providerDraftSignature(providerId: ProviderId): string {
+    const provider = getProvider(providerId);
+    return JSON.stringify({
+      provider: providerId,
+      model: selectedModelFor(providerId, keys) || provider.defaultModel,
+      apiKey: provider.requiresApiKey
+        ? draftKeys[providerId]?.trim() ?? ''
+        : '',
+      endpoint:
+        providerId === 'llama' || providerId === 'ollama'
+          ? draftUrls[providerId]?.trim() || provider.defaultEndpointUrl || ''
+          : providerEndpointFor(providerId, keys) ?? '',
+    });
   }
 
   function refresh() {
@@ -103,6 +163,25 @@
     return baseModels;
   }
 
+  function filterModels(models: string[], query: string, selectedModel: string) {
+    const normalized = query.trim().toLowerCase();
+    const filtered = normalized
+      ? models.filter((model) => model.toLowerCase().includes(normalized))
+      : models;
+
+    if (selectedModel && !filtered.includes(selectedModel)) {
+      return [selectedModel, ...filtered];
+    }
+
+    return filtered;
+  }
+
+  function chooseModel(providerId: ProviderId, model: string) {
+    setSelectedModel(providerId, model);
+    modelSearch = '';
+    modelPickerOpen = false;
+  }
+
   async function loadModelsFor(providerId: ProviderId) {
     const provider = getProvider(providerId);
     if (!provider.listModels) {
@@ -114,6 +193,7 @@
 
     try {
       const models = await provider.listModels({
+        apiKey: draftKeys[providerId]?.trim(),
         endpointUrl: endpointFor(providerId),
       });
       if (requestId !== modelListRequest) {
@@ -127,14 +207,14 @@
 
       const stored = getStoredKeys();
       const storedModel = stored.selectedModel?.[providerId];
-      const shouldUseFirstLocalModel =
+      const shouldUseFirstFetchedModel =
+        providerId === 'ollama' &&
         models.length &&
         (!storedModel ||
-          (providerId === 'ollama' &&
-            provider.availableModels.includes(storedModel) &&
+          (provider.availableModels.includes(storedModel) &&
             !models.includes(storedModel)));
 
-      if (shouldUseFirstLocalModel) {
+      if (shouldUseFirstFetchedModel) {
         setStoredKeys({
           ...stored,
           selectedProvider: providerId,
@@ -151,8 +231,8 @@
         [providerId]: {
           ok: true,
           message: models.length
-            ? `Found ${models.length} local model${models.length === 1 ? '' : 's'}.`
-            : 'No local models found.',
+            ? `Found ${models.length} available model${models.length === 1 ? '' : 's'}.`
+            : 'No models found.',
         },
       };
     } catch (error) {
@@ -170,7 +250,7 @@
           message: `${
             error instanceof AIProviderError || error instanceof Error
               ? error.message
-              : 'Could not load local models.'
+              : 'Could not load models.'
           } Using fallback list.`,
         },
       };
@@ -181,34 +261,93 @@
     }
   }
 
-  function saveProvider(providerId: ProviderId) {
-    const provider = getProvider(providerId);
-    const selectedModel =
-      selectedModelFor(providerId, keys) || provider.defaultModel;
+  function saveCurrentProfile() {
+    const providerId = activeProvider.id;
+    const model =
+      selectedModelFor(providerId, keys) || activeProvider.defaultModel;
+    const savedProvider = savedProviderShape(providerId);
+    if (!activeProfileCanSave) {
+      testState = {
+        ...testState,
+        [providerId]: {
+          ok: false,
+          message: 'Run a successful test before saving this model profile.',
+        },
+      };
+      return;
+    }
+
+    if (!hasProviderCredentials(providerId, savedProvider)) {
+      testState = {
+        ...testState,
+        [providerId]: {
+          ok: false,
+          message: activeProvider.requiresApiKey
+            ? 'Enter an API key before saving this model profile.'
+            : 'Enter the required endpoint before saving this model profile.',
+        },
+      };
+      return;
+    }
+
+    const profile: ProviderModelProfile = {
+      id: profileIdFor(providerId, model),
+      label: profileName.trim() || defaultProfileLabel(providerId, model),
+      provider: providerId,
+      model,
+    };
+    const nextProfiles = [
+      ...(keys.modelProfiles ?? []).filter((item) => item.id !== profile.id),
+      profile,
+    ];
 
     setStoredKeys({
-      ...keys,
-      [providerId]: draftKeys[providerId]?.trim() || undefined,
-      llamaUrl:
-        providerId === 'llama' ? draftUrls.llama?.trim() : keys.llamaUrl,
-      ollamaUrl:
-        providerId === 'ollama' ? draftUrls.ollama?.trim() : keys.ollamaUrl,
-      selectedProvider: providerId,
-      selectedModel: {
-        ...keys.selectedModel,
-        [providerId]: selectedModel,
-      },
+      ...savedProvider,
+      selectedProfileId: keys.selectedProfileId ?? profile.id,
+      modelProfiles: nextProfiles,
     });
+    profileNameTouched = false;
     refresh();
     void loadModelsFor(providerId);
     testState = {
       ...testState,
-      [providerId]: { ok: true, message: 'Saved.' },
+      [providerId]: { ok: true, message: 'Saved model profile.' },
     };
+  }
+
+  function setDefaultProfile(profile: ProviderModelProfile) {
+    setStoredKeys({
+      ...keys,
+      selectedProvider: profile.provider,
+      selectedProfileId: profile.id,
+      selectedModel: {
+        ...keys.selectedModel,
+        [profile.provider]: profile.model,
+      },
+    });
+    refresh();
+    void loadModelsFor(profile.provider);
+  }
+
+  function deleteProfile(profileId: string) {
+    const nextProfiles = modelProfiles.filter((profile) => profile.id !== profileId);
+    const next: StoredKeys = {
+      ...keys,
+      modelProfiles: nextProfiles,
+    };
+    if (keys.selectedProfileId === profileId) {
+      delete next.selectedProfileId;
+    }
+
+    setStoredKeys(next);
+    refresh();
   }
 
   function clearProvider(providerId: ProviderId) {
     keys = clearProviderCredentials(providerId);
+    const nextSignatures = { ...successfulTestSignatures };
+    delete nextSignatures[providerId];
+    successfulTestSignatures = nextSignatures;
     refresh();
     testState = {
       ...testState,
@@ -217,15 +356,19 @@
   }
 
   function setSelectedProvider(providerId: ProviderId) {
+    profileNameTouched = false;
     setStoredKeys({
       ...keys,
       selectedProvider: providerId,
     });
     refresh();
+    modelSearch = '';
+    modelPickerOpen = false;
     void loadModelsFor(providerId);
   }
 
   function setSelectedModel(providerId: ProviderId, model: string) {
+    profileNameTouched = false;
     setStoredKeys({
       ...keys,
       selectedProvider: providerId,
@@ -238,10 +381,11 @@
   }
 
   async function testProvider(providerId: ProviderId) {
-    saveProvider(providerId);
     testing = providerId;
     const provider = getProvider(providerId);
     const started = performance.now();
+    const draftModel = selectedModelFor(providerId, keys) || provider.defaultModel;
+    const draftSignature = providerDraftSignature(providerId);
 
     try {
       const result = await provider.complete({
@@ -250,9 +394,7 @@
           providerId === 'llama' || providerId === 'ollama'
             ? draftUrls[providerId]?.trim() || provider.defaultEndpointUrl
             : providerEndpointFor(providerId, keys),
-        model:
-          selectedModelFor(providerId, getStoredKeys()) ||
-          provider.defaultModel,
+        model: draftModel,
         system: 'You are a connection test. Reply only with valid JSON.',
         messages: [{ role: 'user', content: 'Reply with {"ok":true}' }],
         responseFormat: 'json',
@@ -262,6 +404,16 @@
 
       const parsed = JSON.parse(result.text) as { ok?: boolean };
       const elapsed = Math.round(performance.now() - started);
+      if (parsed.ok === true) {
+        successfulTestSignatures = {
+          ...successfulTestSignatures,
+          [providerId]: draftSignature,
+        };
+      } else {
+        const nextSignatures = { ...successfulTestSignatures };
+        delete nextSignatures[providerId];
+        successfulTestSignatures = nextSignatures;
+      }
       testState = {
         ...testState,
         [providerId]: {
@@ -283,6 +435,9 @@
               : 'Connection test failed.',
         },
       };
+      const nextSignatures = { ...successfulTestSignatures };
+      delete nextSignatures[providerId];
+      successfulTestSignatures = nextSignatures;
     } finally {
       testing = null;
     }
@@ -308,11 +463,29 @@
       class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"
     >
       <div>
-        <h2 class="text-lg font-semibold">{activeProvider.label}</h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <h2 class="text-lg font-semibold">{activeProvider.label}</h2>
+          {#if activeProvider.platformUrl}
+            <a
+              class="text-sm text-emerald-300 underline-offset-4 hover:text-emerald-200 hover:underline"
+              href={activeProvider.platformUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              API platform
+            </a>
+          {/if}
+        </div>
         <p class="mt-1 text-sm text-neutral-400">
           Default model:
           <span class="text-neutral-200">{activeProvider.defaultModel}</span>
         </p>
+        {#if defaultProfile}
+          <p class="mt-1 text-sm text-neutral-400">
+            Default profile:
+            <span class="text-neutral-200">{defaultProfile.label}</span>
+          </p>
+        {/if}
       </div>
       <div class="flex items-center gap-2 text-sm">
         {#if testState[activeProvider.id]}
@@ -361,21 +534,60 @@
             </button>
           {/if}
         </div>
-        <select
-          class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
-          value={selectedModelFor(activeProvider.id, keys)}
-          disabled={activeModels.length === 0}
-          on:change={(event) =>
-            setSelectedModel(activeProvider.id, event.currentTarget.value)}
-        >
-          {#if activeModels.length}
-            {#each activeModels as model (model)}
-              <option value={model}>{model}</option>
-            {/each}
-          {:else}
-            <option value="">No models found</option>
+        <div class="relative">
+          <button
+            class="flex w-full items-center justify-between gap-3 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-left text-neutral-100 outline-none hover:border-neutral-500 focus:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            disabled={activeModels.length === 0}
+            on:click={() => {
+              modelPickerOpen = !modelPickerOpen;
+              modelSearch = '';
+            }}
+          >
+            <span class="min-w-0 truncate">{activeModel || 'No models found'}</span>
+            <span class="shrink-0 text-neutral-500">v</span>
+          </button>
+
+          {#if modelPickerOpen}
+            <div
+              class="absolute z-20 mt-2 w-full overflow-hidden rounded-md border border-neutral-700 bg-neutral-950 shadow-xl shadow-black/40"
+            >
+              <input
+                class="w-full border-b border-neutral-800 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none placeholder:text-neutral-600 focus:border-emerald-400"
+                autocomplete="off"
+                placeholder={`Search ${activeModels.length} model${activeModels.length === 1 ? '' : 's'}`}
+                bind:value={modelSearch}
+                on:keydown={(event) => {
+                  if (event.key === 'Escape') {
+                    modelPickerOpen = false;
+                    modelSearch = '';
+                  }
+                }}
+              />
+              <div class="max-h-72 overflow-y-auto py-1">
+                {#if visibleModels.length}
+                  {#each visibleModels as model (model)}
+                    <button
+                      class={`block w-full px-3 py-2 text-left text-sm hover:bg-neutral-800 ${
+                        model === activeModel
+                          ? 'bg-emerald-400/10 text-emerald-100'
+                          : 'text-neutral-200'
+                      }`}
+                      type="button"
+                      on:click={() => chooseModel(activeProvider.id, model)}
+                    >
+                      <span class="block truncate">{model}</span>
+                    </button>
+                  {/each}
+                {:else}
+                  <div class="px-3 py-4 text-sm text-neutral-500">
+                    No models match that search.
+                  </div>
+                {/if}
+              </div>
+            </div>
           {/if}
-        </select>
+        </div>
         {#if modelListState[activeProvider.id]}
           <p
             class={modelListState[activeProvider.id]?.ok
@@ -437,30 +649,51 @@
       {/if}
     </div>
 
-    <div class="mt-5 flex flex-wrap gap-2">
-      <button
-        class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-        type="button"
-        disabled={testing === activeProvider.id}
-        on:click={() => saveProvider(activeProvider.id)}
-      >
-        Save
-      </button>
-      <button
-        class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-60"
-        type="button"
-        disabled={testing === activeProvider.id}
-        on:click={() => testProvider(activeProvider.id)}
-      >
-        {testing === activeProvider.id ? 'Testing...' : 'Test'}
-      </button>
-      <button
-        class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-        type="button"
-        on:click={() => clearProvider(activeProvider.id)}
-      >
-        Clear
-      </button>
+    <div class="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-3">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <label class="grid flex-1 gap-2 text-sm">
+          <span class="text-neutral-300">Model profile name</span>
+          <input
+            class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
+            value={profileName}
+            placeholder={suggestedProfileName}
+            on:input={(event) => {
+              profileNameTouched = true;
+              profileName = event.currentTarget.value;
+            }}
+          />
+        </label>
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="rounded-md border border-emerald-400/60 px-3 py-2 text-sm font-medium text-emerald-100 hover:border-emerald-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            disabled={!activeProfileCanSave}
+            on:click={saveCurrentProfile}
+          >
+            Save model profile
+          </button>
+          <button
+            class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            disabled={testing === activeProvider.id}
+            on:click={() => testProvider(activeProvider.id)}
+          >
+            {testing === activeProvider.id ? 'Testing...' : 'Test'}
+          </button>
+          <button
+            class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
+            type="button"
+            on:click={() => clearProvider(activeProvider.id)}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      <p class="mt-2 text-xs text-neutral-500">
+        Profiles reuse this provider's saved credentials while pinning a model,
+        so one OpenRouter key can back separate OpenAI, Anthropic, or Google
+        model choices.
+      </p>
     </div>
   </article>
 
@@ -469,6 +702,7 @@
     type="button"
     on:click={() => {
       clearStoredKeys();
+      successfulTestSignatures = {};
       refresh();
     }}
   >
@@ -480,66 +714,79 @@
       class="flex flex-col gap-2 border-b border-neutral-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
-        <h2 class="text-lg font-semibold">Configured providers</h2>
+        <h2 class="text-lg font-semibold">Saved model profiles</h2>
         <p class="mt-1 text-sm text-neutral-400">
-          Overview of saved provider settings in this browser.
+          Each saved profile appears as one row. Provider credentials are kept
+          as backing settings for the profiles that use them.
         </p>
       </div>
       <span class="text-sm text-neutral-400">
-        {configuredProviders.length} configured
+        {modelProfiles.length} saved
       </span>
     </div>
 
-    {#if configuredProviders.length}
+    {#if modelProfiles.length}
       <div class="overflow-x-auto">
-        <table class="w-full min-w-[760px] text-left text-sm">
+        <table class="w-full min-w-[880px] text-left text-sm">
           <thead
             class="border-b border-neutral-800 text-xs uppercase text-neutral-500"
           >
             <tr>
+              <th class="px-5 py-3 font-medium">Name</th>
               <th class="px-5 py-3 font-medium">Provider</th>
-              <th class="px-5 py-3 font-medium">Status</th>
-              <th class="px-5 py-3 font-medium">Selected model</th>
+              <th class="px-5 py-3 font-medium">Model</th>
               <th class="px-5 py-3 font-medium">API key</th>
               <th class="px-5 py-3 font-medium">Endpoint</th>
+              <th class="px-5 py-3 font-medium">Default</th>
+              <th class="px-5 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-neutral-800">
-            {#each configuredProviders as provider (provider.id)}
-              {@const status = providerStatus(provider.id)}
+            {#each modelProfiles as profile (profile.id)}
+              {@const provider = getProvider(profile.provider)}
               <tr
-                class={provider.id === activeProvider.id
+                class={profile.id === keys.selectedProfileId
                   ? 'bg-emerald-400/5'
                   : 'bg-transparent'}
               >
-                <td class="px-5 py-3">
-                  <button
-                    class="text-left font-medium text-neutral-100 hover:text-emerald-200"
-                    type="button"
-                    on:click={() => setSelectedProvider(provider.id)}
-                  >
-                    {provider.label}
-                  </button>
+                <td class="px-5 py-3 font-medium text-neutral-100">
+                  {profile.label}
                 </td>
-                <td class="px-5 py-3">
-                  <span
-                    class={`inline-flex items-center rounded-full border px-2 py-1 text-xs ${
-                      status.tone === 'ready'
-                        ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
-                        : 'border-amber-400/40 bg-amber-400/10 text-amber-200'
-                    }`}
-                  >
-                    {status.label}
-                  </span>
+                <td class="px-5 py-3 text-neutral-300">
+                  {providerLabel(profile.provider)}
                 </td>
-                <td class="max-w-64 truncate px-5 py-3 text-neutral-300">
-                  {selectedModelFor(provider.id, keys)}
+                <td class="max-w-80 truncate px-5 py-3 text-neutral-300">
+                  {profile.model}
                 </td>
                 <td class="px-5 py-3 text-neutral-300">
                   {keyStatus(provider)}
                 </td>
                 <td class="max-w-72 truncate px-5 py-3 text-neutral-300">
                   {endpointStatus(provider)}
+                </td>
+                <td class="px-5 py-3">
+                  {#if profile.id === keys.selectedProfileId}
+                    <span class="inline-flex rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200">
+                      Current default
+                    </span>
+                  {:else}
+                    <button
+                      class="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-200 hover:border-neutral-500 hover:text-white"
+                      type="button"
+                      on:click={() => setDefaultProfile(profile)}
+                    >
+                      Set default
+                    </button>
+                  {/if}
+                </td>
+                <td class="px-5 py-3">
+                  <button
+                    class="rounded-md border border-red-400/50 px-2 py-1 text-xs text-red-200 hover:border-red-300 hover:text-red-100"
+                    type="button"
+                    on:click={() => deleteProfile(profile.id)}
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             {/each}
@@ -548,7 +795,7 @@
       </div>
     {:else}
       <div class="px-5 py-6 text-sm text-neutral-400">
-        No providers configured yet.
+        No model profiles saved yet.
       </div>
     {/if}
   </article>

@@ -3,6 +3,7 @@ import {
   type AIProvider,
   type CompleteParams,
   type CompleteResult,
+  type ListModelsParams,
 } from '../types';
 
 interface GeminiResponse {
@@ -22,11 +23,23 @@ interface GeminiResponse {
   };
 }
 
-async function readJson(response: Response): Promise<GeminiResponse> {
+interface GeminiModelsResponse {
+  models?: Array<{
+    name?: string;
+    supportedGenerationMethods?: string[];
+  }>;
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
+}
+
+async function readJson<T>(response: Response): Promise<T> {
   try {
-    return (await response.json()) as GeminiResponse;
+    return (await response.json()) as T;
   } catch {
-    return {};
+    return {} as T;
   }
 }
 
@@ -50,9 +63,56 @@ function mapFetchError(error: unknown): never {
 const google: AIProvider = {
   id: 'google',
   label: 'Google Gemini',
+  platformUrl: 'https://aistudio.google.com/app/apikey',
   defaultModel: 'gemini-2.5-flash',
   availableModels: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
   requiresApiKey: true,
+  async listModels(params: ListModelsParams = {}): Promise<string[]> {
+    if (!params.apiKey) {
+      throw new AIProviderError('Google Gemini API key is required.', {
+        code: 'missing_api_key',
+      });
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models',
+        {
+          method: 'GET',
+          headers: {
+            'x-goog-api-key': params.apiKey,
+          },
+          signal: params.signal,
+        },
+      );
+    } catch (error) {
+      mapFetchError(error);
+    }
+
+    const payload = await readJson<GeminiModelsResponse>(response);
+    if (!response.ok) {
+      throw new AIProviderError(
+        payload.error?.message ?? 'Google Gemini model list request failed.',
+        {
+          code: payload.error?.status ?? 'provider_error',
+          status: response.status,
+          raw: payload,
+        },
+      );
+    }
+
+    return Array.from(
+      new Set(
+        (payload.models ?? [])
+          .filter((model) =>
+            model.supportedGenerationMethods?.includes('generateContent'),
+          )
+          .map((model) => model.name?.replace(/^models\//, ''))
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+  },
   async complete(params: CompleteParams): Promise<CompleteResult> {
     if (!params.apiKey) {
       throw new AIProviderError('Google Gemini API key is required.', {
@@ -94,7 +154,7 @@ const google: AIProvider = {
       mapFetchError(error);
     }
 
-    const payload = await readJson(response);
+    const payload = await readJson<GeminiResponse>(response);
     if (!response.ok) {
       throw new AIProviderError(
         payload.error?.message ?? 'Google Gemini request failed.',
