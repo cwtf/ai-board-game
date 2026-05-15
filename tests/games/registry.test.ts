@@ -6,6 +6,7 @@ describe('game registry', () => {
     expect(games.map((game) => game.id)).toEqual([
       'splendor',
       'exploding-kittens',
+      'secret-hitler',
     ]);
   });
 

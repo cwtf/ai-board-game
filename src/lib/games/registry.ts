@@ -25,4 +25,15 @@ export const games: GameMeta[] = [
     estimatedAITurnTokens: 600,
     docPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
   },
+  {
+    id: 'secret-hitler',
+    name: 'Secret Hitler',
+    description:
+      'Read the table, pass laws, investigate loyalties, and survive a tense social deduction fight.',
+    minPlayers: 5,
+    maxPlayers: 10,
+    hiddenInformation: true,
+    estimatedAITurnTokens: 700,
+    docPath: 'https://www.secrethitler.com/assets/Secret_Hitler_Rules.pdf',
+  },
 ];

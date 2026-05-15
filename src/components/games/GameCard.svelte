@@ -11,6 +11,8 @@
   $: rulesHref = /^https?:\/\//.test(game.docPath)
     ? game.docPath
     : `/${game.docPath}`;
+  $: implemented = game.id === 'splendor';
+  $: playable = implemented && canPlay;
 </script>
 
 <article
@@ -43,7 +45,7 @@
   </div>
 
   <div class="mt-5 flex flex-wrap gap-3">
-    {#if canPlay}
+    {#if playable}
       <a
         class="rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
         href={`/${game.id}`}
@@ -55,9 +57,9 @@
         class="cursor-not-allowed rounded-md bg-neutral-700 px-4 py-2 text-sm font-medium text-neutral-400"
         type="button"
         disabled
-        title="Set up your AI key first"
+        title={implemented ? 'Set up your AI key first' : 'Coming soon'}
       >
-        Play
+        {implemented ? 'Play' : 'Coming Soon'}
       </button>
     {/if}
     <a
