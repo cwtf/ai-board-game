@@ -1,5 +1,14 @@
 <script lang="ts">
+  import { onDestroy, onMount } from 'svelte';
+  import { getProvider } from '@/lib/ai';
   import { createRng } from '@/lib/games/shared/rng';
+  import {
+    getStoredKeys,
+    hasProviderCredentials,
+    selectedProfileFor,
+    type ProviderModelProfile,
+    type StoredKeys,
+  } from '@/lib/storage/keys';
 
   type Party = 'liberal' | 'fascist';
   type Role = 'liberal' | 'fascist' | 'hitler';
@@ -30,6 +39,10 @@
     alive: boolean;
   }
 
+  type PlayerProfileSelections = Record<number, string>;
+
+  const HUMAN_PROFILE = '__human__';
+  const HUMAN_PLAYER_INDEX = 0;
   const roleCounts: Record<number, { liberals: number; fascists: number }> = {
     5: { liberals: 3, fascists: 1 },
     6: { liberals: 4, fascists: 1 },
@@ -55,6 +68,7 @@
     execution: 'Execution',
   };
 
+  let keys: StoredKeys = {};
   let playerCount = 5;
   let seed = 'secret-table';
   let players: Player[] = [];
@@ -73,11 +87,14 @@
   let peekedPolicies: Policy[] = [];
   let votes: Record<number, Vote> = {};
   let phase: Phase = 'nomination';
-  let revealRoles = false;
+  let identityViewer = HUMAN_PLAYER_INDEX;
   let investigationResult = '';
   let message = '';
   let winner = '';
   let turn = 1;
+  let playerProfileSelections: PlayerProfileSelections = {
+    [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
+  };
 
   $: alivePlayers = players.filter((player) => player.alive);
   $: presidentPlayer = players[president];
@@ -89,6 +106,21 @@
   $: allVotesCast = alivePlayers.every((player) => votes[player.id]);
   $: governmentPasses = jaVotes > alivePlayers.length / 2;
   $: vetoUnlocked = fascistPolicies >= 5;
+  $: selectedProfile = selectedProfileFor(keys);
+  $: configuredProfiles = (keys.modelProfiles ?? []).filter((profile) =>
+    hasProviderCredentials(profile.provider, keys),
+  );
+  $: defaultProfileId =
+    configuredProfiles.find((profile) => profile.id === selectedProfile?.id)
+      ?.id ??
+    configuredProfiles[0]?.id ??
+    '';
+  $: normalizePlayerProfileSelections(playerCount, defaultProfileId);
+  $: normalizeIdentityViewer(playerCount);
+
+  function refreshKeys() {
+    keys = getStoredKeys();
+  }
 
   function shuffle<T>(items: T[], salt: string): T[] {
     const rng = createRng(`${seed}:${salt}`);
@@ -145,7 +177,7 @@
     peekedPolicies = [];
     votes = {};
     phase = 'nomination';
-    revealRoles = false;
+    identityViewer = HUMAN_PLAYER_INDEX;
     investigationResult = '';
     message = 'Nominate a Chancellor.';
     winner = '';
@@ -172,6 +204,89 @@
 
   function policyLabel(policy: Policy): string {
     return policy === 'liberal' ? 'Liberal' : 'Fascist';
+  }
+
+  function configuredProfileById(
+    profileId: string,
+  ): ProviderModelProfile | undefined {
+    return configuredProfiles.find((profile) => profile.id === profileId);
+  }
+
+  function profileLabel(profile: ProviderModelProfile): string {
+    return `${profile.label} (${getProvider(profile.provider).label})`;
+  }
+
+  function normalizePlayerProfileSelections(
+    count: number,
+    fallbackProfileId: string,
+  ) {
+    const validProfileIds = new Set(
+      configuredProfiles.map((profile) => profile.id),
+    );
+    const next: PlayerProfileSelections = {};
+
+    for (let index = 0; index < count; index += 1) {
+      const current = playerProfileSelections[index];
+      if (index === HUMAN_PLAYER_INDEX) {
+        next[index] =
+          current === HUMAN_PROFILE || validProfileIds.has(current)
+            ? current
+            : HUMAN_PROFILE;
+        continue;
+      }
+
+      next[index] = validProfileIds.has(current) ? current : fallbackProfileId;
+    }
+
+    const changed =
+      Object.keys(playerProfileSelections).length !== count ||
+      Array.from({ length: count }).some(
+        (_, index) => playerProfileSelections[index] !== next[index],
+      );
+
+    if (changed) {
+      playerProfileSelections = next;
+    }
+  }
+
+  function selectPlayerProfile(playerIndex: number, profileId: string) {
+    playerProfileSelections = {
+      ...playerProfileSelections,
+      [playerIndex]: profileId,
+    };
+  }
+
+  function normalizeIdentityViewer(count: number) {
+    if (identityViewer >= count) {
+      identityViewer = HUMAN_PLAYER_INDEX;
+    }
+  }
+
+  function visibleRoleFor(viewerId: number, target: Player): Role | null {
+    const viewer = players[viewerId];
+    if (!viewer) {
+      return null;
+    }
+
+    if (viewer.id === target.id) {
+      return target.role;
+    }
+
+    if (viewer.role === 'fascist') {
+      return target.role === 'fascist' || target.role === 'hitler'
+        ? target.role
+        : null;
+    }
+
+    if (
+      viewer.role === 'hitler' &&
+      playerCount <= 6 &&
+      target.role === 'fascist'
+    ) {
+      return target.role;
+    }
+
+    return null;
   }
 
   function nextAliveAfter(index: number): number {
@@ -317,7 +432,11 @@
   }
 
   function presidentDiscard(index: number) {
-    if (phase !== 'president-discard' || !presidentHand[index]) {
+    if (
+      phase !== 'president-discard' ||
+      identityViewer !== president ||
+      !presidentHand[index]
+    ) {
       return;
     }
 
@@ -329,7 +448,11 @@
   }
 
   function chancellorEnact(index: number) {
-    if (phase !== 'chancellor-discard' || !chancellorHand[index]) {
+    if (
+      phase !== 'chancellor-discard' ||
+      identityViewer !== nominee ||
+      !chancellorHand[index]
+    ) {
       return;
     }
 
@@ -340,7 +463,11 @@
   }
 
   function requestVeto() {
-    if (phase !== 'chancellor-discard' || !vetoUnlocked) {
+    if (
+      phase !== 'chancellor-discard' ||
+      identityViewer !== nominee ||
+      !vetoUnlocked
+    ) {
       return;
     }
 
@@ -349,7 +476,7 @@
   }
 
   function approveVeto() {
-    if (phase !== 'veto') {
+    if (phase !== 'veto' || identityViewer !== president) {
       return;
     }
 
@@ -359,7 +486,7 @@
   }
 
   function rejectVeto() {
-    if (phase !== 'veto') {
+    if (phase !== 'veto' || identityViewer !== president) {
       return;
     }
 
@@ -439,7 +566,7 @@
   }
 
   function completePolicyPeek() {
-    if (phase !== 'policy-peek') {
+    if (phase !== 'policy-peek' || identityViewer !== president) {
       return;
     }
     message = 'Policy peek resolved.';
@@ -514,6 +641,28 @@
       : 'border-red-300 bg-red-500/20 text-red-100';
   }
 
+  function hiddenPolicyClasses(): string {
+    return 'border-neutral-700 bg-neutral-900 text-neutral-500';
+  }
+
+  function canViewPresidentCards(): boolean {
+    return identityViewer === president;
+  }
+
+  function canViewChancellorCards(): boolean {
+    return nominee !== null && identityViewer === nominee;
+  }
+
+  function roleBadgeClasses(role: Role | null): string {
+    if (!role) {
+      return 'border-neutral-700 bg-neutral-900 text-neutral-300';
+    }
+    if (role === 'liberal') {
+      return 'border-blue-300/60 bg-blue-400/10 text-blue-100';
+    }
+    return 'border-red-300/60 bg-red-400/10 text-red-100';
+  }
+
   function playerStatus(player: Player): string {
     if (!player.alive) {
       return 'Executed';
@@ -531,6 +680,19 @@
   }
 
   startGame();
+
+  onMount(() => {
+    refreshKeys();
+    window.addEventListener('storage', refreshKeys);
+    window.addEventListener('byok-keys-changed', refreshKeys);
+  });
+
+  onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', refreshKeys);
+      window.removeEventListener('byok-keys-changed', refreshKeys);
+    }
+  });
 </script>
 
 <section class="h-full overflow-auto bg-neutral-950 px-6 py-6 text-neutral-100">
@@ -741,15 +903,29 @@
           </div>
         {:else if phase === 'president-discard'}
           <h2 class="text-sm font-semibold">President Discards One Policy</h2>
+          {#if !canViewPresidentCards()}
+            <p class="mt-2 text-sm text-neutral-400">
+              Policy identities are hidden from {players[identityViewer]?.name}.
+              Switch Viewing as to {presidentName} to resolve this private draw.
+            </p>
+          {/if}
           <div class="mt-3 grid max-w-lg grid-cols-3 gap-2">
             {#each presidentHand as policy, index}
-              <button
-                class={`aspect-[3/4] rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
-                type="button"
-                on:click={() => presidentDiscard(index)}
-              >
-                Discard {policyLabel(policy)}
-              </button>
+              {#if canViewPresidentCards()}
+                <button
+                  class={`aspect-[3/4] rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
+                  type="button"
+                  on:click={() => presidentDiscard(index)}
+                >
+                  Discard {policyLabel(policy)}
+                </button>
+              {:else}
+                <div
+                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
+                >
+                  Hidden policy
+                </div>
+              {/if}
             {/each}
           </div>
         {:else if phase === 'chancellor-discard'}
@@ -757,10 +933,16 @@
             <div>
               <h2 class="text-sm font-semibold">Chancellor Enacts One Policy</h2>
               <p class="mt-2 text-sm text-neutral-400">
-                Select the policy to enact. The other policy is discarded.
+                {#if canViewChancellorCards()}
+                  Select the policy to enact. The other policy is discarded.
+                {:else}
+                  Policy identities are hidden from {players[identityViewer]
+                    ?.name}. Switch Viewing as to {nomineeName} to resolve this
+                  private hand.
+                {/if}
               </p>
             </div>
-            {#if vetoUnlocked}
+            {#if vetoUnlocked && canViewChancellorCards()}
               <button
                 class="rounded-md border border-amber-300/60 px-3 py-2 text-sm text-amber-100 hover:border-amber-200"
                 type="button"
@@ -772,13 +954,21 @@
           </div>
           <div class="mt-3 grid max-w-md grid-cols-2 gap-2">
             {#each chancellorHand as policy, index}
-              <button
-                class={`aspect-[3/4] rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
-                type="button"
-                on:click={() => chancellorEnact(index)}
-              >
-                Enact {policyLabel(policy)}
-              </button>
+              {#if canViewChancellorCards()}
+                <button
+                  class={`aspect-[3/4] rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
+                  type="button"
+                  on:click={() => chancellorEnact(index)}
+                >
+                  Enact {policyLabel(policy)}
+                </button>
+              {:else}
+                <div
+                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
+                >
+                  Hidden policy
+                </div>
+              {/if}
             {/each}
           </div>
         {:else if phase === 'veto'}
@@ -787,43 +977,64 @@
             President may approve the veto and discard the agenda, or reject it
             and force the Chancellor to enact one policy.
           </p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
-              type="button"
-              on:click={approveVeto}
-            >
-              Approve veto
-            </button>
-            <button
-              class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-              type="button"
-              on:click={rejectVeto}
-            >
-              Reject veto
-            </button>
-          </div>
+          {#if identityViewer === president}
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button
+                class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+                type="button"
+                on:click={approveVeto}
+              >
+                Approve veto
+              </button>
+              <button
+                class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500"
+                type="button"
+                on:click={rejectVeto}
+              >
+                Reject veto
+              </button>
+            </div>
+          {:else}
+            <p class="mt-3 text-sm text-neutral-500">
+              Switch Viewing as to {presidentName} for the private veto response.
+            </p>
+          {/if}
         {:else if phase === 'policy-peek'}
           <h2 class="text-sm font-semibold">Policy Peek</h2>
           <p class="mt-2 text-sm text-neutral-400">
-            President privately views the top three policies.
+            {#if canViewPresidentCards()}
+              President privately views the top three policies.
+            {:else}
+              Policy identities are hidden from {players[identityViewer]?.name}.
+              Switch Viewing as to {presidentName} to resolve this private peek.
+            {/if}
           </p>
           <div class="mt-3 grid max-w-lg grid-cols-3 gap-2">
             {#each peekedPolicies as policy}
-              <div
-                class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
-              >
-                {policyLabel(policy)}
-              </div>
+              {#if canViewPresidentCards()}
+                <div
+                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
+                >
+                  {policyLabel(policy)}
+                </div>
+              {:else}
+                <div
+                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
+                >
+                  Hidden policy
+                </div>
+              {/if}
             {/each}
           </div>
-          <button
-            class="mt-3 rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
-            type="button"
-            on:click={completePolicyPeek}
-          >
-            Done
-          </button>
+          {#if canViewPresidentCards()}
+            <button
+              class="mt-3 rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+              type="button"
+              on:click={completePolicyPeek}
+            >
+              Done
+            </button>
+          {/if}
         {:else if phase === 'investigate'}
           <h2 class="text-sm font-semibold">Investigate Loyalty</h2>
           <p class="mt-2 text-sm text-neutral-400">
@@ -863,16 +1074,24 @@
     </section>
 
     <aside class="rounded-md border border-neutral-800 bg-neutral-900 p-4">
-      <div class="flex items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-sm font-semibold">Players</h2>
         <label class="flex items-center gap-2 text-xs text-neutral-400">
-          <input type="checkbox" bind:checked={revealRoles} />
-          Reveal roles
+          Viewing as
+          <select
+            class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs text-neutral-100"
+            bind:value={identityViewer}
+          >
+            {#each players as player (player.id)}
+              <option value={player.id}>{player.name}</option>
+            {/each}
+          </select>
         </label>
       </div>
 
       <div class="mt-3 space-y-2">
         {#each players as player}
+          {@const visibleRole = visibleRoleFor(identityViewer, player)}
           <div
             class={`rounded-md border p-3 ${
               !player.alive
@@ -885,22 +1104,40 @@
             }`}
           >
             <div class="flex items-center justify-between gap-2">
-              <div>
+              <div class="min-w-0">
                 <div class="text-sm font-medium">{player.name}</div>
                 <div class="text-xs text-neutral-500">
                   {playerStatus(player)}
                 </div>
+                <select
+                  class="mt-2 max-w-56 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={playerProfileSelections[player.id] ??
+                    (player.id === HUMAN_PLAYER_INDEX ? HUMAN_PROFILE : '')}
+                  disabled={player.id !== HUMAN_PLAYER_INDEX &&
+                    configuredProfiles.length === 0}
+                  on:change={(event) =>
+                    selectPlayerProfile(player.id, event.currentTarget.value)}
+                >
+                  {#if player.id === HUMAN_PLAYER_INDEX}
+                    <option value={HUMAN_PROFILE}>🧠 Human</option>
+                  {/if}
+                  {#if configuredProfiles.length}
+                    {#each configuredProfiles as profile (profile.id)}
+                      <option value={profile.id}>
+                        {profileLabel(profile)}
+                      </option>
+                    {/each}
+                  {:else if player.id !== HUMAN_PLAYER_INDEX}
+                    <option value="">No model profiles</option>
+                  {/if}
+                </select>
               </div>
               <div
-                class={`rounded-full border px-2 py-1 text-xs ${
-                  revealRoles
-                    ? player.role === 'liberal'
-                      ? 'border-blue-300/60 bg-blue-400/10 text-blue-100'
-                      : 'border-red-300/60 bg-red-400/10 text-red-100'
-                    : 'border-neutral-700 bg-neutral-900 text-neutral-300'
-                }`}
+                class={`rounded-full border px-2 py-1 text-xs ${roleBadgeClasses(
+                  visibleRole,
+                )}`}
               >
-                {revealRoles ? roleLabel(player.role) : 'Hidden'}
+                {visibleRole ? roleLabel(visibleRole) : 'Hidden'}
               </div>
             </div>
 
