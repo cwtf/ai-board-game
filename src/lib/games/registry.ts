@@ -15,17 +15,6 @@ export const games: GameMeta[] = [
     docPath: 'https://www.youtube.com/watch?v=dmc8vTLHsCg',
   },
   {
-    id: 'exploding-kittens',
-    name: 'Exploding Kittens',
-    description:
-      'Manage a hidden hand, dodge exploding draws, and outlast the table with action cards.',
-    minPlayers: 2,
-    maxPlayers: 5,
-    hiddenInformation: true,
-    estimatedAITurnTokens: 600,
-    docPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
-  },
-  {
     id: 'secret-hitler',
     name: 'Secret Hitler',
     description:
@@ -35,5 +24,16 @@ export const games: GameMeta[] = [
     hiddenInformation: true,
     estimatedAITurnTokens: 700,
     docPath: 'https://www.secrethitler.com/assets/Secret_Hitler_Rules.pdf',
+  },
+  {
+    id: 'exploding-kittens',
+    name: 'Exploding Kittens',
+    description:
+      'Manage a hidden hand, dodge exploding draws, and outlast the table with action cards.',
+    minPlayers: 2,
+    maxPlayers: 5,
+    hiddenInformation: true,
+    estimatedAITurnTokens: 600,
+    docPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
   },
 ];

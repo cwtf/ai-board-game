@@ -11,8 +11,9 @@
   $: rulesHref = /^https?:\/\//.test(game.docPath)
     ? game.docPath
     : `/${game.docPath}`;
-  $: implemented = game.id === 'splendor';
-  $: playable = implemented && canPlay;
+  $: implemented = game.id === 'splendor' || game.id === 'secret-hitler';
+  $: needsProvider = game.id === 'splendor';
+  $: playable = implemented && (!needsProvider || canPlay);
 </script>
 
 <article
@@ -57,9 +58,9 @@
         class="cursor-not-allowed rounded-md bg-neutral-700 px-4 py-2 text-sm font-medium text-neutral-400"
         type="button"
         disabled
-        title={implemented ? 'Set up your AI key first' : 'Coming soon'}
+        title={implemented && needsProvider ? 'Set up your AI key first' : 'Coming soon'}
       >
-        {implemented ? 'Play' : 'Coming Soon'}
+        {implemented && needsProvider ? 'Play' : 'Coming Soon'}
       </button>
     {/if}
     <a

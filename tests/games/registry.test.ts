@@ -5,8 +5,8 @@ describe('game registry', () => {
   it('seeds the v1 game list', () => {
     expect(games.map((game) => game.id)).toEqual([
       'splendor',
-      'exploding-kittens',
       'secret-hitler',
+      'exploding-kittens',
     ]);
   });
 
