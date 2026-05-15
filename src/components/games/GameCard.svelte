@@ -8,6 +8,9 @@
     game.minPlayers === game.maxPlayers
       ? `${game.minPlayers} players`
       : `${game.minPlayers}-${game.maxPlayers} players`;
+  $: rulesHref = /^https?:\/\//.test(game.docPath)
+    ? game.docPath
+    : `/${game.docPath}`;
 </script>
 
 <article
@@ -59,7 +62,7 @@
     {/if}
     <a
       class="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-      href={`/${game.docPath}`}
+      href={rulesHref}
       target="_blank"
       rel="noreferrer"
     >

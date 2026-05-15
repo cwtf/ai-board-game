@@ -6,7 +6,11 @@
   import SplendorNobleArt from '@/components/games/splendor/SplendorNobleArt.svelte';
   import { getProvider, listProviders } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
-  import { createGameLoop, type GameLoop, type LoopSnapshot } from '@/lib/games/shared/loop';
+  import {
+    createGameLoop,
+    type GameLoop,
+    type LoopSnapshot,
+  } from '@/lib/games/shared/loop';
   import { createRng } from '@/lib/games/shared/rng';
   import type { AIPlayerConfig } from '@/lib/games/shared/types';
   import { splendorAdapter } from '@/lib/games/splendor/ai-adapter';
@@ -42,15 +46,17 @@
   type MoveAnimationIntent =
     | { kind: 'card'; playerIndex: number; card: Card; from: RectSnapshot }
     | { kind: 'noble'; playerIndex: number; noble: Noble; from: RectSnapshot }
-    | { kind: 'gem'; playerIndex: number; gem: GemOrGold; from: RectSnapshot };
+    | { kind: 'gem'; playerIndex: number; gem: GemOrGold; from: RectSnapshot }
+    | { kind: 'refill'; card: Card; from: RectSnapshot };
   type FlyingAsset = MoveAnimationIntent & {
     id: string;
     style: string;
   };
 
   const HUMAN_PLAYER_INDEX = 0;
-  const TABLE_WIDTH = 2360;
+  const MIN_TABLE_WIDTH = 2100;
   const TABLE_HEIGHT = 900;
+  const TABLE_RIGHT_GUTTER = 24;
   const providers = listProviders();
   const gemLabels: Record<GemOrGold, string> = {
     emerald: 'Emerald',
@@ -84,6 +90,7 @@
   let message = '';
   let aiController: ReturnType<typeof createAbortController> | undefined;
   let viewportEl: globalThis.HTMLElement;
+  let tableWidth = MIN_TABLE_WIDTH;
   let tableScale = 1;
   let tableOffsetX = 0;
   let tableOffsetY = 0;
@@ -93,6 +100,7 @@
   const supplyGemElements = new Map<GemOrGold, globalThis.HTMLElement>();
   const playerGemTargetElements = new Map<string, globalThis.HTMLElement>();
   const boardCardElements = new Map<string, globalThis.HTMLElement>();
+  const deckElements = new Map<Tier, globalThis.HTMLElement>();
   const reservedCardElements = new Map<string, globalThis.HTMLElement>();
   const ownedCardElements = new Map<string, globalThis.HTMLElement>();
   const nobleElements = new Map<string, globalThis.HTMLElement>();
@@ -104,9 +112,10 @@
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
   $: humanCanAct =
     currentPlayer === HUMAN_PLAYER_INDEX && snapshot?.status !== 'thinking';
-  $: legalMoves = state && humanCanAct
-    ? splendorAdapter.legalMoves(state, HUMAN_PLAYER_INDEX)
-    : [];
+  $: legalMoves =
+    state && humanCanAct
+      ? splendorAdapter.legalMoves(state, HUMAN_PLAYER_INDEX)
+      : [];
   $: selectedProvider =
     providers.find((provider) => provider.id === keys.selectedProvider) ??
     providers[0];
@@ -140,19 +149,32 @@
 
     const style = window.getComputedStyle(viewportEl);
     const horizontalPadding =
-      Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+      Number.parseFloat(style.paddingLeft) +
+      Number.parseFloat(style.paddingRight);
     const verticalPadding =
-      Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
-    const availableWidth = Math.max(1, viewportEl.clientWidth - horizontalPadding);
-    const availableHeight = Math.max(1, viewportEl.clientHeight - verticalPadding);
-    const scale = Math.min(
-      availableWidth / TABLE_WIDTH,
-      availableHeight / TABLE_HEIGHT,
+      Number.parseFloat(style.paddingTop) +
+      Number.parseFloat(style.paddingBottom);
+    const availableWidth = Math.max(
       1,
+      viewportEl.clientWidth - horizontalPadding,
     );
+    const availableHeight = Math.max(
+      1,
+      viewportEl.clientHeight - verticalPadding,
+    );
+    const heightScale = Math.min(availableHeight / TABLE_HEIGHT, 1);
+    const usableWidth = Math.max(1, availableWidth - TABLE_RIGHT_GUTTER);
+    tableWidth = Math.max(MIN_TABLE_WIDTH, usableWidth / heightScale);
+    const scale = Math.min(usableWidth / tableWidth, heightScale, 1);
     tableScale = scale;
-    tableOffsetX = Math.max(0, horizontalPadding / 2 + (availableWidth - TABLE_WIDTH * scale) / 2);
-    tableOffsetY = Math.max(0, verticalPadding / 2 + (availableHeight - TABLE_HEIGHT * scale) / 2);
+    tableOffsetX = Math.max(0, horizontalPadding / 2);
+    tableOffsetY = Math.max(0, verticalPadding / 2);
+  }
+
+  async function resizeTableAfterRender() {
+    await tick();
+    resizeTable();
+    requestAnimationFrame(resizeTable);
   }
 
   function createAbortController() {
@@ -181,38 +203,27 @@
     };
   }
 
-  function registerBoardCard(
-    node: globalThis.HTMLElement,
-    cardId: string,
-  ) {
+  function registerBoardCard(node: globalThis.HTMLElement, cardId: string) {
     return trackElement(boardCardElements, node, cardId);
   }
 
-  function registerSupplyGem(
-    node: globalThis.HTMLElement,
-    gem: GemOrGold,
-  ) {
+  function registerDeck(node: globalThis.HTMLElement, tier: Tier) {
+    return trackElement(deckElements, node, tier);
+  }
+
+  function registerSupplyGem(node: globalThis.HTMLElement, gem: GemOrGold) {
     return trackElement(supplyGemElements, node, gem);
   }
 
-  function registerPlayerGemTarget(
-    node: globalThis.HTMLElement,
-    key: string,
-  ) {
+  function registerPlayerGemTarget(node: globalThis.HTMLElement, key: string) {
     return trackElement(playerGemTargetElements, node, key);
   }
 
-  function registerReservedCard(
-    node: globalThis.HTMLElement,
-    key: string,
-  ) {
+  function registerReservedCard(node: globalThis.HTMLElement, key: string) {
     return trackElement(reservedCardElements, node, key);
   }
 
-  function registerOwnedCard(
-    node: globalThis.HTMLElement,
-    cardId: string,
-  ) {
+  function registerOwnedCard(node: globalThis.HTMLElement, cardId: string) {
     return trackElement(ownedCardElements, node, cardId);
   }
 
@@ -261,7 +272,10 @@
     target: RectSnapshot,
     source: RectSnapshot,
   ): RectSnapshot {
-    const width = Math.max(42, Math.min(source.width, target.width || source.width));
+    const width = Math.max(
+      42,
+      Math.min(source.width, target.width || source.width),
+    );
     const height = width * (source.height / Math.max(1, source.width));
 
     return {
@@ -352,6 +366,30 @@
       }
     }
 
+    if (
+      (record.move.kind === 'buy' || record.move.kind === 'reserve') &&
+      record.move.source === 'board'
+    ) {
+      const beforeSlot = ([1, 2, 3] as const)
+        .flatMap((tier) =>
+          previous.state.board[boardKey(tier)].map((card, index) => ({
+            tier,
+            index,
+            card,
+          })),
+        )
+        .find((slot) => slot.card?.id === record.move.cardId);
+
+      if (beforeSlot) {
+        const replacement =
+          next.state.board[boardKey(beforeSlot.tier)][beforeSlot.index];
+        const from = elementRect(deckElements.get(beforeSlot.tier));
+        if (replacement && replacement.id !== record.move.cardId && from) {
+          intents.push({ kind: 'refill', card: replacement, from });
+        }
+      }
+    }
+
     const claimedNoble = after.nobles.find(
       (noble) => !previousNobles.has(noble.id),
     );
@@ -378,26 +416,31 @@
     const nextAssets = intents.flatMap((intent) => {
       const targetElement =
         intent.kind === 'card'
-          ? ownedCardElements.get(intent.card.id) ??
+          ? (ownedCardElements.get(intent.card.id) ??
             playerCardTargetElements.get(intent.playerIndex) ??
-            playerPanelElements.get(intent.playerIndex)
-          : intent.kind === 'gem'
-            ? playerGemTargetElements.get(
-                playerGemTargetKey(intent.playerIndex, intent.gem),
-              ) ?? playerPanelElements.get(intent.playerIndex)
-          : playerNobleTargetElements.get(intent.playerIndex) ??
-            playerPanelElements.get(intent.playerIndex);
+            playerPanelElements.get(intent.playerIndex))
+          : intent.kind === 'refill'
+            ? boardCardElements.get(intent.card.id)
+            : intent.kind === 'gem'
+              ? (playerGemTargetElements.get(
+                  playerGemTargetKey(intent.playerIndex, intent.gem),
+                ) ?? playerPanelElements.get(intent.playerIndex))
+              : (playerNobleTargetElements.get(intent.playerIndex) ??
+                playerPanelElements.get(intent.playerIndex));
       const target = elementRect(targetElement);
 
       if (!target) {
         return [];
       }
 
-      const to = centeredTargetRect(target, intent.from);
+      const to =
+        intent.kind === 'refill'
+          ? target
+          : centeredTargetRect(target, intent.from);
       return [
         {
           ...intent,
-          id: `${intent.kind}-${intent.kind === 'card' ? intent.card.id : intent.kind === 'noble' ? intent.noble.id : intent.gem}-${Date.now()}-${Math.random()}`,
+          id: `${intent.kind}-${intent.kind === 'card' || intent.kind === 'refill' ? intent.card.id : intent.kind === 'noble' ? intent.noble.id : intent.gem}-${Date.now()}-${Math.random()}`,
           style: animationStyle(intent.from, to),
         },
       ];
@@ -459,6 +502,12 @@
       void queueMoveAnimations(moveAnimations);
     });
     void runAI();
+    void resizeTableAfterRender();
+  }
+
+  function startShuffledGame() {
+    seed = globalThis.crypto?.randomUUID?.() ?? `splendor-${Date.now()}`;
+    startGame();
   }
 
   async function runAI() {
@@ -484,7 +533,9 @@
         message = 'AI move aborted.';
       } else {
         message =
-          error instanceof Error ? error.message : 'AI move failed unexpectedly.';
+          error instanceof Error
+            ? error.message
+            : 'AI move failed unexpectedly.';
       }
     } finally {
       aiController = undefined;
@@ -533,7 +584,9 @@
   }
 
   function normalizeGemSelection(gems: Gem[]): Gem[] {
-    return [...gems].sort((left, right) => GEMS.indexOf(left) - GEMS.indexOf(right));
+    return [...gems].sort(
+      (left, right) => GEMS.indexOf(left) - GEMS.indexOf(right),
+    );
   }
 
   function selectGem(gem: Gem) {
@@ -567,7 +620,9 @@
   }
 
   function removeSelectedGem(index: number) {
-    selectedGems = selectedGems.filter((_, selectedIndex) => selectedIndex !== index);
+    selectedGems = selectedGems.filter(
+      (_, selectedIndex) => selectedIndex !== index,
+    );
     message = '';
   }
 
@@ -683,7 +738,8 @@
       activeModal = null;
       void runAI();
     } catch (error) {
-      message = error instanceof Error ? error.message : 'Move could not be played.';
+      message =
+        error instanceof Error ? error.message : 'Move could not be played.';
     }
   }
 
@@ -701,7 +757,10 @@
     }
 
     const current = discardDraft[gem] ?? 0;
-    const next = Math.max(0, Math.min(pendingProjectedTokens[gem], current + delta));
+    const next = Math.max(
+      0,
+      Math.min(pendingProjectedTokens[gem], current + delta),
+    );
     discardDraft = { ...discardDraft, [gem]: next };
   }
 
@@ -710,7 +769,9 @@
       return;
     }
 
-    const range = goldRangesFor(state, pendingMove).find((item) => item.gem === gem);
+    const range = goldRangesFor(state, pendingMove).find(
+      (item) => item.gem === gem,
+    );
     if (!range) {
       return;
     }
@@ -728,7 +789,10 @@
     return card.cost[gem] ?? 0;
   }
 
-  function findCard(current: SplendorState, move: SplendorMove): Card | undefined {
+  function findCard(
+    current: SplendorState,
+    move: SplendorMove,
+  ): Card | undefined {
     if (move.kind !== 'buy') {
       return undefined;
     }
@@ -744,7 +808,10 @@
       .find((card): card is Card => card?.id === move.cardId);
   }
 
-  function goldRangesFor(current: SplendorState, move: Extract<SplendorMove, { kind: 'buy' }>) {
+  function goldRangesFor(
+    current: SplendorState,
+    move: Extract<SplendorMove, { kind: 'buy' }>,
+  ) {
     const card = findCard(current, move);
     const player = current.players[currentPlayer];
     if (!card) {
@@ -762,7 +829,10 @@
     }).filter((range) => range.remaining > 0);
   }
 
-  function projectedTokensAfter(current: SplendorState, move: SplendorMove): TokenSet {
+  function projectedTokensAfter(
+    current: SplendorState,
+    move: SplendorMove,
+  ): TokenSet {
     const tokens = { ...current.players[currentPlayer].tokens };
 
     if (move.kind === 'take') {
@@ -785,7 +855,10 @@
     }
 
     for (const gem of GEMS) {
-      const remaining = Math.max(0, costValue(card, gem) - current.players[currentPlayer].bonuses[gem]);
+      const remaining = Math.max(
+        0,
+        costValue(card, gem) - current.players[currentPlayer].bonuses[gem],
+      );
       const goldForGem =
         move.goldUsedFor?.[gem] ?? Math.max(0, remaining - tokens[gem]);
       tokens[gem] -= remaining - goldForGem;
@@ -795,7 +868,10 @@
     return tokens;
   }
 
-  function projectedBonusesAfter(current: SplendorState, move: SplendorMove): BonusSet {
+  function projectedBonusesAfter(
+    current: SplendorState,
+    move: SplendorMove,
+  ): BonusSet {
     const bonuses = { ...current.players[currentPlayer].bonuses };
     if (move.kind === 'buy') {
       const card = findCard(current, move);
@@ -806,7 +882,10 @@
     return bonuses;
   }
 
-  function eligibleNoblesAfter(current: SplendorState, move: SplendorMove): Noble[] {
+  function eligibleNoblesAfter(
+    current: SplendorState,
+    move: SplendorMove,
+  ): Noble[] {
     const bonuses = projectedBonusesAfter(current, move);
     return current.noblesInPlay.filter((noble) =>
       GEMS.every((gem) => bonuses[gem] >= (noble.cost[gem] ?? 0)),
@@ -816,7 +895,9 @@
   function legalBuy(card: Card, source: 'board' | 'reserved') {
     return legalMoves.find(
       (move) =>
-        move.kind === 'buy' && move.source === source && move.cardId === card.id,
+        move.kind === 'buy' &&
+        move.source === source &&
+        move.cardId === card.id,
     );
   }
 
@@ -831,7 +912,8 @@
 
   function legalReserveDeck(tier: Tier) {
     return legalMoves.find(
-      (move) => move.kind === 'reserve' && move.source === 'deck' && move.tier === tier,
+      (move) =>
+        move.kind === 'reserve' && move.source === 'deck' && move.tier === tier,
     );
   }
 
@@ -857,11 +939,11 @@
 
   onMount(() => {
     refreshKeys();
-    resizeTable();
     window.addEventListener('storage', refreshKeys);
     window.addEventListener('byok-keys-changed', refreshKeys);
     window.addEventListener('resize', resizeTable);
-    startGame();
+    startShuffledGame();
+    void resizeTableAfterRender();
   });
 
   onDestroy(() => {
@@ -876,416 +958,595 @@
 </script>
 
 {#if state}
-  <section bind:this={viewportEl} class="h-full w-full overflow-hidden bg-neutral-950 p-2">
+  <section
+    bind:this={viewportEl}
+    class="h-full w-full overflow-hidden bg-neutral-950 p-2"
+  >
     <div
       class="flex origin-top-left h-full flex-col overflow-hidden"
-      style={`width: ${TABLE_WIDTH}px; height: ${TABLE_HEIGHT}px; transform: translate(${tableOffsetX}px, ${tableOffsetY}px) scale(${tableScale});`}
+      style={`width: ${tableWidth}px; height: ${TABLE_HEIGHT}px; transform: translate(${tableOffsetX}px, ${tableOffsetY}px) scale(${tableScale});`}
     >
-    <div class="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_416px_560px]">
-      <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
-        <section class="flex min-h-0 flex-col gap-2">
-          <div class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
-            <h1 class="text-2xl font-semibold tracking-normal text-white">Splendor</h1>
-            <p class="text-xs text-neutral-400">
-              Turn {state.turn + 1}, player {currentPlayer + 1}
-              {state.finalRoundTriggered ? ' - final round' : ''}
-            </p>
-            <div class="mt-2">
-              <TokenUsageBadge
-                lastUsage={lastUsage as TokenUsage | undefined}
-                totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
-              />
+      <div
+        class="grid min-h-0 flex-1 grid-cols-[1120px_416px_minmax(560px,1fr)] gap-3"
+      >
+        <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
+          <section class="flex min-h-0 flex-col gap-2">
+            <div
+              class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+            >
+              <h1 class="text-2xl font-semibold tracking-normal text-white">
+                Splendor
+              </h1>
+              <p class="text-xs text-neutral-400">
+                Turn {state.turn + 1}, player {currentPlayer + 1}
+                {state.finalRoundTriggered ? ' - final round' : ''}
+              </p>
+              <div class="mt-2">
+                <TokenUsageBadge
+                  lastUsage={lastUsage as TokenUsage | undefined}
+                  totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
+                />
+              </div>
             </div>
-          </div>
 
-          <section class="min-h-0 flex-1 rounded-md border border-neutral-800 bg-neutral-950 p-2">
-            <div class="mb-1 flex items-center justify-between">
-              <h2 class="text-sm font-semibold tracking-normal">Nobles</h2>
-              <span class="text-xs text-neutral-500">{state.noblesInPlay.length} available</span>
-            </div>
-            <div class="flex flex-col gap-2 overflow-hidden">
-              {#each state.noblesInPlay as noble (noble.id)}
-                <article
-                  class="rounded-md border border-amber-300/40 bg-neutral-900 p-1"
-                  use:registerNoble={noble.id}
+            <section
+              class="min-h-0 flex-1 rounded-md border border-neutral-800 bg-neutral-950 p-2"
+            >
+              <div class="mb-1 flex items-center justify-between">
+                <h2 class="text-sm font-semibold tracking-normal">Nobles</h2>
+                <span class="text-xs text-neutral-500"
+                  >{state.noblesInPlay.length} available</span
                 >
-                  <SplendorNobleArt {noble} />
-                </article>
+              </div>
+              <div class="flex flex-col gap-2 overflow-hidden">
+                {#each state.noblesInPlay as noble (noble.id)}
+                  <article
+                    class="rounded-md border border-amber-300/40 bg-neutral-900 p-1"
+                    use:registerNoble={noble.id}
+                  >
+                    <SplendorNobleArt {noble} />
+                  </article>
+                {/each}
+              </div>
+            </section>
+          </section>
+
+          <div class="flex min-h-0 flex-col gap-2">
+            <section
+              class="grid min-h-0 flex-1 grid-rows-[repeat(3,minmax(0,1fr))] gap-2"
+            >
+              {#each [3, 2, 1] as tier (tier)}
+                <div
+                  class="min-h-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-2"
+                >
+                  <div
+                    class="mb-1.5 flex h-8 items-center justify-between gap-2"
+                  >
+                    <h2 class="text-sm font-semibold tracking-normal">
+                      Tier {tier}
+                    </h2>
+                    <span class="text-xs text-neutral-500"
+                      >{state.decks[deckKey(tier as Tier)].length} in deck</span
+                    >
+                  </div>
+                  <div
+                    class="grid h-[calc(100%-2.375rem)] grid-cols-[repeat(5,10.5rem)] items-start justify-center gap-x-1 gap-y-2 overflow-hidden"
+                  >
+                    <button
+                      class="group relative aspect-[5/7] w-[10.5rem] overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(
+                        tier as Tier,
+                      )
+                        ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10'
+                        : 'border-neutral-800 opacity-60'}"
+                      type="button"
+                      use:registerDeck={tier as Tier}
+                      aria-label={`Reserve a face-down tier ${tier} card`}
+                      disabled={!legalReserveDeck(tier as Tier) || !humanCanAct}
+                      on:click={() => {
+                        const move = legalReserveDeck(tier as Tier);
+                        if (move) beginMove(move);
+                      }}
+                    >
+                      <div
+                        class="absolute inset-1 rounded-md border border-amber-300/30 bg-[radial-gradient(circle_at_50%_35%,rgba(251,191,36,0.16),transparent_36%),linear-gradient(135deg,rgba(23,23,23,1),rgba(3,7,18,1))]"
+                      ></div>
+                      <div
+                        class="absolute inset-4 rounded-md border border-amber-200/20"
+                      ></div>
+                      <div
+                        class="absolute left-2 right-2 top-2 flex items-center justify-between gap-2 rounded-md bg-neutral-950/75 px-2 py-1 text-[10px] text-amber-100/90 ring-1 ring-amber-200/15"
+                      >
+                        <span>Deck</span>
+                        <span>{state.decks[deckKey(tier as Tier)].length}</span>
+                      </div>
+                      <div
+                        class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center"
+                      >
+                        <span
+                          class="grid size-10 rotate-45 place-items-center border border-amber-200/45 bg-neutral-950/80 shadow-inner"
+                        >
+                          <span
+                            class="-rotate-45 text-sm font-semibold text-amber-100"
+                            >{tier}</span
+                          >
+                        </span>
+                      </div>
+                    </button>
+                    {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
+                      {#if card}
+                        <article
+                          class="relative w-[10.5rem] rounded-md border bg-neutral-900 p-1 {legalBuy(
+                            card,
+                            'board',
+                          ) || legalReserve(card)
+                            ? 'border-emerald-400/50'
+                            : 'border-neutral-800'}"
+                          use:registerBoardCard={card.id}
+                        >
+                          <SplendorCardArt {card} board />
+                          <div
+                            class="absolute bottom-1.5 right-1.5 flex flex-col gap-1"
+                          >
+                            <button
+                              class="rounded-md bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
+                              type="button"
+                              disabled={!legalBuy(card, 'board') ||
+                                !humanCanAct}
+                              on:click={() => {
+                                const move = legalBuy(card, 'board');
+                                if (move) beginMove(move);
+                              }}
+                            >
+                              Buy
+                            </button>
+                            <button
+                              class="rounded-md border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
+                              type="button"
+                              disabled={!legalReserve(card) || !humanCanAct}
+                              on:click={() => {
+                                const move = legalReserve(card);
+                                if (move) beginMove(move);
+                              }}
+                            >
+                              Reserve
+                            </button>
+                          </div>
+                        </article>
+                      {:else}
+                        <div
+                          class="aspect-[5/7] w-[10.5rem] rounded-md border border-dashed border-neutral-800 bg-neutral-950"
+                        ></div>
+                      {/if}
+                    {/each}
+                  </div>
+                </div>
               {/each}
+            </section>
+          </div>
+        </div>
+
+        <aside class="flex min-h-0 flex-col gap-2">
+          <section
+            class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+          >
+            <div class="flex flex-wrap justify-end gap-1.5">
+              <label class="text-xs text-neutral-400">
+                Players
+                <select
+                  class="ml-2 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
+                  bind:value={playerCount}
+                  disabled={snapshot?.status === 'thinking'}
+                >
+                  <option value={2}>2</option>
+                  <option value={3}>3</option>
+                  <option value={4}>4</option>
+                </select>
+              </label>
+              <label class="text-xs text-neutral-400">
+                Seed
+                <input
+                  class="ml-2 w-28 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
+                  bind:value={seed}
+                  disabled={snapshot?.status === 'thinking'}
+                />
+              </label>
+              <button
+                class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-100 hover:border-neutral-500"
+                type="button"
+                on:click={startShuffledGame}
+                disabled={snapshot?.status === 'thinking'}
+              >
+                New game
+              </button>
+            </div>
+
+            {#if !configured}
+              <div
+                class="mt-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-100"
+              >
+                Configure a provider for AI turns.
+              </div>
+            {/if}
+
+            {#if snapshot?.warning || message}
+              <div
+                class="mt-2 rounded-md border border-rose-400/40 bg-rose-400/10 px-2 py-1.5 text-xs text-rose-100"
+              >
+                {message || snapshot?.warning}
+              </div>
+            {/if}
+
+            {#if snapshot?.status === 'thinking'}
+              <div
+                class="mt-2 flex items-center justify-between gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-1.5 text-xs text-sky-100"
+              >
+                <span>Player {currentPlayer + 1} thinking</span>
+                <button
+                  class="rounded-md border border-sky-300/50 px-2 py-1 text-xs hover:bg-sky-300/10"
+                  type="button"
+                  on:click={abortAI}
+                >
+                  Abort
+                </button>
+              </div>
+            {/if}
+          </section>
+
+          <section
+            class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+          >
+            <h2 class="text-sm font-semibold tracking-normal">Token Supply</h2>
+            <div class="mt-2 grid grid-cols-3 gap-1">
+              {#each GEMS as gem (gem)}
+                <button
+                  class={`flex min-h-14 w-full flex-col items-start justify-between rounded-md border px-1.5 py-1.5 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
+                  type="button"
+                  disabled={state.tokenPool[gem] === 0 || !humanCanAct}
+                  on:pointerdown|preventDefault={() =>
+                    selectGemFromPointer(gem)}
+                  on:click={() => selectGemFromClick(gem)}
+                >
+                  <span
+                    class="pointer-events-none block"
+                    use:registerSupplyGem={gem}
+                  >
+                    <SplendorGemBadge {gem} label={gemLabels[gem]} />
+                  </span>
+                  <span class="pointer-events-none text-[10px] opacity-80"
+                    >Supply {state.tokenPool[gem]}</span
+                  >
+                </button>
+              {/each}
+              <div
+                class={`flex min-h-14 w-full flex-col items-start justify-between rounded-md border px-1.5 py-1.5 ${gemClasses.gold}`}
+              >
+                <span class="block" use:registerSupplyGem={'gold'}>
+                  <SplendorGemBadge gem="gold" label="Gold" />
+                </span>
+                <span class="text-[10px] opacity-80"
+                  >Supply {state.tokenPool.gold}</span
+                >
+              </div>
+            </div>
+            <div
+              class="mt-2 rounded-md border border-neutral-800 bg-neutral-900 p-2"
+            >
+              <div
+                class="flex min-h-7 items-start justify-between gap-2 text-xs text-neutral-300"
+              >
+                <div class="flex flex-wrap items-center gap-1">
+                  {#if selectedGems.length}
+                    {#each selectedGems as gem, index (`${gem}-${index}`)}
+                      <button
+                        class="rounded-full transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                        type="button"
+                        title={`Remove ${gemLabels[gem]}`}
+                        disabled={!humanCanAct}
+                        on:click={() => removeSelectedGem(index)}
+                      >
+                        <SplendorGemBadge {gem} compact />
+                      </button>
+                    {/each}
+                  {:else}
+                    Select tokens to take
+                  {/if}
+                </div>
+                {#if selectedGems.length}
+                  <button
+                    class="shrink-0 rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-300 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    disabled={!humanCanAct}
+                    on:click={clearSelectedGems}
+                  >
+                    Clear
+                  </button>
+                {/if}
+              </div>
+              <button
+                class="mt-2 w-full rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
+                type="button"
+                disabled={!takeMove || !humanCanAct}
+                on:click={() => {
+                  if (takeMove) beginMove(takeMove);
+                }}
+              >
+                {takeMove ? formatMove(takeMove) : 'No legal take selected'}
+              </button>
             </div>
           </section>
-        </section>
 
-        <div class="flex min-h-0 flex-col gap-2">
-          <section class="grid min-h-0 flex-1 grid-rows-[repeat(3,minmax(0,1fr))] gap-2">
-            {#each [3, 2, 1] as tier (tier)}
-              <div class="min-h-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-2">
-                <div class="mb-1.5 flex h-8 items-center justify-between gap-2">
-                  <h2 class="text-sm font-semibold tracking-normal">Tier {tier}</h2>
-                  <span class="text-xs text-neutral-500">{state.decks[deckKey(tier as Tier)].length} in deck</span>
-                </div>
-                <div class="grid h-[calc(100%-2.375rem)] grid-cols-5 items-start justify-items-center gap-x-1 gap-y-2 overflow-hidden">
-                  <button
-                    class="group relative aspect-[5/7] w-[10.5rem] overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(tier as Tier) ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10' : 'border-neutral-800 opacity-60'}"
-                    type="button"
-                    aria-label={`Reserve a face-down tier ${tier} card`}
-                    disabled={!legalReserveDeck(tier as Tier) || !humanCanAct}
-                    on:click={() => {
-                      const move = legalReserveDeck(tier as Tier);
-                      if (move) beginMove(move);
-                    }}
+          <section class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+            {#each state.players as player, index (index)}
+              {#if index !== 0}
+                <article
+                  class="shrink-0 rounded-md border {index === currentPlayer
+                    ? 'border-emerald-400/60'
+                    : 'border-neutral-800'} bg-neutral-950 p-2"
+                  use:registerPlayerPanel={index}
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-sm font-semibold tracking-normal">
+                      {playerLabel(index)}
+                    </h2>
+                    <span class="text-xs text-neutral-300"
+                      >{player.prestige} prestige</span
+                    >
+                  </div>
+                  <div class="mt-1.5">
+                    <div
+                      class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500"
+                    >
+                      Gems
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                      {#each [...GEMS, 'gold'] as gem (gem)}
+                        <span
+                          use:registerPlayerGemTarget={playerGemTargetKey(
+                            index,
+                            gem,
+                          )}
+                        >
+                          <SplendorGemBadge
+                            {gem}
+                            amount={player.tokens[gem]}
+                            compact
+                          />
+                        </span>
+                      {/each}
+                    </div>
+                  </div>
+                  <div class="mt-1.5">
+                    <div
+                      class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500"
+                    >
+                      Bought card bonuses
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                      {#each GEMS as gem (gem)}
+                        <SplendorGemBadge
+                          {gem}
+                          amount={player.bonuses[gem]}
+                          compact
+                        />
+                      {/each}
+                    </div>
+                  </div>
+                  <div
+                    class="mt-1.5 text-[10px] text-neutral-500"
+                    use:registerPlayerNobleTarget={index}
                   >
-                    <div class="absolute inset-1 rounded-md border border-amber-300/30 bg-[radial-gradient(circle_at_50%_35%,rgba(251,191,36,0.16),transparent_36%),linear-gradient(135deg,rgba(23,23,23,1),rgba(3,7,18,1))]"></div>
-                    <div class="absolute inset-4 rounded-md border border-amber-200/20"></div>
-                    <div class="absolute left-2 right-2 top-2 flex items-center justify-between gap-2 rounded-md bg-neutral-950/75 px-2 py-1 text-[10px] text-amber-100/90 ring-1 ring-amber-200/15">
-                      <span>Deck</span>
-                      <span>{state.decks[deckKey(tier as Tier)].length}</span>
-                    </div>
-                    <div class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
-                      <span class="grid size-10 rotate-45 place-items-center border border-amber-200/45 bg-neutral-950/80 shadow-inner">
-                        <span class="-rotate-45 text-sm font-semibold text-amber-100">{tier}</span>
-                      </span>
-                    </div>
-                  </button>
-                  {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
-                    {#if card}
-                      <article
-                        class="relative w-[10.5rem] rounded-md border bg-neutral-900 p-1 {legalBuy(card, 'board') || legalReserve(card) ? 'border-emerald-400/50' : 'border-neutral-800'}"
-                        use:registerBoardCard={card.id}
+                    Cards {player.cards.length} - Reserved {player.reserved
+                      .length} - Nobles {player.nobles.length}
+                  </div>
+                  <div
+                    class="mt-1.5 grid grid-cols-2 gap-1.5 text-[10px] text-neutral-400"
+                  >
+                    <div
+                      class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1"
+                      use:registerPlayerCardTarget={index}
+                    >
+                      <span class="text-neutral-500">Cards Bought</span>
+                      <span class="float-right text-neutral-200"
+                        >{player.cards.length}</span
                       >
-                        <SplendorCardArt {card} board />
-                        <div class="absolute bottom-1.5 right-1.5 flex flex-col gap-1">
+                    </div>
+                    <div
+                      class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1"
+                    >
+                      <span class="text-neutral-500">Cards Reserved</span>
+                      <span class="float-right text-neutral-200"
+                        >{player.reserved.length}</span
+                      >
+                    </div>
+                  </div>
+                </article>
+              {/if}
+            {/each}
+          </section>
+        </aside>
+
+        <aside class="min-h-0 w-full">
+          {#each [state.players[0]] as player}
+            <article
+              class="flex h-full min-h-0 w-full flex-col rounded-md border {currentPlayer ===
+              HUMAN_PLAYER_INDEX
+                ? 'border-emerald-400/60'
+                : 'border-neutral-800'} bg-neutral-950 p-2"
+              use:registerPlayerPanel={0}
+            >
+              <div class="flex items-center justify-between gap-2">
+                <h2 class="text-sm font-semibold tracking-normal">
+                  {playerLabel(0)}
+                </h2>
+                <span class="text-xs text-neutral-300"
+                  >{player.prestige} prestige</span
+                >
+              </div>
+              <div class="mt-1.5">
+                <div
+                  class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500"
+                >
+                  Gems
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  {#each [...GEMS, 'gold'] as gem (gem)}
+                    <span
+                      use:registerPlayerGemTarget={playerGemTargetKey(0, gem)}
+                    >
+                      <SplendorGemBadge
+                        {gem}
+                        amount={player.tokens[gem]}
+                        compact
+                      />
+                    </span>
+                  {/each}
+                </div>
+              </div>
+              <div class="mt-1.5">
+                <div
+                  class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500"
+                >
+                  Bought card bonuses
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  {#each GEMS as gem (gem)}
+                    <SplendorGemBadge
+                      {gem}
+                      amount={player.bonuses[gem]}
+                      compact
+                    />
+                  {/each}
+                </div>
+              </div>
+              <div
+                class="mt-1.5 text-[10px] text-neutral-500"
+                use:registerPlayerNobleTarget={0}
+              >
+                Cards {player.cards.length} - Reserved {player.reserved.length} -
+                Nobles {player.nobles.length}
+              </div>
+
+              <div
+                class="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1"
+              >
+                <section
+                  class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2"
+                  use:registerPlayerCardTarget={0}
+                >
+                  <h3
+                    class="text-xs font-semibold tracking-normal text-neutral-200"
+                  >
+                    Cards Bought
+                  </h3>
+                  {#if player.cards.length}
+                    <div class="mt-2 space-y-2">
+                      {#each GEMS as gem (gem)}
+                        {#each [cardsForBonus(player.cards, gem)] as stack}
+                          {#if stack.length}
+                            <div>
+                              <div class="mb-1 flex items-center gap-1.5">
+                                <SplendorGemBadge
+                                  {gem}
+                                  amount={stack.length}
+                                  compact
+                                />
+                              </div>
+                              <div class="flex gap-2 overflow-x-auto pb-1">
+                                {#each stack as card (card.id)}
+                                  <div
+                                    class="w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1"
+                                    use:registerOwnedCard={card.id}
+                                  >
+                                    <SplendorCardArt {card} board />
+                                  </div>
+                                {/each}
+                              </div>
+                            </div>
+                          {/if}
+                        {/each}
+                      {/each}
+                    </div>
+                  {:else}
+                    <div
+                      class="mt-2 rounded-md border border-dashed border-neutral-800 px-3 py-4 text-center text-xs text-neutral-600"
+                    >
+                      No bought cards yet
+                    </div>
+                  {/if}
+                </section>
+
+                {#if player.reserved.length}
+                  <section
+                    class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2"
+                  >
+                    <h3
+                      class="text-xs font-semibold tracking-normal text-neutral-200"
+                    >
+                      Cards Reserved
+                    </h3>
+                    <div class="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {#each player.reserved as card (card.id)}
+                        <div
+                          class="relative w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1"
+                          use:registerReservedCard={`${0}:${card.id}`}
+                        >
+                          <SplendorCardArt {card} board />
                           <button
-                            class="rounded-md bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
+                            class="absolute bottom-2 right-2 rounded-md bg-emerald-500 px-2 py-1 text-xs font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
                             type="button"
-                            disabled={!legalBuy(card, 'board') || !humanCanAct}
+                            disabled={!legalBuy(card, 'reserved') ||
+                              !humanCanAct}
                             on:click={() => {
-                              const move = legalBuy(card, 'board');
+                              const move = legalBuy(card, 'reserved');
                               if (move) beginMove(move);
                             }}
                           >
                             Buy
                           </button>
-                          <button
-                            class="rounded-md border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
-                            type="button"
-                            disabled={!legalReserve(card) || !humanCanAct}
-                            on:click={() => {
-                              const move = legalReserve(card);
-                              if (move) beginMove(move);
-                            }}
-                          >
-                            Reserve
-                          </button>
                         </div>
-                      </article>
-                    {:else}
-                      <div class="aspect-[5/7] w-[10.5rem] rounded-md border border-dashed border-neutral-800 bg-neutral-950"></div>
-                    {/if}
-                  {/each}
-                </div>
-              </div>
-            {/each}
-          </section>
-        </div>
-      </div>
-
-      <aside class="flex min-h-0 flex-col gap-2">
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
-          <div class="flex flex-wrap justify-end gap-1.5">
-            <label class="text-xs text-neutral-400">
-              Players
-              <select
-                class="ml-2 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
-                bind:value={playerCount}
-                disabled={snapshot?.status === 'thinking'}
-              >
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-                <option value={4}>4</option>
-              </select>
-            </label>
-            <label class="text-xs text-neutral-400">
-              Seed
-              <input
-                class="ml-2 w-28 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
-                bind:value={seed}
-                disabled={snapshot?.status === 'thinking'}
-              />
-            </label>
-            <button
-              class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-100 hover:border-neutral-500"
-              type="button"
-              on:click={startGame}
-              disabled={snapshot?.status === 'thinking'}
-            >
-              New game
-            </button>
-          </div>
-
-          {#if !configured}
-            <div class="mt-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-100">
-              Configure a provider for AI turns.
-            </div>
-          {/if}
-
-          {#if snapshot?.warning || message}
-            <div class="mt-2 rounded-md border border-rose-400/40 bg-rose-400/10 px-2 py-1.5 text-xs text-rose-100">
-              {message || snapshot?.warning}
-            </div>
-          {/if}
-
-          {#if snapshot?.status === 'thinking'}
-            <div class="mt-2 flex items-center justify-between gap-2 rounded-md border border-sky-400/40 bg-sky-400/10 px-2 py-1.5 text-xs text-sky-100">
-              <span>Player {currentPlayer + 1} thinking</span>
-              <button
-                class="rounded-md border border-sky-300/50 px-2 py-1 text-xs hover:bg-sky-300/10"
-                type="button"
-                on:click={abortAI}
-              >
-                Abort
-              </button>
-            </div>
-          {/if}
-        </section>
-
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-2">
-          <h2 class="text-sm font-semibold tracking-normal">Token Supply</h2>
-          <div class="mt-2 grid grid-cols-3 gap-1">
-            {#each GEMS as gem (gem)}
-              <button
-                class={`flex min-h-14 w-full flex-col items-start justify-between rounded-md border px-1.5 py-1.5 text-left ${gemClasses[gem]} disabled:cursor-not-allowed disabled:opacity-40`}
-                type="button"
-                disabled={state.tokenPool[gem] === 0 || !humanCanAct}
-                on:pointerdown|preventDefault={() => selectGemFromPointer(gem)}
-                on:click={() => selectGemFromClick(gem)}
-              >
-                <span
-                  class="pointer-events-none block"
-                  use:registerSupplyGem={gem}
-                >
-                  <SplendorGemBadge {gem} label={gemLabels[gem]} />
-                </span>
-                <span class="pointer-events-none text-[10px] opacity-80">Supply {state.tokenPool[gem]}</span>
-              </button>
-            {/each}
-            <div class={`flex min-h-14 w-full flex-col items-start justify-between rounded-md border px-1.5 py-1.5 ${gemClasses.gold}`}>
-              <span class="block" use:registerSupplyGem={'gold'}>
-                <SplendorGemBadge gem="gold" label="Gold" />
-              </span>
-              <span class="text-[10px] opacity-80">Supply {state.tokenPool.gold}</span>
-            </div>
-          </div>
-          <div class="mt-2 rounded-md border border-neutral-800 bg-neutral-900 p-2">
-            <div class="flex min-h-7 items-start justify-between gap-2 text-xs text-neutral-300">
-              <div class="flex flex-wrap items-center gap-1">
-              {#if selectedGems.length}
-                {#each selectedGems as gem, index (`${gem}-${index}`)}
-                    <button
-                      class="rounded-full transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                      type="button"
-                      title={`Remove ${gemLabels[gem]}`}
-                      disabled={!humanCanAct}
-                      on:click={() => removeSelectedGem(index)}
-                    >
-                      <SplendorGemBadge {gem} compact />
-                    </button>
-                {/each}
-              {:else}
-                Select tokens to take
-              {/if}
-              </div>
-              {#if selectedGems.length}
-                <button
-                  class="shrink-0 rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-300 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  disabled={!humanCanAct}
-                  on:click={clearSelectedGems}
-                >
-                  Clear
-                </button>
-              {/if}
-            </div>
-            <button
-              class="mt-2 w-full rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
-              type="button"
-              disabled={!takeMove || !humanCanAct}
-              on:click={() => {
-                if (takeMove) beginMove(takeMove);
-              }}
-            >
-              {takeMove ? formatMove(takeMove) : 'No legal take selected'}
-            </button>
-          </div>
-        </section>
-
-        <section class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-          {#each state.players as player, index (index)}
-            {#if index !== 0}
-              <article
-                class="shrink-0 rounded-md border {index === currentPlayer ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2"
-                use:registerPlayerPanel={index}
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <h2 class="text-sm font-semibold tracking-normal">{playerLabel(index)}</h2>
-                  <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
-                </div>
-                <div class="mt-1.5">
-                  <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Gems</div>
-                  <div class="flex flex-wrap gap-1">
-                    {#each [...GEMS, 'gold'] as gem (gem)}
-                      <span use:registerPlayerGemTarget={playerGemTargetKey(index, gem)}>
-                        <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
-                      </span>
-                    {/each}
-                  </div>
-                </div>
-                <div class="mt-1.5">
-                  <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Bought card bonuses</div>
-                  <div class="flex flex-wrap gap-1">
-                    {#each GEMS as gem (gem)}
-                      <SplendorGemBadge {gem} amount={player.bonuses[gem]} compact />
-                    {/each}
-                  </div>
-                </div>
-                <div
-                  class="mt-1.5 text-[10px] text-neutral-500"
-                  use:registerPlayerNobleTarget={index}
-                >
-                  Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
-                </div>
-                <div class="mt-1.5 grid grid-cols-2 gap-1.5 text-[10px] text-neutral-400">
-                  <div
-                    class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1"
-                    use:registerPlayerCardTarget={index}
-                  >
-                    <span class="text-neutral-500">Cards Bought</span>
-                    <span class="float-right text-neutral-200">{player.cards.length}</span>
-                  </div>
-                  <div class="rounded-md border border-neutral-800 bg-neutral-900/50 px-2 py-1">
-                    <span class="text-neutral-500">Cards Reserved</span>
-                    <span class="float-right text-neutral-200">{player.reserved.length}</span>
-                  </div>
-                </div>
-              </article>
-            {/if}
-          {/each}
-        </section>
-      </aside>
-
-      <aside class="min-h-0">
-        {#each [state.players[0]] as player}
-          <article
-            class="flex h-full min-h-0 flex-col rounded-md border {currentPlayer === HUMAN_PLAYER_INDEX ? 'border-emerald-400/60' : 'border-neutral-800'} bg-neutral-950 p-2"
-            use:registerPlayerPanel={0}
-          >
-            <div class="flex items-center justify-between gap-2">
-              <h2 class="text-sm font-semibold tracking-normal">{playerLabel(0)}</h2>
-              <span class="text-xs text-neutral-300">{player.prestige} prestige</span>
-            </div>
-            <div class="mt-1.5">
-              <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Gems</div>
-              <div class="flex flex-wrap gap-1">
-                {#each [...GEMS, 'gold'] as gem (gem)}
-                  <span use:registerPlayerGemTarget={playerGemTargetKey(0, gem)}>
-                    <SplendorGemBadge {gem} amount={player.tokens[gem]} compact />
-                  </span>
-                {/each}
-              </div>
-            </div>
-            <div class="mt-1.5">
-              <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-neutral-500">Bought card bonuses</div>
-              <div class="flex flex-wrap gap-1">
-                {#each GEMS as gem (gem)}
-                  <SplendorGemBadge {gem} amount={player.bonuses[gem]} compact />
-                {/each}
-              </div>
-            </div>
-            <div
-              class="mt-1.5 text-[10px] text-neutral-500"
-              use:registerPlayerNobleTarget={0}
-            >
-              Cards {player.cards.length} - Reserved {player.reserved.length} - Nobles {player.nobles.length}
-            </div>
-
-            <div class="mt-2 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
-              <section
-                class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2"
-                use:registerPlayerCardTarget={0}
-              >
-                <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Bought</h3>
-                {#if player.cards.length}
-                  <div class="mt-2 space-y-2">
-                    {#each GEMS as gem (gem)}
-                      {#each [cardsForBonus(player.cards, gem)] as stack}
-                        {#if stack.length}
-                          <div>
-                            <div class="mb-1 flex items-center gap-1.5">
-                              <SplendorGemBadge {gem} amount={stack.length} compact />
-                            </div>
-                            <div class="flex gap-2 overflow-x-auto pb-1">
-                              {#each stack as card (card.id)}
-                                <div
-                                  class="w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1"
-                                  use:registerOwnedCard={card.id}
-                                >
-                                  <SplendorCardArt {card} board />
-                                </div>
-                              {/each}
-                            </div>
-                          </div>
-                        {/if}
                       {/each}
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="mt-2 rounded-md border border-dashed border-neutral-800 px-3 py-4 text-center text-xs text-neutral-600">
-                    No bought cards yet
-                  </div>
+                    </div>
+                  </section>
                 {/if}
-              </section>
 
-              {#if player.reserved.length}
-                <section class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
-                  <h3 class="text-xs font-semibold tracking-normal text-neutral-200">Cards Reserved</h3>
-                  <div class="mt-2 flex gap-2 overflow-x-auto pb-1">
-                    {#each player.reserved as card (card.id)}
-                      <div
-                        class="relative w-44 shrink-0 rounded-md border border-neutral-800 bg-neutral-900 p-1"
-                        use:registerReservedCard={`${0}:${card.id}`}
-                      >
-                        <SplendorCardArt {card} board />
-                        <button
-                          class="absolute bottom-2 right-2 rounded-md bg-emerald-500 px-2 py-1 text-xs font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
-                          type="button"
-                          disabled={!legalBuy(card, 'reserved') || !humanCanAct}
-                          on:click={() => {
-                            const move = legalBuy(card, 'reserved');
-                            if (move) beginMove(move);
-                          }}
+                {#if player.nobles.length}
+                  <section
+                    class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2"
+                  >
+                    <h3
+                      class="text-xs font-semibold tracking-normal text-neutral-200"
+                    >
+                      Nobles Acquired
+                    </h3>
+                    <div class="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {#each player.nobles as noble (noble.id)}
+                        <div
+                          class="w-40 shrink-0 rounded-md border border-amber-300/40 bg-neutral-900 p-1"
                         >
-                          Buy
-                        </button>
-                      </div>
-                    {/each}
-                  </div>
-                </section>
-              {/if}
-            </div>
-          </article>
-        {/each}
-      </aside>
-    </div>
+                          <SplendorNobleArt {noble} />
+                        </div>
+                      {/each}
+                    </div>
+                  </section>
+                {/if}
+              </div>
+            </article>
+          {/each}
+        </aside>
+      </div>
     </div>
   </section>
 {/if}
 
 {#each flyingAssets as asset (asset.id)}
   <div
-    class="splendor-flying-asset pointer-events-none fixed z-50 {asset.kind === 'gem' ? 'rounded-full bg-transparent p-0 shadow-lg' : 'overflow-hidden rounded-md border border-emerald-300/60 bg-neutral-950 p-1 shadow-2xl'}"
+    class="splendor-flying-asset pointer-events-none fixed z-50 {asset.kind ===
+    'gem'
+      ? 'rounded-full bg-transparent p-0 shadow-lg'
+      : 'overflow-hidden rounded-md border border-emerald-300/60 bg-neutral-950 p-1 shadow-2xl'}"
     style={asset.style}
   >
-    {#if asset.kind === 'card'}
+    {#if asset.kind === 'card' || asset.kind === 'refill'}
       <SplendorCardArt card={asset.card} board />
     {:else if asset.kind === 'noble'}
       <SplendorNobleArt noble={asset.noble} />
@@ -1296,24 +1557,190 @@
 {/each}
 
 {#if activeModal === 'gold' && pendingMove?.kind === 'buy' && state}
-  <div class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4">
-    <div class="w-full max-w-lg rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
+  <div
+    class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4"
+  >
+    <div
+      class="w-full max-w-lg rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
+    >
       <h2 class="text-xl font-semibold tracking-normal">Allocate Gold</h2>
       <div class="mt-4 space-y-3">
         {#each goldRangesFor(state, pendingMove) as range (range.gem)}
-          <div class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3">
+          <div
+            class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3"
+          >
             <SplendorGemBadge gem={range.gem} />
             <div class="flex items-center gap-2">
-              <button class="rounded-md border border-neutral-700 px-2 py-1" type="button" on:click={() => adjustGold(range.gem, -1)}>-</button>
-              <span class="w-8 text-center">{goldDraft[range.gem] ?? range.min}</span>
-              <button class="rounded-md border border-neutral-700 px-2 py-1" type="button" on:click={() => adjustGold(range.gem, 1)}>+</button>
+              <button
+                class="rounded-md border border-neutral-700 px-2 py-1"
+                type="button"
+                on:click={() => adjustGold(range.gem, -1)}>-</button
+              >
+              <span class="w-8 text-center"
+                >{goldDraft[range.gem] ?? range.min}</span
+              >
+              <button
+                class="rounded-md border border-neutral-700 px-2 py-1"
+                type="button"
+                on:click={() => adjustGold(range.gem, 1)}>+</button
+              >
             </div>
           </div>
         {/each}
       </div>
       <div class="mt-5 flex justify-end gap-2">
-        <button class="rounded-md border border-neutral-700 px-3 py-2 text-sm" type="button" on:click={cancelModal}>Cancel</button>
-        <button class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950" type="button" on:click={confirmGold}>Confirm</button>
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-2 text-sm"
+          type="button"
+          on:click={cancelModal}>Cancel</button
+        >
+        <button
+          class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950"
+          type="button"
+          on:click={confirmGold}>Confirm</button
+        >
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if activeModal === 'noble' && pendingMove && state}
+  <div
+    class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4"
+  >
+    <div
+      class="w-full max-w-2xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
+    >
+      <h2 class="text-xl font-semibold tracking-normal">Choose Noble</h2>
+      <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {#each eligibleNoblesAfter(state, pendingMove) as noble (noble.id)}
+          <button
+            class="rounded-md border bg-neutral-900 p-1 text-left transition {nobleDraft ===
+            noble.id
+              ? 'border-amber-300 ring-2 ring-amber-300/30'
+              : 'border-neutral-800 hover:border-amber-300/60'}"
+            type="button"
+            aria-pressed={nobleDraft === noble.id}
+            on:click={() => {
+              nobleDraft = noble.id;
+            }}
+            on:dblclick={() => {
+              nobleDraft = noble.id;
+              confirmNoble();
+            }}
+          >
+            <SplendorNobleArt {noble} />
+          </button>
+        {/each}
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-2 text-sm"
+          type="button"
+          on:click={cancelModal}>Cancel</button
+        >
+        <button
+          class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950"
+          type="button"
+          on:click={confirmNoble}>Confirm</button
+        >
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if activeModal === 'discard' && pendingProjectedTokens}
+  <div
+    class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4"
+  >
+    <div
+      class="w-full max-w-lg rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
+    >
+      <h2 class="text-xl font-semibold tracking-normal">Discard Tokens</h2>
+      <p class="mt-1 text-sm text-neutral-400">
+        Discard {discardNeeded} token{discardNeeded === 1 ? '' : 's'} to return to
+        10.
+      </p>
+      <div class="mt-4 space-y-3">
+        {#each [...GEMS, 'gold'] as gem (gem)}
+          <div
+            class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3"
+          >
+            <SplendorGemBadge {gem} amount={pendingProjectedTokens[gem]} />
+            <div class="flex items-center gap-2">
+              <button
+                class="rounded-md border border-neutral-700 px-2 py-1"
+                type="button"
+                on:click={() => adjustDiscard(gem, -1)}>-</button
+              >
+              <span class="w-8 text-center">{discardDraft[gem] ?? 0}</span>
+              <button
+                class="rounded-md border border-neutral-700 px-2 py-1"
+                type="button"
+                on:click={() => adjustDiscard(gem, 1)}>+</button
+              >
+            </div>
+          </div>
+        {/each}
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-2 text-sm"
+          type="button"
+          on:click={cancelModal}>Cancel</button
+        >
+        <button
+          class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
+          type="button"
+          disabled={discardTotal !== discardNeeded}
+          on:click={confirmDiscard}
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if snapshot?.status === 'terminal' && state && !gameOverDismissed}
+  <div
+    class="fixed inset-0 z-10 flex items-center justify-center bg-neutral-950/80 px-4"
+  >
+    <div
+      class="w-full max-w-xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
+    >
+      <h2 class="text-xl font-semibold tracking-normal">Game Over</h2>
+      <p class="mt-1 text-sm text-neutral-400">
+        {snapshot.winner === null
+          ? 'Shared victory'
+          : `Player ${snapshot.winner + 1} wins`}
+      </p>
+      <div class="mt-4 space-y-2">
+        {#each state.players as player, index (index)}
+          <div
+            class="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 p-3"
+          >
+            <span>{playerLabel(index)}</span>
+            <span>{player.prestige} prestige - {player.cards.length} cards</span
+            >
+          </div>
+        {/each}
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            gameOverDismissed = true;
+          }}
+        >
+          View board
+        </button>
+        <button
+          class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950"
+          type="button"
+          on:click={startShuffledGame}>New game</button
+        >
       </div>
     </div>
   </div>
@@ -1350,96 +1777,3 @@
     }
   }
 </style>
-
-{#if activeModal === 'noble' && pendingMove && state}
-  <div class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4">
-    <div class="w-full max-w-2xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
-      <h2 class="text-xl font-semibold tracking-normal">Choose Noble</h2>
-      <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {#each eligibleNoblesAfter(state, pendingMove) as noble (noble.id)}
-          <button
-            class="rounded-md border bg-neutral-900 p-1 text-left transition {nobleDraft === noble.id ? 'border-amber-300 ring-2 ring-amber-300/30' : 'border-neutral-800 hover:border-amber-300/60'}"
-            type="button"
-            aria-pressed={nobleDraft === noble.id}
-            on:click={() => {
-              nobleDraft = noble.id;
-            }}
-            on:dblclick={() => {
-              nobleDraft = noble.id;
-              confirmNoble();
-            }}
-          >
-            <SplendorNobleArt {noble} />
-          </button>
-        {/each}
-      </div>
-      <div class="mt-5 flex justify-end gap-2">
-        <button class="rounded-md border border-neutral-700 px-3 py-2 text-sm" type="button" on:click={cancelModal}>Cancel</button>
-        <button class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950" type="button" on:click={confirmNoble}>Confirm</button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-{#if activeModal === 'discard' && pendingProjectedTokens}
-  <div class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4">
-    <div class="w-full max-w-lg rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
-      <h2 class="text-xl font-semibold tracking-normal">Discard Tokens</h2>
-      <p class="mt-1 text-sm text-neutral-400">Discard {discardNeeded} token{discardNeeded === 1 ? '' : 's'} to return to 10.</p>
-      <div class="mt-4 space-y-3">
-        {#each [...GEMS, 'gold'] as gem (gem)}
-          <div class="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <SplendorGemBadge {gem} amount={pendingProjectedTokens[gem]} />
-            <div class="flex items-center gap-2">
-              <button class="rounded-md border border-neutral-700 px-2 py-1" type="button" on:click={() => adjustDiscard(gem, -1)}>-</button>
-              <span class="w-8 text-center">{discardDraft[gem] ?? 0}</span>
-              <button class="rounded-md border border-neutral-700 px-2 py-1" type="button" on:click={() => adjustDiscard(gem, 1)}>+</button>
-            </div>
-          </div>
-        {/each}
-      </div>
-      <div class="mt-5 flex justify-end gap-2">
-        <button class="rounded-md border border-neutral-700 px-3 py-2 text-sm" type="button" on:click={cancelModal}>Cancel</button>
-        <button
-          class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
-          type="button"
-          disabled={discardTotal !== discardNeeded}
-          on:click={confirmDiscard}
-        >
-          Confirm
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
-{#if snapshot?.status === 'terminal' && state && !gameOverDismissed}
-  <div class="fixed inset-0 z-10 flex items-center justify-center bg-neutral-950/80 px-4">
-    <div class="w-full max-w-xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl">
-      <h2 class="text-xl font-semibold tracking-normal">Game Over</h2>
-      <p class="mt-1 text-sm text-neutral-400">
-        {snapshot.winner === null ? 'Shared victory' : `Player ${snapshot.winner + 1} wins`}
-      </p>
-      <div class="mt-4 space-y-2">
-        {#each state.players as player, index (index)}
-          <div class="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 p-3">
-            <span>{playerLabel(index)}</span>
-            <span>{player.prestige} prestige - {player.cards.length} cards</span>
-          </div>
-        {/each}
-      </div>
-      <div class="mt-5 flex justify-end gap-2">
-        <button
-          class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
-          type="button"
-          on:click={() => {
-            gameOverDismissed = true;
-          }}
-        >
-          View board
-        </button>
-        <button class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950" type="button" on:click={startGame}>New game</button>
-      </div>
-    </div>
-  </div>
-{/if}

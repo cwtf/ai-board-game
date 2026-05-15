@@ -35,9 +35,9 @@
   {/if}
 
   <div
-    class="pointer-events-none absolute inset-0 flex flex-col justify-between bg-gradient-to-b from-neutral-950/80 via-transparent to-neutral-950/90 p-3"
+    class="pointer-events-none absolute inset-0 bg-gradient-to-b from-neutral-950/80 via-transparent to-neutral-950/90"
   >
-    <div class="flex items-center justify-between gap-2">
+    <div class="flex items-center justify-between gap-2 p-3">
       {#if imageFailed}
         <span class="font-medium text-amber-100 drop-shadow">{noble.id}</span>
       {:else}
@@ -49,7 +49,7 @@
         {noble.prestige}
       </span>
     </div>
-    <div class="flex flex-wrap gap-2">
+    <div class="absolute bottom-2 left-1 flex flex-col items-start gap-1.5">
       {#each GEMS as gem (gem)}
         {#if noble.cost[gem]}
           <SplendorGemBadge {gem} amount={noble.cost[gem]} />

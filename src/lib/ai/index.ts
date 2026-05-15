@@ -2,12 +2,15 @@ import anthropic from './providers/anthropic';
 import deepseek from './providers/deepseek';
 import glm from './providers/glm';
 import google from './providers/google';
+import groq from './providers/groq';
 import kimi from './providers/kimi';
 import llama from './providers/llama';
+import mistral from './providers/mistral';
 import ollama from './providers/ollama';
 import openai from './providers/openai';
 import openrouter from './providers/openrouter';
 import qwen from './providers/qwen';
+import together from './providers/together';
 import type { AIProvider, ProviderId } from './types';
 
 const providers = [
@@ -15,6 +18,9 @@ const providers = [
   anthropic,
   google,
   deepseek,
+  groq,
+  mistral,
+  together,
   kimi,
   glm,
   qwen,
@@ -45,6 +51,7 @@ export type {
   ChatMessage,
   CompleteParams,
   CompleteResult,
+  ListModelsParams,
   ProviderId,
   TokenUsage,
 } from './types';

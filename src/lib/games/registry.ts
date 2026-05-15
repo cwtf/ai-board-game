@@ -12,7 +12,7 @@ export const games: GameMeta[] = [
     maxPlayers: 4,
     hiddenInformation: true,
     estimatedAITurnTokens: 400,
-    docPath: 'docs/games/splendor.md',
+    docPath: 'https://www.youtube.com/watch?v=dmc8vTLHsCg',
   },
   {
     id: 'exploding-kittens',
@@ -23,6 +23,6 @@ export const games: GameMeta[] = [
     maxPlayers: 5,
     hiddenInformation: true,
     estimatedAITurnTokens: 600,
-    docPath: 'docs/games/exploding-kittens.md',
+    docPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
   },
 ];

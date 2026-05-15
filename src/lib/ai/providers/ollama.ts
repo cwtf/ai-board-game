@@ -14,16 +14,32 @@ interface OllamaResponse {
   error?: string;
 }
 
-function endpoint(baseUrl: string): string {
-  const base = baseUrl.replace(/\/+$/, '');
-  return base.endsWith('/api/chat') ? base : `${base}/api/chat`;
+interface OllamaModelsResponse {
+  models?: {
+    name?: string;
+    model?: string;
+  }[];
+  error?: string;
 }
 
-async function readJson(response: Response): Promise<OllamaResponse> {
+function endpoint(baseUrl: string, path: 'chat' | 'tags'): string {
+  let base = baseUrl.replace(/\/+$/, '');
+  if (base.endsWith('/api/chat') || base.endsWith('/api/tags')) {
+    base = base.slice(0, base.lastIndexOf('/'));
+  }
+
+  if (base.endsWith('/api')) {
+    return `${base}/${path}`;
+  }
+
+  return `${base}/api/${path}`;
+}
+
+async function readJson<T>(response: Response): Promise<T> {
   try {
-    return (await response.json()) as OllamaResponse;
+    return (await response.json()) as T;
   } catch {
-    return {};
+    return {} as T;
   }
 }
 
@@ -53,11 +69,46 @@ const ollama: AIProvider = {
   requiresEndpointUrl: false,
   endpointLabel: 'Ollama URL',
   defaultEndpointUrl: 'http://localhost:11434',
+  async listModels(params = {}): Promise<string[]> {
+    let response: Response;
+    try {
+      response = await fetch(
+        endpoint(params.endpointUrl ?? 'http://localhost:11434', 'tags'),
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+          signal: params.signal,
+        },
+      );
+    } catch (error) {
+      mapFetchError(error);
+    }
+
+    const payload = await readJson<OllamaModelsResponse>(response);
+    if (!response.ok) {
+      throw new AIProviderError(
+        payload.error ?? 'Ollama model list request failed.',
+        {
+          code: 'provider_error',
+          status: response.status,
+          raw: payload,
+        },
+      );
+    }
+
+    const models = (payload.models ?? [])
+      .map((model) => model.model ?? model.name)
+      .filter((model): model is string => Boolean(model));
+
+    return Array.from(new Set(models));
+  },
   async complete(params: CompleteParams): Promise<CompleteResult> {
     let response: Response;
     try {
       response = await fetch(
-        endpoint(params.endpointUrl ?? 'http://localhost:11434'),
+        endpoint(params.endpointUrl ?? 'http://localhost:11434', 'chat'),
         {
           method: 'POST',
           headers: {
@@ -84,7 +135,7 @@ const ollama: AIProvider = {
       mapFetchError(error);
     }
 
-    const payload = await readJson(response);
+    const payload = await readJson<OllamaResponse>(response);
     if (!response.ok) {
       throw new AIProviderError(payload.error ?? 'Ollama request failed.', {
         code: 'provider_error',

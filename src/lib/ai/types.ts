@@ -3,6 +3,9 @@ export type ProviderId =
   | 'anthropic'
   | 'google'
   | 'deepseek'
+  | 'groq'
+  | 'mistral'
+  | 'together'
   | 'kimi'
   | 'glm'
   | 'qwen'
@@ -38,6 +41,11 @@ export interface CompleteResult {
   raw?: unknown;
 }
 
+export interface ListModelsParams {
+  endpointUrl?: string;
+  signal?: AbortSignal;
+}
+
 export interface AIProvider {
   id: ProviderId;
   label: string;
@@ -47,6 +55,7 @@ export interface AIProvider {
   requiresEndpointUrl?: boolean;
   endpointLabel?: string;
   defaultEndpointUrl?: string;
+  listModels?(params?: ListModelsParams): Promise<string[]>;
   complete(params: CompleteParams): Promise<CompleteResult>;
 }
 
