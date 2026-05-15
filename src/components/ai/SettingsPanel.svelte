@@ -38,7 +38,7 @@
   $: activeProvider =
     providers.find((provider) => provider.id === selectedProviderId) ??
     providers[0];
-  $: activeModels = modelsFor(activeProvider);
+  $: activeModels = modelsFor(activeProvider, providerModels, keys);
   $: activeModel = selectedModelFor(activeProvider.id, keys);
   $: visibleModels = filterModels(activeModels, modelSearch, activeModel);
   $: modelProfiles = keys.modelProfiles ?? [];
@@ -151,10 +151,14 @@
       : providerEndpointFor(providerId, keys);
   }
 
-  function modelsFor(provider: (typeof providers)[number]): string[] {
-    const fetchedModels = providerModels[provider.id];
+  function modelsFor(
+    provider: (typeof providers)[number],
+    fetchedByProvider: Partial<Record<ProviderId, string[]>>,
+    storedKeys: StoredKeys,
+  ): string[] {
+    const fetchedModels = fetchedByProvider[provider.id];
     const baseModels = fetchedModels ?? provider.availableModels;
-    const selectedModel = keys.selectedModel?.[provider.id];
+    const selectedModel = storedKeys.selectedModel?.[provider.id];
 
     if (selectedModel && !baseModels.includes(selectedModel)) {
       return [selectedModel, ...baseModels];
@@ -766,7 +770,7 @@
                 </td>
                 <td class="px-5 py-3">
                   {#if profile.id === keys.selectedProfileId}
-                    <span class="inline-flex rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200">
+                    <span class="inline-flex items-center justify-center rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-center text-xs leading-tight text-emerald-200">
                       Current default
                     </span>
                   {:else}
