@@ -210,4 +210,28 @@ describe('game loop', () => {
     expect(loop.getSnapshot().status).toBe('terminal');
     expect(loop.getSnapshot().winner).toBe(1);
   });
+
+  it('updates AI player control without recreating the loop', async () => {
+    const loop = createGameLoop({
+      adapter,
+      initialState: { current: 0, scores: [0, 0], target: 3 },
+      aiPlayers: {},
+    });
+
+    expect(() => loop.playHumanMove(addOne)).not.toThrow();
+
+    loop.setAIPlayers({
+      1: {
+        provider: providerWithReplies(['{"moveId":"ADD_TWO"}']),
+        model: 'mock',
+      },
+    });
+    await loop.step();
+
+    expect(loop.getSnapshot().state.scores).toEqual([1, 2]);
+    expect(loop.getSnapshot().log.at(-1)).toMatchObject({
+      player: 1,
+      source: 'ai',
+    });
+  });
 });

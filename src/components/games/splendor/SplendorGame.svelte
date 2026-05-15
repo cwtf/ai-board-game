@@ -4,7 +4,7 @@
   import SplendorCardArt from '@/components/games/splendor/SplendorCardArt.svelte';
   import SplendorGemBadge from '@/components/games/splendor/SplendorGemBadge.svelte';
   import SplendorNobleArt from '@/components/games/splendor/SplendorNobleArt.svelte';
-  import { getProvider, listProviders } from '@/lib/ai';
+  import { getProvider } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
     createGameLoop,
@@ -32,8 +32,8 @@
     getStoredKeys,
     hasProviderCredentials,
     providerEndpointFor,
-    selectedModelFor,
     selectedProfileFor,
+    type ProviderModelProfile,
     type StoredKeys,
   } from '@/lib/storage/keys';
 
@@ -53,12 +53,13 @@
     id: string;
     style: string;
   };
+  type PlayerProfileSelections = Record<number, string>;
 
+  const HUMAN_PROFILE = '__human__';
   const HUMAN_PLAYER_INDEX = 0;
   const MIN_TABLE_WIDTH = 2100;
   const TABLE_HEIGHT = 900;
   const TABLE_RIGHT_GUTTER = 24;
-  const providers = listProviders();
   const gemLabels: Record<GemOrGold, string> = {
     emerald: 'Emerald',
     sapphire: 'Sapphire',
@@ -98,6 +99,10 @@
   let handledPointerSelection = false;
   let gameOverDismissed = false;
   let flyingAssets: FlyingAsset[] = [];
+  let playerProfileSelections: PlayerProfileSelections = {
+    [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
+  };
+  let aiPaused = false;
   const supplyGemElements = new Map<GemOrGold, globalThis.HTMLElement>();
   const playerGemTargetElements = new Map<string, globalThis.HTMLElement>();
   const boardCardElements = new Map<string, globalThis.HTMLElement>();
@@ -112,26 +117,27 @@
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
   $: humanCanAct =
-    currentPlayer === HUMAN_PLAYER_INDEX && snapshot?.status !== 'thinking';
+    currentPlayer === HUMAN_PLAYER_INDEX &&
+    playerProfileSelections[HUMAN_PLAYER_INDEX] === HUMAN_PROFILE &&
+    snapshot?.status !== 'thinking';
   $: legalMoves =
     state && humanCanAct
       ? splendorAdapter.legalMoves(state, HUMAN_PLAYER_INDEX)
       : [];
   $: selectedProfile = selectedProfileFor(keys);
-  $: selectedProvider =
-    providers.find(
-      (provider) =>
-        provider.id === (selectedProfile?.provider ?? keys.selectedProvider),
-    ) ?? providers[0];
-  $: configured = selectedProvider
-    ? hasProviderCredentials(selectedProvider.id, keys)
-    : false;
-  $: selectedModel =
-    selectedProfile?.model ?? selectedModelFor(selectedProvider.id, keys);
-  $: aiPlayerIndexes = Array.from(
-    { length: Math.max(0, playerCount - 1) },
-    (_, index) => index + 1,
+  $: configuredProfiles = (keys.modelProfiles ?? []).filter((profile) =>
+    hasProviderCredentials(profile.provider, keys),
   );
+  $: defaultProfileId =
+    configuredProfiles.find((profile) => profile.id === selectedProfile?.id)
+      ?.id ??
+    configuredProfiles[0]?.id ??
+    '';
+  $: normalizePlayerProfileSelections(playerCount, defaultProfileId);
+  $: aiPlayerIndexes = playerIndexesControlledByAI(playerProfileSelections);
+  $: humanDelegated =
+    playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_PROFILE;
+  $: gamePaused = humanDelegated && aiPaused;
   $: lastUsage = snapshot?.log.at(-1)?.usage;
   $: takeMove = findTakeMove(selectedGems);
   $: discardTotal = tokenTotal(discardDraft);
@@ -460,22 +466,134 @@
     }, 780);
   }
 
-  function aiConfigs(): Record<number, AIPlayerConfig> {
-    if (!selectedProvider || !configured) {
-      return {};
+  function configuredProfileById(
+    profileId: string,
+  ): ProviderModelProfile | undefined {
+    return configuredProfiles.find((profile) => profile.id === profileId);
+  }
+
+  function profileLabel(profile: ProviderModelProfile): string {
+    return `${profile.label} (${getProvider(profile.provider).label})`;
+  }
+
+  function normalizePlayerProfileSelections(
+    count: number,
+    fallbackProfileId: string,
+  ) {
+    const validProfileIds = new Set(
+      configuredProfiles.map((profile) => profile.id),
+    );
+    const next: PlayerProfileSelections = {};
+
+    for (let index = 0; index < count; index += 1) {
+      const current = playerProfileSelections[index];
+      if (index === HUMAN_PLAYER_INDEX) {
+        next[index] =
+          current === HUMAN_PROFILE || validProfileIds.has(current)
+            ? current
+            : HUMAN_PROFILE;
+        continue;
+      }
+
+      next[index] = validProfileIds.has(current) ? current : fallbackProfileId;
     }
 
-    const providerId = selectedProvider.id as ProviderId;
-    const ai: AIPlayerConfig = {
+    const changed =
+      Object.keys(playerProfileSelections).length !== count ||
+      Array.from({ length: count }).some(
+        (_, index) => playerProfileSelections[index] !== next[index],
+      );
+
+    if (changed) {
+      playerProfileSelections = next;
+      syncLoopAIPlayers();
+    }
+  }
+
+  function playerIndexesControlledByAI(
+    selections: PlayerProfileSelections,
+  ): number[] {
+    return Array.from({ length: playerCount }, (_, index) => index).filter(
+      (index) =>
+        selections[index] !== HUMAN_PROFILE &&
+        Boolean(configuredProfileById(selections[index])),
+    );
+  }
+
+  function aiConfigForProfile(profile: ProviderModelProfile): AIPlayerConfig {
+    const providerId = profile.provider as ProviderId;
+    return {
       provider: getProvider(providerId),
-      model: selectedModel,
+      model: profile.model,
       apiKey: keys[providerId],
       endpointUrl: providerEndpointFor(providerId, keys),
       temperature: 0.2,
       maxTokens: 500,
     };
+  }
 
-    return Object.fromEntries(aiPlayerIndexes.map((player) => [player, ai]));
+  function aiConfigs(
+    selections: PlayerProfileSelections = playerProfileSelections,
+  ): Record<number, AIPlayerConfig> {
+    return Object.fromEntries(
+      Array.from({ length: playerCount }, (_, index) => index).flatMap(
+        (player) => {
+          const profileId = selections[player];
+          if (profileId === HUMAN_PROFILE) {
+            return [];
+          }
+
+          const profile = configuredProfileById(profileId);
+          return profile ? [[player, aiConfigForProfile(profile)]] : [];
+        },
+      ),
+    );
+  }
+
+  function syncLoopAIPlayers() {
+    loop?.setAIPlayers(aiConfigs());
+  }
+
+  function selectPlayerProfile(playerIndex: number, profileId: string) {
+    playerProfileSelections = {
+      ...playerProfileSelections,
+      [playerIndex]: profileId,
+    };
+    selectedGems = [];
+    pendingMove = undefined;
+    activeModal = null;
+    message = '';
+    syncLoopAIPlayers();
+
+    if (playerIndex === HUMAN_PLAYER_INDEX && profileId === HUMAN_PROFILE) {
+      aiController?.abort();
+      aiPaused = false;
+      loop?.clearWarning();
+      return;
+    }
+
+    if (playerIndex === HUMAN_PLAYER_INDEX && profileId !== HUMAN_PROFILE) {
+      aiController?.abort();
+      aiPaused = true;
+      loop?.clearWarning();
+      return;
+    }
+
+    if (profileId !== HUMAN_PROFILE && !aiPaused) {
+      void runAI();
+    }
+  }
+
+  function toggleAIPaused() {
+    aiPaused = !aiPaused;
+    message = '';
+    if (aiPaused) {
+      aiController?.abort();
+      return;
+    }
+
+    loop?.clearWarning();
+    void runAI();
   }
 
   function startGame() {
@@ -487,11 +605,13 @@
     message = '';
     gameOverDismissed = false;
     flyingAssets = [];
+    normalizePlayerProfileSelections(playerCount, defaultProfileId);
+    aiPaused = playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_PROFILE;
 
     const initialState = splendorAdapter.init({
       seed: seed.trim() || 'splendor-table',
       playerCount,
-      aiPlayerIndices: aiPlayerIndexes,
+      aiPlayerIndices: playerIndexesControlledByAI(playerProfileSelections),
     });
     loop = createGameLoop({
       adapter: splendorAdapter,
@@ -514,7 +634,7 @@
   }
 
   async function runAI() {
-    if (!loop || !selectedProvider || !configured) {
+    if (!loop || aiPaused) {
       return;
     }
 
@@ -532,6 +652,12 @@
     try {
       await loop.runUntilBlocked(aiController.signal);
     } catch (error) {
+      if (aiPaused) {
+        loop.clearWarning();
+        message = '';
+        return;
+      }
+
       if (error instanceof Error && error.name === 'AbortError') {
         message = 'AI move aborted.';
       } else {
@@ -1163,11 +1289,20 @@
               </button>
             </div>
 
-            {#if !configured}
+            {#if configuredProfiles.length === 0}
               <div
                 class="mt-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-100"
               >
-                Configure a provider for AI turns.
+                Save a model profile for AI turns.
+              </div>
+            {/if}
+
+            {#if gamePaused}
+              <div
+                class="mt-2 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-1.5 text-xs text-emerald-100"
+              >
+                <span class="font-semibold">Game Paused.</span> Resume Player 1,
+                or switch Player 1 back to brain control.
               </div>
             {/if}
 
@@ -1288,9 +1423,28 @@
                   use:registerPlayerPanel={index}
                 >
                   <div class="flex items-center justify-between gap-2">
-                    <h2 class="text-sm font-semibold tracking-normal">
-                      {playerLabel(index)}
-                    </h2>
+                    <div class="min-w-0">
+                      <h2 class="text-sm font-semibold tracking-normal">
+                        {playerLabel(index)}
+                      </h2>
+                      <select
+                        class="mt-1 max-w-44 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100"
+                        value={playerProfileSelections[index] ?? ''}
+                        disabled={snapshot?.status === 'thinking'}
+                        on:change={(event) =>
+                          selectPlayerProfile(index, event.currentTarget.value)}
+                      >
+                        {#if configuredProfiles.length}
+                          {#each configuredProfiles as profile (profile.id)}
+                            <option value={profile.id}>
+                              {profileLabel(profile)}
+                            </option>
+                          {/each}
+                        {:else}
+                          <option value="">No model profiles</option>
+                        {/if}
+                      </select>
+                    </div>
                     <span class="text-xs text-neutral-300"
                       >{player.prestige} prestige</span
                     >
@@ -1378,9 +1532,35 @@
               use:registerPlayerPanel={0}
             >
               <div class="flex items-center justify-between gap-2">
-                <h2 class="text-sm font-semibold tracking-normal">
-                  {playerLabel(0)}
-                </h2>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h2 class="text-sm font-semibold tracking-normal">
+                      {playerLabel(0)}
+                    </h2>
+                    {#if humanDelegated}
+                      <button
+                        class="rounded-md border border-emerald-400/50 px-2 py-0.5 text-[10px] font-medium text-emerald-100 hover:border-emerald-300"
+                        type="button"
+                        on:click={toggleAIPaused}
+                      >
+                        {aiPaused ? 'Resume' : 'Pause'}
+                      </button>
+                    {/if}
+                  </div>
+                  <select
+                    class="mt-1 max-w-56 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100"
+                    value={playerProfileSelections[0] ?? HUMAN_PROFILE}
+                    on:change={(event) =>
+                      selectPlayerProfile(0, event.currentTarget.value)}
+                  >
+                    <option value={HUMAN_PROFILE}>🧠 Human</option>
+                    {#each configuredProfiles as profile (profile.id)}
+                      <option value={profile.id}>
+                        {profileLabel(profile)}
+                      </option>
+                    {/each}
+                  </select>
+                </div>
                 <span class="text-xs text-neutral-300"
                   >{player.prestige} prestige</span
                 >

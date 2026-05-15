@@ -33,6 +33,8 @@ export interface GameLoop<State, Move> {
     subscriber: (snapshot: LoopSnapshot<State, Move>) => void,
   ): () => void;
   getSnapshot(): LoopSnapshot<State, Move>;
+  setAIPlayers(aiPlayers: GameLoopOptions<State, Move>['aiPlayers']): void;
+  clearWarning(): void;
   playHumanMove(move: Move): void;
   step(signal?: AbortSignal): Promise<boolean>;
   runUntilBlocked(signal?: AbortSignal): Promise<void>;
@@ -77,6 +79,7 @@ export function createGameLoop<State, Move>({
   let state = initialState;
   let status: LoopStatus = adapter.isTerminal(state) ? 'terminal' : 'idle';
   let warning: string | undefined;
+  let currentAIPlayers = aiPlayers;
   const log: MoveRecord<Move>[] = [];
   let totalUsage = { input: 0, output: 0 };
   const subscribers = new Set<(snapshot: LoopSnapshot<State, Move>) => void>();
@@ -240,13 +243,21 @@ export function createGameLoop<State, Move>({
       };
     },
     getSnapshot: snapshot,
+    setAIPlayers(nextAIPlayers) {
+      currentAIPlayers = nextAIPlayers;
+      emit();
+    },
+    clearWarning() {
+      warning = undefined;
+      emit();
+    },
     playHumanMove(move) {
       if (adapter.isTerminal(state)) {
         throw new Error('Cannot play a move after the game has ended.');
       }
 
       const player = adapter.currentPlayer(state);
-      if (aiConfigFor(aiPlayers, player)) {
+      if (aiConfigFor(currentAIPlayers, player)) {
         throw new Error('Current player is controlled by AI.');
       }
 
@@ -266,7 +277,7 @@ export function createGameLoop<State, Move>({
       }
 
       const player = adapter.currentPlayer(state);
-      const ai = aiConfigFor(aiPlayers, player);
+      const ai = aiConfigFor(currentAIPlayers, player);
       if (!ai) {
         status = 'idle';
         emit();
