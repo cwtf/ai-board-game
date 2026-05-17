@@ -241,6 +241,7 @@
   let tableReadThinking = false;
   let tableReadWarning = '';
   let tableReadStatus = '';
+  let tableReadZoom = 100;
   let lastSuccessfulTableReadKey = '';
   let lastAutoTableReadKey = '';
   let lastExecutionNotice = '';
@@ -1236,6 +1237,15 @@
 
   function relationshipMarkerId(status: RelationshipStatus): string {
     return `relationship-arrow-${status}`;
+  }
+
+  function tableReadChartViewBox(): string {
+    const scale = Math.max(1, tableReadZoom / 100);
+    const size = 100 / scale;
+    const origin = (100 - size) / 2;
+    return `${origin.toFixed(2)} ${origin.toFixed(2)} ${size.toFixed(
+      2,
+    )} ${size.toFixed(2)}`;
   }
 
   function relationshipPath(edge: RelationshipEdge, count: number): string {
@@ -2802,6 +2812,20 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-sm font-semibold">Table Reads</h2>
           <div class="flex flex-wrap items-center gap-2">
+            <label class="flex items-center gap-2 text-xs text-neutral-400">
+              Zoom
+              <input
+                class="w-24 accent-emerald-400"
+                type="range"
+                min="100"
+                max="220"
+                step="10"
+                bind:value={tableReadZoom}
+              />
+              <span class="w-9 text-right text-neutral-500"
+                >{tableReadZoom}%</span
+              >
+            </label>
             <select
               class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
               value={tableReadProfileId}
@@ -2847,67 +2871,73 @@
         {/if}
 
         <div class="mt-3 grid gap-4 lg:grid-cols-[1fr_240px]">
-          <svg
-            class="h-56 w-full rounded-md border border-neutral-900 bg-neutral-950"
-            viewBox="0 0 100 100"
-            role="img"
-            aria-label="Trust and suspicion relationships between players"
+          <div
+            class="h-56 w-full overflow-hidden rounded-md border border-neutral-900 bg-neutral-950"
           >
-            <defs>
-              {#each relationshipLegend as status}
-                <marker
-                  id={relationshipMarkerId(status)}
-                  viewBox="0 0 10 10"
-                  refX="8.2"
-                  refY="5"
-                  markerWidth="3.6"
-                  markerHeight="3.6"
-                  orient="auto-start-reverse"
+            <svg
+              class="block h-full w-full"
+              viewBox={tableReadChartViewBox()}
+              role="img"
+              aria-label="Trust and suspicion relationships between players"
+            >
+              <defs>
+                {#each relationshipLegend as status}
+                  <marker
+                    id={relationshipMarkerId(status)}
+                    viewBox="0 0 10 10"
+                    refX="8.2"
+                    refY="5"
+                    markerWidth="3.6"
+                    markerHeight="3.6"
+                    orient="auto-start-reverse"
+                  >
+                    <path
+                      d="M 0 0 L 10 5 L 0 10 z"
+                      fill={relationshipStroke(status)}
+                    />
+                  </marker>
+                {/each}
+              </defs>
+              {#each relationshipEdges as edge}
+                <path
+                  d={relationshipPath(edge, players.length)}
+                  fill="none"
+                  stroke={relationshipStroke(edge.status)}
+                  stroke-width={relationshipStrokeWidth(edge.status)}
+                  opacity={relationshipOpacity(edge.status)}
+                  stroke-linecap="round"
+                  marker-end={`url(#${relationshipMarkerId(edge.status)})`}
                 >
-                  <path
-                    d="M 0 0 L 10 5 L 0 10 z"
-                    fill={relationshipStroke(status)}
-                  />
-                </marker>
+                  <title>{relationshipSummary(edge)}</title>
+                </path>
               {/each}
-            </defs>
-            {#each relationshipEdges as edge}
-              <path
-                d={relationshipPath(edge, players.length)}
-                fill="none"
-                stroke={relationshipStroke(edge.status)}
-                stroke-width={relationshipStrokeWidth(edge.status)}
-                opacity={relationshipOpacity(edge.status)}
-                stroke-linecap="round"
-                marker-end={`url(#${relationshipMarkerId(edge.status)})`}
-              >
-                <title>{relationshipSummary(edge)}</title>
-              </path>
-            {/each}
-            {#each players as player, index}
-              {@const position = relationshipNodePosition(
-                index,
-                players.length,
-              )}
-              <circle
-                cx={position.x}
-                cy={position.y}
-                r="5.5"
-                fill={player.id === HUMAN_PLAYER_INDEX ? '#0c4a6e' : '#171717'}
-                stroke={player.alive ? '#737373' : '#404040'}
-                stroke-width="0.8"
-              />
-              <text
-                x={position.x}
-                y={position.y + 11}
-                text-anchor="middle"
-                class="text-[4.6px] font-semibold"
-                style={`fill:${playerNameColor(player.id)}`}
-              >
-                {player.name.replace(' (You)', '')}
-              </text>
-            {/each}
-          </svg>
+              {#each players as player, index}
+                {@const position = relationshipNodePosition(
+                  index,
+                  players.length,
+                )}
+                <circle
+                  cx={position.x}
+                  cy={position.y}
+                  r="5.5"
+                  fill={player.id === HUMAN_PLAYER_INDEX
+                    ? '#0c4a6e'
+                    : '#171717'}
+                  stroke={player.alive ? '#737373' : '#404040'}
+                  stroke-width="0.8"
+                />
+                <text
+                  x={position.x}
+                  y={position.y + 11}
+                  text-anchor="middle"
+                  class="text-[4.6px] font-semibold"
+                  style={`fill:${playerNameColor(player.id)}`}
+                >
+                  {player.name.replace(' (You)', '')}
+                </text>
+              {/each}
+            </svg>
+          </div>
 
           <div class="min-h-0">
             <div class="flex flex-wrap gap-2 text-[10px] text-neutral-400">
@@ -3167,10 +3197,11 @@
     </aside>
 
     <aside
-      class="flex min-h-[calc(100vh-8rem)] flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
+      class="flex flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
     >
       <section
-        class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3"
+        class="flex flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3"
+        style="height: 100%; min-height: 0;"
       >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-sm font-semibold">Table Chat</h2>
@@ -3180,7 +3211,10 @@
           </span>
         </div>
 
-        <div class="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+        <div
+          class="mt-3 space-y-2 overflow-y-auto pr-1"
+          style="flex: 1 1 auto; min-height: 32rem; max-height: 80rem;"
+        >
           {#if chatMessages.length}
             {#each chatMessages as item (item.id)}
               <article
