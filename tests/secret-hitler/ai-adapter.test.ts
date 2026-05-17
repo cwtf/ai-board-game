@@ -9,10 +9,17 @@ describe('Secret Hitler AI adapter', () => {
     const prompt = secretHitlerAdapter.systemPrompt();
 
     expect(prompt).toContain('exactly one assigned player');
-    expect(prompt).toContain('only the information your player is allowed to know');
+    expect(prompt).toContain(
+      'only the information your player is allowed to know',
+    );
     expect(prompt).toContain('Never claim certainty from hidden information');
     expect(prompt).toContain('Do not make your next move obvious');
     expect(prompt).toContain('Never announce private policy choices');
+    expect(prompt).toContain('Liberals win at 5 Liberal policies');
+    expect(prompt).toContain('Fascists win at 6 Fascist policies');
+    expect(prompt).toContain(
+      'Hitler being elected Chancellor wins for Fascists only if 3 or more Fascist policies',
+    );
     expect(prompt).toContain('public reasoning');
     expect(prompt).toContain('tableTalk');
     expect(prompt).toContain('moveId');
@@ -20,6 +27,41 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('Liberals should');
     expect(prompt).toContain('Fascists should');
     expect(prompt).toContain('Hitler should');
+  });
+
+  it('serializes core win-condition rules alongside the board state', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'rules',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.liberalPolicies = 4;
+    state.fascistPolicies = 0;
+
+    const payload = JSON.parse(
+      secretHitlerAdapter.serializeForAI(state, 0, []),
+    ) as {
+      rules: {
+        liberalPolicyWinCount: number;
+        fascistPolicyWinCount: number;
+        hitlerChancellorFascistPolicyThreshold: number;
+        importantRules: string[];
+      };
+      state: { liberalPolicies: number; fascistPolicies: number };
+    };
+
+    expect(payload.state).toMatchObject({
+      liberalPolicies: 4,
+      fascistPolicies: 0,
+    });
+    expect(payload.rules).toMatchObject({
+      liberalPolicyWinCount: 5,
+      fascistPolicyWinCount: 6,
+      hitlerChancellorFascistPolicyThreshold: 3,
+    });
+    expect(payload.rules.importantRules.join(' ')).toContain(
+      'Hitler becoming Chancellor does not create a Fascist win while there are zero, one, or two Fascist policies enacted.',
+    );
   });
 
   it('serializes only legally visible identities for each player', () => {
@@ -43,45 +85,27 @@ describe('Secret Hitler AI adapter', () => {
     ) as {
       state: { players: Array<{ visibleRole: string | null }> };
     };
-    expect(liberalPayload.state.players.map((player) => player.visibleRole)).toEqual([
-      'liberal',
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect(
+      liberalPayload.state.players.map((player) => player.visibleRole),
+    ).toEqual(['liberal', null, null, null, null, null, null]);
 
     const fascistPayload = JSON.parse(
       secretHitlerAdapter.serializeForAI(state, 1, []),
     ) as {
       state: { players: Array<{ visibleRole: string | null }> };
     };
-    expect(fascistPayload.state.players.map((player) => player.visibleRole)).toEqual([
-      null,
-      'fascist',
-      'hitler',
-      null,
-      null,
-      null,
-      'fascist',
-    ]);
+    expect(
+      fascistPayload.state.players.map((player) => player.visibleRole),
+    ).toEqual([null, 'fascist', 'hitler', null, null, null, 'fascist']);
 
     const hitlerPayload = JSON.parse(
       secretHitlerAdapter.serializeForAI(state, 2, []),
     ) as {
       state: { players: Array<{ visibleRole: string | null }> };
     };
-    expect(hitlerPayload.state.players.map((player) => player.visibleRole)).toEqual([
-      null,
-      null,
-      'hitler',
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect(
+      hitlerPayload.state.players.map((player) => player.visibleRole),
+    ).toEqual([null, null, 'hitler', null, null, null, null]);
   });
 
   it('shows Hitler the fascist teammate in five and six player games', () => {
@@ -215,7 +239,11 @@ describe('Secret Hitler AI adapter', () => {
       { playerCount: 5, existingFascists: 2, expectedPhase: 'policy-peek' },
       { playerCount: 5, existingFascists: 3, expectedPhase: 'execution' },
       { playerCount: 7, existingFascists: 1, expectedPhase: 'investigate' },
-      { playerCount: 7, existingFascists: 2, expectedPhase: 'special-election' },
+      {
+        playerCount: 7,
+        existingFascists: 2,
+        expectedPhase: 'special-election',
+      },
     ] as const;
 
     for (const item of cases) {
@@ -265,9 +293,7 @@ describe('Secret Hitler AI adapter', () => {
     expect(next.fascistPolicies).toBe(5);
     expect(next.phase).toBe('execution');
     expect(secretHitlerAdapter.legalMoves(next, next.president)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: 'execute' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ kind: 'execute' })]),
     );
   });
 

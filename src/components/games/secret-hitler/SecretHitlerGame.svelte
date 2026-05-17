@@ -83,14 +83,48 @@
     9: { liberals: 5, fascists: 3 },
     10: { liberals: 6, fascists: 3 },
   };
-  const liberalSpaces = ['Policy', 'Policy', 'Policy', 'Policy', 'Liberals win'];
+  const liberalSpaces = [
+    'Policy',
+    'Policy',
+    'Policy',
+    'Policy',
+    'Liberals win',
+  ];
   const fascistPowersByPlayerCount: Record<number, ExecutivePower[]> = {
     5: ['none', 'none', 'policy-peek', 'execution', 'execution', 'none'],
     6: ['none', 'none', 'policy-peek', 'execution', 'execution', 'none'],
-    7: ['none', 'investigate', 'special-election', 'execution', 'execution', 'none'],
-    8: ['none', 'investigate', 'special-election', 'execution', 'execution', 'none'],
-    9: ['investigate', 'investigate', 'special-election', 'execution', 'execution', 'none'],
-    10: ['investigate', 'investigate', 'special-election', 'execution', 'execution', 'none'],
+    7: [
+      'none',
+      'investigate',
+      'special-election',
+      'execution',
+      'execution',
+      'none',
+    ],
+    8: [
+      'none',
+      'investigate',
+      'special-election',
+      'execution',
+      'execution',
+      'none',
+    ],
+    9: [
+      'investigate',
+      'investigate',
+      'special-election',
+      'execution',
+      'execution',
+      'none',
+    ],
+    10: [
+      'investigate',
+      'investigate',
+      'special-election',
+      'execution',
+      'execution',
+      'none',
+    ],
   };
   const powerLabels: Record<ExecutivePower, string> = {
     none: 'No power',
@@ -141,6 +175,28 @@
     '#fda4af',
     '#5eead4',
   ];
+  const secretHitlerAssetBase = '/assets/secret-hitler';
+  const ballotAssets: Record<Exclude<Vote, null>, string> = {
+    ja: `${secretHitlerAssetBase}/ballots/ja.png`,
+    nein: `${secretHitlerAssetBase}/ballots/nein.png`,
+  };
+  const policyAssets: Record<Policy, string> = {
+    liberal: `${secretHitlerAssetBase}/policies/liberal.png`,
+    fascist: `${secretHitlerAssetBase}/policies/fascist.png`,
+  };
+  const roleAssets: Record<Role, string> = {
+    liberal: `${secretHitlerAssetBase}/roles/liberal.png`,
+    fascist: `${secretHitlerAssetBase}/roles/fascist.png`,
+    hitler: `${secretHitlerAssetBase}/roles/hitler.png`,
+  };
+  const partyAssets: Record<Party, string> = {
+    liberal: `${secretHitlerAssetBase}/party/liberal.png`,
+    fascist: `${secretHitlerAssetBase}/party/fascist.png`,
+  };
+  const dossierBackAsset = `${secretHitlerAssetBase}/backs/dossier-back.png`;
+  const electionTrackerAsset = `${secretHitlerAssetBase}/tokens/election-tracker.png`;
+  const liberalBoardAsset = `${secretHitlerAssetBase}/boards/liberal-board.png`;
+  const fascistBoardAsset = `${secretHitlerAssetBase}/boards/fascist-board.png`;
 
   let keys: StoredKeys = {};
   let playerCount = 5;
@@ -195,8 +251,12 @@
   $: nomineePlayer = nominee === null ? undefined : players[nominee];
   $: presidentName = presidentPlayer?.name ?? germanPlayerName(0);
   $: nomineeName = nomineePlayer?.name ?? 'Not nominated';
-  $: jaVotes = alivePlayers.filter((player) => votes[player.id] === 'ja').length;
-  $: neinVotes = alivePlayers.filter((player) => votes[player.id] === 'nein').length;
+  $: jaVotes = alivePlayers.filter(
+    (player) => votes[player.id] === 'ja',
+  ).length;
+  $: neinVotes = alivePlayers.filter(
+    (player) => votes[player.id] === 'nein',
+  ).length;
   $: allVotesCast = alivePlayers.every((player) => votes[player.id]);
   $: governmentPasses = jaVotes > alivePlayers.length / 2;
   $: vetoUnlocked = fascistPolicies >= 5;
@@ -250,11 +310,7 @@
       votes,
       phase,
       investigationResult,
-      winner: winner
-        ? winner.startsWith('Liberals')
-          ? 0
-          : 1
-        : null,
+      winner: winner ? (winner.startsWith('Liberals') ? 0 : 1) : null,
       winnerText: winner,
       turn,
       chatMessages: chatMessages.map(
@@ -650,7 +706,10 @@
       const from = Math.min(edge.from, edge.to);
       const to = Math.max(edge.from, edge.to);
       const existing = analystReads.get(`${from}:${to}`);
-      if (!existing || relationshipRank(edge.status) >= relationshipRank(existing.status)) {
+      if (
+        !existing ||
+        relationshipRank(edge.status) >= relationshipRank(existing.status)
+      ) {
         analystReads.set(`${from}:${to}`, { ...edge, from, to });
       }
     }
@@ -672,7 +731,9 @@
     return edges;
   }
 
-  function normalizeRelationshipStatus(value: unknown): RelationshipStatus | undefined {
+  function normalizeRelationshipStatus(
+    value: unknown,
+  ): RelationshipStatus | undefined {
     if (typeof value !== 'string') {
       return undefined;
     }
@@ -722,13 +783,15 @@
         name: player.name,
         alive: player.alive,
       })),
-      publicChat: chatMessages.map(({ playerId, playerName, body, turn, phase }) => ({
-        playerId,
-        playerName,
-        body,
-        turn,
-        phase,
-      })),
+      publicChat: chatMessages.map(
+        ({ playerId, playerName, body, turn, phase }) => ({
+          playerId,
+          playerName,
+          body,
+          turn,
+          phase,
+        }),
+      ),
     });
   }
 
@@ -783,7 +846,10 @@
             ? candidate.summary.trim().slice(0, 120)
             : relationshipLabel(status),
       };
-      if (!existing || relationshipRank(nextEdge.status) >= relationshipRank(existing.status)) {
+      if (
+        !existing ||
+        relationshipRank(nextEdge.status) >= relationshipRank(existing.status)
+      ) {
         edges.set(key, nextEdge);
       }
     }
@@ -858,7 +924,8 @@
     if (snapshotKey === lastSuccessfulTableReadKey && tableReadEdges.length) {
       if (!opts.silent) {
         tableReadWarning = '';
-        tableReadStatus = 'Room read is already up to date for the current chat.';
+        tableReadStatus =
+          'Room read is already up to date for the current chat.';
       }
       return;
     }
@@ -936,7 +1003,10 @@
           if (parsed.returnedPairCount < expectedPairCount && attempt < 3) {
             lastError = `Only ${parsed.returnedPairCount}/${expectedPairCount} player pairs were returned.`;
             messages.push(
-              { role: 'assistant' as const, content: result.text.slice(0, 4000) },
+              {
+                role: 'assistant' as const,
+                content: result.text.slice(0, 4000),
+              },
               {
                 role: 'user' as const,
                 content: `Partial relationship map: ${lastError}. Return all ${expectedPairCount} unordered player pairs. Use neutral for pairs with no clear evidence. Return exactly one JSON object with {"relationships":[...]}.`,
@@ -973,7 +1043,8 @@
           error instanceof Error
             ? `Read Room failed: ${error.message}`
             : 'Read Room failed.';
-        tableReadStatus = 'Last read failed. Try again, or select a stricter model.';
+        tableReadStatus =
+          'Last read failed. Try again, or select a stricter model.';
       }
     } finally {
       tableReadThinking = false;
@@ -1090,6 +1161,16 @@
 
       try {
         const providerId = profile.provider as ProviderId;
+        const responderContext = JSON.parse(
+          secretHitlerAdapter.serializeForAI(
+            toAdapterState(),
+            responder.id,
+            [],
+          ),
+        ) as {
+          rules: unknown;
+          state: unknown;
+        };
         const result = await getProvider(providerId).complete({
           apiKey: keys[providerId],
           endpointUrl: providerEndpointFor(providerId, keys),
@@ -1108,6 +1189,8 @@
                 player: responder.id,
                 questionFrom: players[askerId]?.name ?? 'another player',
                 question,
+                rules: responderContext.rules,
+                state: responderContext.state,
                 publicChat: chatMessages.slice(-20),
                 responseSchema: { tableTalk: 'brief public reply' },
               }),
@@ -1223,7 +1306,10 @@
                 : `${target.name} was executed.`;
           }
         }
-        if (state.phase !== nextState.phase && isExecutivePhase(nextState.phase)) {
+        if (
+          state.phase !== nextState.phase &&
+          isExecutivePhase(nextState.phase)
+        ) {
           lastExecutivePowerNotice = `${
             powerLabels[nextState.phase as ExecutivePower]
           } unlocked from Fascist policy ${nextState.fascistPolicies}.`;
@@ -1234,7 +1320,10 @@
         ) {
           maybeAutoReadRoom();
         }
-        if (state.phase !== nextState.phase && isExecutivePhase(nextState.phase)) {
+        if (
+          state.phase !== nextState.phase &&
+          isExecutivePhase(nextState.phase)
+        ) {
           break;
         }
       }
@@ -1549,7 +1638,10 @@
     }
 
     const policy = chancellorHand[index];
-    discardPile = [...discardPile, ...chancellorHand.filter((_, item) => item !== index)];
+    discardPile = [
+      ...discardPile,
+      ...chancellorHand.filter((_, item) => item !== index),
+    ];
     chancellorHand = [];
     enactPolicy(policy);
     if (!isExecutivePhase(phase)) {
@@ -1627,11 +1719,9 @@
     }
 
     if (policy === 'fascist' && opts.chaos) {
-      lastExecutivePowerNotice =
-        `Fascist policy ${fascistPolicies} was enacted by the election tracker, so no executive power resolves.`;
+      lastExecutivePowerNotice = `Fascist policy ${fascistPolicies} was enacted by the election tracker, so no executive power resolves.`;
     } else if (policy === 'fascist') {
-      lastExecutivePowerNotice =
-        `Fascist policy ${fascistPolicies} has no executive power for ${playerCount} players.`;
+      lastExecutivePowerNotice = `Fascist policy ${fascistPolicies} has no executive power for ${playerCount} players.`;
     }
 
     message = `${policyLabel(policy)} policy enacted.`;
@@ -1760,12 +1850,40 @@
 
   function policyClasses(policy: Policy): string {
     return policy === 'liberal'
-      ? 'border-blue-300 bg-blue-500/20 text-blue-100'
-      : 'border-red-300 bg-red-500/20 text-red-100';
+      ? 'border-blue-200/70 bg-blue-950/50 text-blue-100'
+      : 'border-red-200/70 bg-red-950/50 text-red-100';
   }
 
   function hiddenPolicyClasses(): string {
-    return 'border-neutral-700 bg-neutral-900 text-neutral-500';
+    return 'border-amber-100/20 bg-neutral-950 text-neutral-400';
+  }
+
+  function partyForRole(role: Role): Party {
+    return role === 'liberal' ? 'liberal' : 'fascist';
+  }
+
+  function policyAsset(policy: Policy): string {
+    return policyAssets[policy];
+  }
+
+  function partyAssetForRole(role: Role): string {
+    return partyAssets[partyForRole(role)];
+  }
+
+  function roleAsset(role: Role | null): string {
+    return role ? roleAssets[role] : dossierBackAsset;
+  }
+
+  function roleCardLabel(role: Role | null): string {
+    return role ? roleLabel(role) : 'Hidden dossier';
+  }
+
+  function voteAsset(vote: Vote): string {
+    return vote ? ballotAssets[vote] : dossierBackAsset;
+  }
+
+  function voteCardLabel(vote: Vote): string {
+    return vote ? `${voteLabel(vote)} ballot` : 'Hidden ballot';
   }
 
   function canViewPresidentCards(): boolean {
@@ -1923,59 +2041,109 @@
       {/if}
 
       <div class="mt-5 grid gap-4 xl:grid-cols-2">
-        <section class="rounded-md border border-blue-400/30 bg-blue-400/5 p-3">
-          <div class="flex items-center justify-between">
+        <section
+          class="overflow-hidden rounded-md border border-blue-200/30 bg-neutral-950"
+        >
+          <div
+            class="flex items-center justify-between border-b border-blue-200/10 px-3 py-2"
+          >
             <h2 class="text-sm font-semibold text-blue-100">Liberal Track</h2>
             <span class="text-xs text-blue-200">{liberalPolicies}/5</span>
           </div>
-          <div class="mt-3 grid grid-cols-5 gap-2">
-            {#each liberalSpaces as space, index}
-              <div
-                class={`flex aspect-[4/3] items-center justify-center rounded-md border text-center text-xs ${
-                  index < liberalPolicies
-                    ? 'border-blue-300 bg-blue-400/30 text-white'
-                    : 'border-blue-400/30 bg-neutral-950 text-blue-100'
-                }`}
-              >
-                {space}
-              </div>
-            {/each}
+          <div class="relative aspect-[16/9] overflow-hidden bg-blue-950">
+            <img
+              class="absolute inset-0 h-full w-full object-cover"
+              src={liberalBoardAsset}
+              alt=""
+              aria-hidden="true"
+            />
+            <div
+              class="absolute left-[13.7%] top-[30.5%] grid h-[43.7%] w-[72.8%] grid-cols-5 gap-[1.5%]"
+            >
+              {#each liberalSpaces as space, index}
+                <div class="relative min-w-0 overflow-hidden rounded-sm">
+                  {#if index < liberalPolicies}
+                    <img
+                      class="h-full w-full rounded-sm border border-blue-100/80 object-cover shadow-[0_8px_18px_rgba(0,0,0,0.45)]"
+                      src={policyAsset('liberal')}
+                      alt="Enacted Liberal policy"
+                    />
+                  {:else}
+                    <div
+                      class="flex h-full items-end justify-center rounded-sm border border-blue-100/25 bg-blue-950/15 px-1 pb-2 text-center text-[10px] font-semibold uppercase leading-tight text-blue-50/90 backdrop-blur-[1px]"
+                    >
+                      {space}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
           </div>
         </section>
 
-        <section class="rounded-md border border-red-400/30 bg-red-400/5 p-3">
-          <div class="flex items-center justify-between">
+        <section
+          class="overflow-hidden rounded-md border border-red-200/30 bg-neutral-950"
+        >
+          <div
+            class="flex items-center justify-between border-b border-red-200/10 px-3 py-2"
+          >
             <h2 class="text-sm font-semibold text-red-100">Fascist Track</h2>
             <span class="text-xs text-red-200">{fascistPolicies}/6</span>
           </div>
-          <div class="mt-3 grid grid-cols-6 gap-2">
-            {#each fascistPowersByPlayerCount[playerCount] as power, index}
-              <div
-                class={`flex aspect-[4/3] items-center justify-center rounded-md border px-1 text-center text-xs ${
-                  index < fascistPolicies
-                    ? 'border-red-300 bg-red-500/30 text-white'
-                    : 'border-red-400/30 bg-neutral-950 text-red-100'
-                }`}
-              >
-                {index === 5 ? 'Fascists win' : powerLabels[power]}
-              </div>
-            {/each}
+          <div class="relative aspect-[16/9] overflow-hidden bg-red-950">
+            <img
+              class="absolute inset-0 h-full w-full object-cover"
+              src={fascistBoardAsset}
+              alt=""
+              aria-hidden="true"
+            />
+            <div
+              class="absolute left-[3.4%] top-[43.1%] grid h-[30.8%] w-[93.2%] grid-cols-6 gap-[0.7%]"
+            >
+              {#each fascistPowersByPlayerCount[playerCount] as power, index}
+                <div class="relative min-w-0 overflow-hidden rounded-sm">
+                  {#if index < fascistPolicies}
+                    <img
+                      class="h-full w-full rounded-sm border border-red-100/80 object-cover shadow-[0_8px_18px_rgba(0,0,0,0.5)]"
+                      src={policyAsset('fascist')}
+                      alt="Enacted Fascist policy"
+                    />
+                  {:else}
+                    <div
+                      class="flex h-full items-end justify-center rounded-sm border border-red-100/20 bg-black/15 px-1 pb-2 text-center text-[9px] font-semibold uppercase leading-tight text-red-50/90 backdrop-blur-[1px]"
+                    >
+                      {index === 5 ? 'Fascists win' : powerLabels[power]}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
           </div>
         </section>
       </div>
 
       <div class="mt-4 grid gap-4 md:grid-cols-3">
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+        <section
+          class="rounded-md border border-neutral-800 bg-neutral-950 p-3"
+        >
           <h2 class="text-sm font-semibold">Election Tracker</h2>
           <div class="mt-3 grid grid-cols-3 gap-2">
             {#each [0, 1, 2] as step}
               <div
-                class={`h-10 rounded-md border ${
+                class={`flex h-12 items-center justify-center rounded-md border ${
                   step < electionTracker
-                    ? 'border-amber-300 bg-amber-300/30'
-                    : 'border-neutral-700 bg-neutral-900'
+                    ? 'border-amber-200/70 bg-amber-200/10'
+                    : 'border-neutral-700 bg-neutral-900/70'
                 }`}
-              ></div>
+              >
+                {#if step < electionTracker}
+                  <img
+                    class="h-9 w-9 rounded-full object-cover drop-shadow"
+                    src={electionTrackerAsset}
+                    alt={`Failed election ${step + 1}`}
+                  />
+                {/if}
+              </div>
             {/each}
           </div>
           <div class="mt-3 text-xs text-neutral-500">
@@ -1983,21 +2151,52 @@
           </div>
         </section>
 
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+        <section
+          class="rounded-md border border-neutral-800 bg-neutral-950 p-3"
+        >
           <h2 class="text-sm font-semibold">Policy Deck</h2>
           <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
-            <div class="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-              <div class="text-xs uppercase text-neutral-500">Draw</div>
-              <div class="mt-1 text-2xl font-semibold">{drawPile.length}</div>
+            <div
+              class="rounded-md border border-neutral-800 bg-neutral-900 p-3"
+            >
+              <div class="flex items-center gap-3">
+                <img
+                  class="h-16 w-11 rounded object-cover shadow"
+                  src={dossierBackAsset}
+                  alt=""
+                  aria-hidden="true"
+                />
+                <div>
+                  <div class="text-xs uppercase text-neutral-500">Draw</div>
+                  <div class="mt-1 text-2xl font-semibold">
+                    {drawPile.length}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-              <div class="text-xs uppercase text-neutral-500">Discard</div>
-              <div class="mt-1 text-2xl font-semibold">{discardPile.length}</div>
+            <div
+              class="rounded-md border border-neutral-800 bg-neutral-900 p-3"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="grid h-16 w-11 place-items-center rounded border border-neutral-700 bg-neutral-950 text-[10px] uppercase text-neutral-500"
+                >
+                  Out
+                </div>
+                <div>
+                  <div class="text-xs uppercase text-neutral-500">Discard</div>
+                  <div class="mt-1 text-2xl font-semibold">
+                    {discardPile.length}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section class="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+        <section
+          class="rounded-md border border-neutral-800 bg-neutral-950 p-3"
+        >
           <h2 class="text-sm font-semibold">Government</h2>
           <div class="mt-3 space-y-2 text-sm text-neutral-300">
             <div class="flex justify-between gap-2">
@@ -2016,12 +2215,13 @@
         </section>
       </div>
 
-      <section class="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <section
+        class="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4"
+      >
         {#if phase === 'nomination'}
           <h2 class="text-sm font-semibold">Nominate Chancellor</h2>
           <p class="mt-2 text-sm text-neutral-400">
-            {presidentName} nominates an eligible living player from the player
-            list.
+            {presidentName} nominates an eligible living player from the player list.
           </p>
         {:else if phase === 'voting'}
           <div class="flex flex-wrap items-center justify-between gap-3">
@@ -2047,7 +2247,9 @@
           </div>
           <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {#each alivePlayers as player}
-              <div class="rounded-md border border-neutral-800 bg-neutral-900 p-2">
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-900 p-2"
+              >
                 <div class="flex items-center justify-between gap-2">
                   <div class="text-sm font-medium">{player.name}</div>
                   {#if ballotRevealPending && votes[player.id]}
@@ -2063,47 +2265,73 @@
                       Ballot submitted
                     </span>
                   {:else}
-                    <span class="text-[10px] text-neutral-500">Awaiting ballot</span>
+                    <span class="text-[10px] text-neutral-500"
+                      >Awaiting ballot</span
+                    >
                   {/if}
                 </div>
                 {#if canManuallyVote(player)}
-                  <div class="mt-2 flex gap-2">
+                  <div class="mt-2 grid grid-cols-2 gap-2">
                     <button
-                      class={`flex-1 rounded-md border px-2 py-1 text-xs ${
+                      class={`overflow-hidden rounded-md border p-1 transition hover:border-emerald-200 ${
                         votes[player.id] === 'ja'
-                          ? 'border-emerald-300 bg-emerald-400/20 text-emerald-100'
-                          : 'border-neutral-700 text-neutral-300'
+                          ? 'border-emerald-300 bg-emerald-400/20'
+                          : 'border-neutral-700 bg-neutral-950'
                       }`}
                       type="button"
                       on:click={() => castHumanVote('ja')}
+                      aria-label="Vote Ja"
                     >
-                      Ja
+                      <img
+                        class="aspect-[2/3] w-full rounded object-cover"
+                        src={ballotAssets.ja}
+                        alt=""
+                        aria-hidden="true"
+                      />
                     </button>
                     <button
-                      class={`flex-1 rounded-md border px-2 py-1 text-xs ${
+                      class={`overflow-hidden rounded-md border p-1 transition hover:border-red-200 ${
                         votes[player.id] === 'nein'
-                          ? 'border-red-300 bg-red-400/20 text-red-100'
-                          : 'border-neutral-700 text-neutral-300'
+                          ? 'border-red-300 bg-red-400/20'
+                          : 'border-neutral-700 bg-neutral-950'
                       }`}
                       type="button"
                       on:click={() => castHumanVote('nein')}
+                      aria-label="Vote Nein"
                     >
-                      Nein
+                      <img
+                        class="aspect-[2/3] w-full rounded object-cover"
+                        src={ballotAssets.nein}
+                        alt=""
+                        aria-hidden="true"
+                      />
                     </button>
                   </div>
                 {:else}
                   <div
-                    class={`mt-2 rounded-md border px-3 py-2 text-center text-xs ${
+                    class={`mt-2 rounded-md border p-2 text-center text-xs ${
                       ballotRevealPending
                         ? voteRevealClasses(votes[player.id])
                         : 'border-neutral-800 bg-neutral-950 text-neutral-500'
                     }`}
                   >
-                    {#if ballotRevealPending}
-                      Vote: {voteLabel(votes[player.id])}
-                    {:else}
-                      Private ballot controlled by {player.name}
-                    {/if}
+                    <img
+                      class="mx-auto aspect-[2/3] h-24 rounded object-cover shadow"
+                      src={voteAsset(
+                        ballotRevealPending ? votes[player.id] : null,
+                      )}
+                      alt={ballotRevealPending
+                        ? voteCardLabel(votes[player.id])
+                        : ''}
+                      aria-hidden={!ballotRevealPending}
+                    />
+                    <div class="mt-2">
+                      {#if ballotRevealPending}
+                        Vote: {voteLabel(votes[player.id])}
+                      {:else}
+                        Private ballot controlled by {player.name}
+                      {/if}
+                    </div>
                   </div>
                 {/if}
               </div>
@@ -2121,17 +2349,32 @@
             {#each presidentHand as policy, index}
               {#if canViewPresidentCards()}
                 <button
-                  class={`aspect-[3/4] rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
+                  class={`overflow-hidden rounded-md border p-1 text-sm font-semibold transition hover:-translate-y-0.5 hover:border-amber-100 ${policyClasses(policy)}`}
                   type="button"
                   on:click={() => presidentDiscard(index)}
+                  aria-label={`Discard ${policyLabel(policy)} policy`}
                 >
-                  Discard {policyLabel(policy)}
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={policyAsset(policy)}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span class="mt-2 block pb-1"
+                    >Discard {policyLabel(policy)}</span
+                  >
                 </button>
               {:else}
                 <div
-                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
+                  class={`rounded-md border p-1 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
                 >
-                  Hidden policy
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={dossierBackAsset}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span class="mt-2 block pb-1">Hidden policy</span>
                 </div>
               {/if}
             {/each}
@@ -2139,14 +2382,16 @@
         {:else if phase === 'chancellor-discard'}
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 class="text-sm font-semibold">Chancellor Enacts One Policy</h2>
+              <h2 class="text-sm font-semibold">
+                Chancellor Enacts One Policy
+              </h2>
               <p class="mt-2 text-sm text-neutral-400">
                 {#if canViewChancellorCards()}
                   Select the policy to enact. The other policy is discarded.
                 {:else}
                   Policy identities are hidden from {players[identityViewer]
-                    ?.name}. Switch Viewing as to {nomineeName} to resolve this
-                  private hand.
+                    ?.name}. Switch Viewing as to {nomineeName} to resolve this private
+                  hand.
                 {/if}
               </p>
             </div>
@@ -2164,17 +2409,32 @@
             {#each chancellorHand as policy, index}
               {#if canViewChancellorCards()}
                 <button
-                  class={`aspect-[3/4] rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
+                  class={`overflow-hidden rounded-md border p-1 text-sm font-semibold transition hover:-translate-y-0.5 hover:border-amber-100 ${policyClasses(policy)}`}
                   type="button"
                   on:click={() => chancellorEnact(index)}
+                  aria-label={`Enact ${policyLabel(policy)} policy`}
                 >
-                  Enact {policyLabel(policy)}
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={policyAsset(policy)}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span class="mt-2 block pb-1"
+                    >Enact {policyLabel(policy)}</span
+                  >
                 </button>
               {:else}
                 <div
-                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
+                  class={`rounded-md border p-1 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
                 >
-                  Hidden policy
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={dossierBackAsset}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span class="mt-2 block pb-1">Hidden policy</span>
                 </div>
               {/if}
             {/each}
@@ -2232,15 +2492,26 @@
             {#each peekedPolicies as policy}
               {#if canViewPresidentCards()}
                 <div
-                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-sm font-semibold ${policyClasses(policy)}`}
+                  class={`rounded-md border p-1 text-center text-sm font-semibold ${policyClasses(policy)}`}
                 >
-                  {policyLabel(policy)}
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={policyAsset(policy)}
+                    alt={`${policyLabel(policy)} policy`}
+                  />
+                  <span class="mt-2 block pb-1">{policyLabel(policy)}</span>
                 </div>
               {:else}
                 <div
-                  class={`flex aspect-[3/4] items-center justify-center rounded-md border px-2 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
+                  class={`rounded-md border p-1 text-center text-sm font-semibold ${hiddenPolicyClasses()}`}
                 >
-                  Hidden policy
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={dossierBackAsset}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span class="mt-2 block pb-1">Hidden policy</span>
                 </div>
               {/if}
             {/each}
@@ -2315,8 +2586,8 @@
             {/if}
           </div>
           <p class="mt-2 text-sm text-neutral-400">
-            {presidentName} has the execution power. If Hitler is executed,
-            Liberals win immediately.
+            {presidentName} has the execution power. If Hitler is executed, Liberals
+            win immediately.
           </p>
           {#if canContinueAIExecutivePower()}
             <p class="mt-1 text-xs text-amber-200">
@@ -2334,7 +2605,9 @@
         {/if}
       </section>
 
-      <section class="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <section
+        class="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4"
+      >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-sm font-semibold">Table Reads</h2>
           <div class="flex flex-wrap items-center gap-2">
@@ -2342,7 +2615,8 @@
               class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
               value={tableReadProfileId}
               disabled={configuredProfiles.length === 0 || tableReadThinking}
-              on:change={(event) => selectTableReadProfile(event.currentTarget.value)}
+              on:change={(event) =>
+                selectTableReadProfile(event.currentTarget.value)}
             >
               <option value="">Neutral analyst</option>
               {#each configuredProfiles as profile (profile.id)}
@@ -2354,7 +2628,9 @@
             <button
               class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-100 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
-              disabled={!tableReadProfileId || tableReadThinking || chatMessages.length === 0}
+              disabled={!tableReadProfileId ||
+                tableReadThinking ||
+                chatMessages.length === 0}
               on:click={() => void requestTableReads()}
             >
               {tableReadThinking ? 'Reading...' : 'Read room'}
@@ -2387,8 +2663,14 @@
             aria-label="Trust and suspicion relationships between players"
           >
             {#each relationshipEdges as edge}
-              {@const fromPosition = relationshipNodePosition(edge.from, players.length)}
-              {@const toPosition = relationshipNodePosition(edge.to, players.length)}
+              {@const fromPosition = relationshipNodePosition(
+                edge.from,
+                players.length,
+              )}
+              {@const toPosition = relationshipNodePosition(
+                edge.to,
+                players.length,
+              )}
               <line
                 x1={fromPosition.x}
                 y1={fromPosition.y}
@@ -2403,7 +2685,10 @@
               </line>
             {/each}
             {#each players as player, index}
-              {@const position = relationshipNodePosition(index, players.length)}
+              {@const position = relationshipNodePosition(
+                index,
+                players.length,
+              )}
               <circle
                 cx={position.x}
                 cy={position.y}
@@ -2437,7 +2722,9 @@
               {/each}
             </div>
 
-            <div class="mt-3 max-h-52 space-y-1 overflow-y-auto pr-1 text-[11px] text-neutral-400">
+            <div
+              class="mt-3 max-h-52 space-y-1 overflow-y-auto pr-1 text-[11px] text-neutral-400"
+            >
               {#if tableReadEdges.length}
                 {#each relationshipEdges as edge}
                   <div class="flex items-center gap-2">
@@ -2445,7 +2732,11 @@
                       class="h-2 w-2 rounded-full"
                       style={`background:${relationshipStroke(edge.status)}`}
                     ></span>
-                    <span class={edge.status === 'neutral' ? 'text-neutral-500' : ''}>
+                    <span
+                      class={edge.status === 'neutral'
+                        ? 'text-neutral-500'
+                        : ''}
+                    >
                       <span
                         class="font-semibold"
                         style={`color:${playerNameColor(edge.from)}`}
@@ -2525,10 +2816,12 @@
                     : 'border-neutral-800 bg-neutral-950'
             }`}
           >
-            <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0">
+            <div>
+              <div class="min-w-0 w-full">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class={`text-sm font-medium ${playerNameClasses(player.id)}`}>
+                  <span
+                    class={`text-sm font-medium ${playerNameClasses(player.id)}`}
+                  >
                     {player.name}
                   </span>
                   <span
@@ -2565,13 +2858,6 @@
                   {/if}
                 </select>
               </div>
-              <div
-                class={`rounded-full border px-2 py-1 text-xs ${roleBadgeClasses(
-                  visibleRole,
-                )}`}
-              >
-                {visibleRole ? roleLabel(visibleRole) : 'Hidden'}
-              </div>
             </div>
 
             <div class="mt-3 grid gap-2">
@@ -2604,7 +2890,9 @@
                 <button
                   class="rounded-md border border-emerald-400/50 px-3 py-1.5 text-xs text-emerald-100 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  disabled={!humanIsPresident || !player.alive || player.id === president}
+                  disabled={!humanIsPresident ||
+                    !player.alive ||
+                    player.id === president}
                   on:click={() => chooseSpecialPresident(player.id)}
                 >
                   Choose President
@@ -2615,27 +2903,61 @@
                 <button
                   class="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-100 hover:border-red-300 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  disabled={!humanIsPresident || !player.alive || player.id === president}
+                  disabled={!humanIsPresident ||
+                    !player.alive ||
+                    player.id === president}
                   on:click={() => executePlayer(player.id)}
                 >
                   Execute
                 </button>
               {/if}
             </div>
+
+            <div class="mt-3 flex justify-center gap-3">
+              <div class="w-20 shrink-0">
+                <div
+                  class={`overflow-hidden rounded-md border p-1 ${roleBadgeClasses(
+                    visibleRole,
+                  )}`}
+                >
+                  <img
+                    class="aspect-[2/3] w-full rounded object-cover"
+                    src={roleAsset(visibleRole)}
+                    alt={roleCardLabel(visibleRole)}
+                  />
+                  <div
+                    class="mt-1 truncate text-center text-[10px] font-semibold"
+                  >
+                    {visibleRole ? roleLabel(visibleRole) : 'Hidden'}
+                  </div>
+                </div>
+              </div>
+              {#if visibleRole}
+                <div class="w-20 shrink-0">
+                  <img
+                    class="aspect-[2/3] w-full rounded-md border border-amber-100/20 object-cover"
+                    src={partyAssetForRole(visibleRole)}
+                    alt={`${partyLabel(visibleRole)} membership`}
+                  />
+                </div>
+              {/if}
+            </div>
           </div>
         {/each}
       </div>
-
     </aside>
 
     <aside
       class="flex h-[calc(100vh-8rem)] min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
     >
-      <section class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3">
+      <section
+        class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3"
+      >
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-sm font-semibold">Table Chat</h2>
           <span class="text-xs text-neutral-500">
-            Speaking as {players[HUMAN_PLAYER_INDEX]?.name ?? germanPlayerName(0)}
+            Speaking as {players[HUMAN_PLAYER_INDEX]?.name ??
+              germanPlayerName(0)}
           </span>
         </div>
 
@@ -2646,10 +2968,14 @@
                 class="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2"
               >
                 <div class="flex items-center justify-between gap-2">
-                  <span class={`text-xs font-semibold ${playerNameClasses(item.playerId)}`}>
+                  <span
+                    class={`text-xs font-semibold ${playerNameClasses(item.playerId)}`}
+                  >
                     {item.playerName}
                   </span>
-                  <span class="text-[10px] uppercase tracking-wide text-neutral-600">
+                  <span
+                    class="text-[10px] uppercase tracking-wide text-neutral-600"
+                  >
                     Turn {item.turn}
                   </span>
                 </div>
