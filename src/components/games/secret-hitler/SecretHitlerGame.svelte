@@ -2065,7 +2065,9 @@
 </script>
 
 <section class="h-full overflow-auto bg-neutral-950 px-6 py-6 text-neutral-100">
-  <div class="mx-auto grid max-w-[2050px] gap-4 xl:grid-cols-[1fr_520px_360px]">
+  <div
+    class="mx-auto grid max-w-[2050px] items-stretch gap-4 xl:grid-cols-[1fr_520px_360px]"
+  >
     <section class="rounded-md border border-neutral-800 bg-neutral-900 p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -2340,7 +2342,16 @@
             <div>
               <h2 class="text-sm font-semibold">Vote on Government</h2>
               <p class="mt-2 text-sm text-neutral-400">
-                Proposed government: {presidentName} and {nomineeName}
+                Proposed government:
+                <span class={`font-semibold ${playerNameClasses(president)}`}>
+                  {presidentName}
+                </span>
+                and
+                <span
+                  class={`font-semibold ${playerNameClasses(nominee ?? president)}`}
+                >
+                  {nomineeName}
+                </span>
               </p>
               {#if ballotRevealPending}
                 <p class="mt-1 text-xs text-amber-200">
@@ -2912,7 +2923,7 @@
     </section>
 
     <aside
-      class="flex h-[calc(100vh-8rem)] min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
+      class="flex min-h-[calc(100vh-8rem)] flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-sm font-semibold">Players</h2>
@@ -2922,14 +2933,14 @@
       </div>
 
       <div
-        class={`mt-3 grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 ${
+        class={`mt-3 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pr-1 ${
           players.length > 5 ? 'grid-cols-2' : 'grid-cols-1'
         }`}
       >
         {#each players as player}
           {@const visibleRole = visibleRoleFor(identityViewer, player)}
           <div
-            class={`rounded-md border p-3 ${
+            class={`flex h-[17.5rem] flex-col overflow-hidden rounded-md border p-3 ${
               !player.alive
                 ? 'border-neutral-800 bg-neutral-950 opacity-60'
                 : player.id === president
@@ -3036,7 +3047,7 @@
               {/if}
             </div>
 
-            <div class="mt-3 flex justify-center gap-3">
+            <div class="mt-3 flex flex-1 items-center justify-center gap-3">
               <div class="w-20 shrink-0">
                 <div
                   class={`overflow-hidden rounded-md border p-1 ${roleBadgeClasses(
@@ -3090,7 +3101,7 @@
     </aside>
 
     <aside
-      class="flex h-[calc(100vh-8rem)] min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
+      class="flex min-h-[calc(100vh-8rem)] flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
     >
       <section
         class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3"
