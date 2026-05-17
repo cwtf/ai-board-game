@@ -705,12 +705,12 @@
     for (const edge of analystEdges) {
       const from = Math.min(edge.from, edge.to);
       const to = Math.max(edge.from, edge.to);
-      const existing = analystReads.get(`${from}:${to}`);
+      const existing = analystReads.get(relationshipKey(from, to));
       if (
         !existing ||
         relationshipRank(edge.status) >= relationshipRank(existing.status)
       ) {
-        analystReads.set(`${from}:${to}`, { ...edge, from, to });
+        analystReads.set(relationshipKey(from, to), { ...edge, from, to });
       }
     }
 
@@ -718,7 +718,7 @@
     for (let left = 0; left < tablePlayers.length; left += 1) {
       for (let right = left + 1; right < tablePlayers.length; right += 1) {
         edges.push(
-          analystReads.get(`${left}:${right}`) ?? {
+          analystReads.get(relationshipKey(left, right)) ?? {
             from: left,
             to: right,
             status: 'neutral',
@@ -729,6 +729,43 @@
     }
 
     return edges;
+  }
+
+  function relationshipKey(from: number, to: number): string {
+    return `${Math.min(from, to)}:${Math.max(from, to)}`;
+  }
+
+  function mergeTableReadEdges(
+    savedEdges: RelationshipEdge[],
+    newEdges: RelationshipEdge[],
+  ): RelationshipEdge[] {
+    const merged = new Map<string, RelationshipEdge>();
+    for (const edge of completeRelationshipEdges(players, savedEdges)) {
+      merged.set(relationshipKey(edge.from, edge.to), edge);
+    }
+
+    for (const edge of newEdges) {
+      const key = relationshipKey(edge.from, edge.to);
+      const normalizedEdge = {
+        ...edge,
+        from: Math.min(edge.from, edge.to),
+        to: Math.max(edge.from, edge.to),
+      };
+
+      if (normalizedEdge.status === 'neutral') {
+        const existing = merged.get(key);
+        if (!existing || existing.status === 'neutral') {
+          merged.set(key, normalizedEdge);
+        }
+        continue;
+      }
+
+      merged.set(key, normalizedEdge);
+    }
+
+    return Array.from(merged.values()).sort(
+      (left, right) => left.from - right.from || left.to - right.to,
+    );
   }
 
   function normalizeRelationshipStatus(
@@ -835,7 +872,7 @@
 
       const left = Math.min(from, to);
       const right = Math.max(from, to);
-      const key = `${left}:${right}`;
+      const key = relationshipKey(left, right);
       const existing = edges.get(key);
       const nextEdge = {
         from: left,
@@ -947,13 +984,24 @@
             name: player.name,
             alive: player.alive,
           })),
+          savedRoomState: completeRelationshipEdges(
+            players,
+            tableReadEdges,
+          ).map((edge) => ({
+            from: edge.from,
+            to: edge.to,
+            status: edge.status,
+            summary: edge.summary,
+          })),
           publicChat: chatMessages
             .slice(-40)
             .map(({ id: _id, ...item }) => item),
           expectedRelationships: expectedPairCount,
           instructions: [
+            'Update the savedRoomState using only new public evidence from chat.',
             'Return exactly one relationship entry for every unordered pair of players.',
-            'Use neutral when public chat does not clearly support trust, suspicion, or accusation.',
+            'Use neutral when there is no new finding for a pair; neutral will not erase an existing non-neutral saved read.',
+            'Return trust, suspicious, or accused only when public chat supports a new or changed association.',
             'Do not omit quiet pairs.',
             'Keep summaries under 80 characters.',
           ],
@@ -981,8 +1029,10 @@
           system: [
             'You are a neutral table-read analyst for a Secret Hitler game.',
             'Use only public chat and public player names. Do not infer from hidden roles, private hands, or secret information.',
+            'You are updating a saved room-state graph. Preserve prior non-neutral associations unless newer public chat supports changing them.',
+            'A neutral output means no new finding for that pair; it must not be used to erase prior trust, suspicion, or accusation.',
             `Return exactly ${expectedPairCount} relationship entries: one for every unordered player pair.`,
-            'Use neutral for unclear, quiet, or unsupported pairs. Do not omit pairs.',
+            'Use neutral for unclear, quiet, unsupported, or unchanged pairs. Do not omit pairs.',
             'Return pairs in stable ascending order by from, then to.',
             'Statuses are trust, neutral, suspicious, or accused. accused means a player is being treated as Fascist/Hitler, not merely discussing Fascist policies.',
             'Return exactly one complete minified JSON object: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}]}.',
@@ -1009,19 +1059,31 @@
               },
               {
                 role: 'user' as const,
-                content: `Partial relationship map: ${lastError}. Return all ${expectedPairCount} unordered player pairs. Use neutral for pairs with no clear evidence. Return exactly one JSON object with {"relationships":[...]}.`,
+                content: `Partial relationship map: ${lastError}. Return all ${expectedPairCount} unordered player pairs. Use neutral for pairs with no new finding; neutral will not erase saved non-neutral reads. Return exactly one JSON object with {"relationships":[...]}.`,
               },
             );
             continue;
           }
 
-          tableReadEdges = parsed.edges;
+          const mergedEdges = mergeTableReadEdges(tableReadEdges, parsed.edges);
+          const preservedCount = mergedEdges.filter((edge) => {
+            const incoming = parsed.edges.find(
+              (item) =>
+                relationshipKey(item.from, item.to) ===
+                relationshipKey(edge.from, edge.to),
+            );
+            return (
+              edge.status !== 'neutral' &&
+              (!incoming || incoming.status === 'neutral')
+            );
+          }).length;
+          tableReadEdges = mergedEdges;
           lastSuccessfulTableReadKey = snapshotKey;
           tableReadWarning = '';
           tableReadStatus =
             parsed.returnedPairCount >= expectedPairCount
-              ? `Room read updated with all ${expectedPairCount} relationships mapped.`
-              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} relationships. Missing pairs are shown neutral.`;
+              ? `Room read updated with all ${expectedPairCount} relationships mapped; ${preservedCount} saved non-neutral read${preservedCount === 1 ? '' : 's'} preserved.`
+              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} relationships; saved non-neutral reads were preserved.`;
           return;
         } catch (error) {
           lastError =
@@ -1030,7 +1092,7 @@
             { role: 'assistant' as const, content: result.text.slice(0, 4000) },
             {
               role: 'user' as const,
-              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries, one for every unordered player pair. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}]}. Valid statuses: trust, neutral, suspicious, accused.`,
+              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries, one for every unordered player pair. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no new finding"}]}. Valid statuses: trust, neutral, suspicious, accused. Neutral means no new finding and will not erase saved non-neutral reads.`,
             },
           );
         }
@@ -2058,7 +2120,7 @@
               aria-hidden="true"
             />
             <div
-              class="absolute left-[13.7%] top-[30.5%] grid h-[43.7%] w-[72.8%] grid-cols-5 gap-[1.5%]"
+              class="absolute left-[13.6%] top-[27.5%] grid h-[42.3%] w-[72.2%] grid-cols-5 gap-[1.35%]"
             >
               {#each liberalSpaces as space, index}
                 <div class="relative min-w-0 overflow-hidden rounded-sm">
@@ -2098,7 +2160,7 @@
               aria-hidden="true"
             />
             <div
-              class="absolute left-[3.4%] top-[43.1%] grid h-[30.8%] w-[93.2%] grid-cols-6 gap-[0.7%]"
+              class="absolute left-[13.35%] top-[40.1%] grid h-[36.8%] w-[73.2%] grid-cols-6 gap-[0.75%]"
             >
               {#each fascistPowersByPlayerCount[playerCount] as power, index}
                 <div class="relative min-w-0 overflow-hidden rounded-sm">
