@@ -56,6 +56,21 @@
     phase: Phase;
   }
 
+  type RelationshipStatus = 'trust' | 'neutral' | 'suspicious' | 'accused';
+
+  interface RelationshipEdge {
+    from: number;
+    to: number;
+    status: RelationshipStatus;
+    summary: string;
+  }
+
+  interface ParsedTableRead {
+    edges: RelationshipEdge[];
+    rejectedCount: number;
+    returnedPairCount: number;
+  }
+
   type PlayerProfileSelections = Record<number, string>;
 
   const HUMAN_PROFILE = '__human__';
@@ -84,6 +99,48 @@
     'special-election': 'Special election',
     execution: 'Execution',
   };
+  const relationshipLegend: RelationshipStatus[] = [
+    'trust',
+    'suspicious',
+    'accused',
+    'neutral',
+  ];
+  const germanPlayerNames = [
+    'Klara',
+    'Lukas',
+    'Greta',
+    'Felix',
+    'Anja',
+    'Hans',
+    'Marta',
+    'Otto',
+    'Heidi',
+    'Klaus',
+  ];
+  const playerNameColorClasses = [
+    'text-sky-300',
+    'text-emerald-300',
+    'text-amber-300',
+    'text-fuchsia-300',
+    'text-lime-300',
+    'text-orange-300',
+    'text-violet-300',
+    'text-cyan-300',
+    'text-rose-300',
+    'text-teal-300',
+  ];
+  const playerNameColors = [
+    '#7dd3fc',
+    '#6ee7b7',
+    '#fcd34d',
+    '#f0abfc',
+    '#bef264',
+    '#fdba74',
+    '#c4b5fd',
+    '#67e8f9',
+    '#fda4af',
+    '#5eead4',
+  ];
 
   let keys: StoredKeys = {};
   let playerCount = 5;
@@ -103,6 +160,7 @@
   let chancellorHand: Policy[] = [];
   let peekedPolicies: Policy[] = [];
   let votes: Record<number, Vote> = {};
+  let ballotRevealPending = false;
   let phase: Phase = 'nomination';
   let identityViewer = HUMAN_PLAYER_INDEX;
   let investigationResult = '';
@@ -111,10 +169,19 @@
   let turn = 1;
   let chatDraft = '';
   let chatMessages: ChatMessage[] = [];
+  let tableReadProfileId = '';
+  let tableReadEdges: RelationshipEdge[] = [];
+  let tableReadThinking = false;
+  let tableReadWarning = '';
+  let tableReadStatus = '';
+  let lastSuccessfulTableReadKey = '';
+  let lastAutoTableReadKey = '';
+  let lastExecutionNotice = '';
   let aiThinking = false;
   let aiWarning = '';
   let aiController: globalThis.AbortController | undefined;
   let chatReplyController: globalThis.AbortController | undefined;
+  let tableReadController: globalThis.AbortController | undefined;
   let lastUsage: TokenUsage | undefined;
   let totalUsage: TokenUsage = { input: 0, output: 0 };
   const answeredQuestionKeys = new Set<string>();
@@ -125,7 +192,7 @@
   $: alivePlayers = players.filter((player) => player.alive);
   $: presidentPlayer = players[president];
   $: nomineePlayer = nominee === null ? undefined : players[nominee];
-  $: presidentName = presidentPlayer?.name ?? 'Player 1';
+  $: presidentName = presidentPlayer?.name ?? germanPlayerName(0);
   $: nomineeName = nomineePlayer?.name ?? 'Not nominated';
   $: jaVotes = alivePlayers.filter((player) => votes[player.id] === 'ja').length;
   $: neinVotes = alivePlayers.filter((player) => votes[player.id] === 'nein').length;
@@ -143,11 +210,19 @@
     '';
   $: normalizePlayerProfileSelections(playerCount, defaultProfileId);
   $: normalizeIdentityViewer(playerCount);
+  $: normalizeTableReadProfile(defaultProfileId);
   $: currentActor = players.length
     ? secretHitlerAdapter.currentPlayer(toAdapterState())
     : HUMAN_PLAYER_INDEX;
   $: currentActorProfile = configuredProfileById(
     playerProfileSelections[currentActor] ?? HUMAN_PROFILE,
+  );
+  $: humanPlayer = players[HUMAN_PLAYER_INDEX];
+  $: humanCanChat = Boolean(humanPlayer?.alive);
+  $: humanIsPresident = president === HUMAN_PLAYER_INDEX;
+  $: relationshipEdges = completeRelationshipEdges(players, tableReadEdges);
+  $: activeRelationshipEdges = relationshipEdges.filter(
+    (edge) => edge.status !== 'neutral',
   );
 
   function refreshKeys() {
@@ -216,6 +291,52 @@
     if (latestChat) {
       maybeRequestQuestionReplies(latestChat);
     }
+  }
+
+  function allBallotsSubmitted(state: SecretHitlerState): boolean {
+    return state.players
+      .filter((player) => player.alive)
+      .every((player) => state.votes[player.id]);
+  }
+
+  function stateWithTableTalk(
+    state: SecretHitlerState,
+    playerId: number,
+    tableTalk?: string,
+  ): SecretHitlerState {
+    const body = tableTalk?.trim();
+    const speaker = state.players[playerId];
+    if (!body || !speaker) {
+      return state;
+    }
+
+    return {
+      ...state,
+      chatMessages: [
+        ...state.chatMessages,
+        {
+          playerId: speaker.id,
+          playerName: speaker.name,
+          body: body.slice(0, 500),
+          turn: state.turn,
+          phase: state.phase,
+        },
+      ],
+    };
+  }
+
+  function pauseForBallotReveal() {
+    ballotRevealPending = true;
+    message = 'All ballots are in. Review the votes, then press Next.';
+  }
+
+  function continueAfterBallotReveal() {
+    if (!ballotRevealPending) {
+      return;
+    }
+
+    ballotRevealPending = false;
+    resolveVote();
   }
 
   function messageForState(state: SecretHitlerState): string {
@@ -289,8 +410,8 @@
       id: index,
       name:
         index === HUMAN_PLAYER_INDEX
-          ? 'Player 1 (You)'
-          : `Player ${index + 1}`,
+          ? `${germanPlayerName(index)} (You)`
+          : germanPlayerName(index),
       role,
       alive: true,
     }));
@@ -308,6 +429,7 @@
     chancellorHand = [];
     peekedPolicies = [];
     votes = {};
+    ballotRevealPending = false;
     phase = 'nomination';
     identityViewer = HUMAN_PLAYER_INDEX;
     investigationResult = '';
@@ -316,6 +438,11 @@
     turn = 1;
     chatDraft = '';
     chatMessages = [];
+    tableReadEdges = [];
+    tableReadWarning = '';
+    lastAutoTableReadKey = '';
+    lastSuccessfulTableReadKey = '';
+    lastExecutionNotice = '';
     answeredQuestionKeys.clear();
     aiWarning = '';
     lastUsage = undefined;
@@ -353,6 +480,27 @@
     return configuredProfiles.find((profile) => profile.id === profileId);
   }
 
+  function normalizeTableReadProfile(fallbackProfileId: string) {
+    if (!tableReadProfileId && fallbackProfileId) {
+      tableReadProfileId = fallbackProfileId;
+      tableReadWarning = '';
+      tableReadStatus = '';
+      lastSuccessfulTableReadKey = '';
+      return;
+    }
+
+    if (
+      tableReadProfileId &&
+      !configuredProfiles.some((profile) => profile.id === tableReadProfileId)
+    ) {
+      tableReadProfileId = fallbackProfileId;
+      tableReadEdges = [];
+      tableReadWarning = '';
+      tableReadStatus = '';
+      lastSuccessfulTableReadKey = '';
+    }
+  }
+
   function profileLabel(profile: ProviderModelProfile): string {
     return `${profile.label} (${getProvider(profile.provider).label})`;
   }
@@ -374,6 +522,19 @@
 
   function aiCanAct(playerIndex: number): boolean {
     return Boolean(modelProfileForPlayer(playerIndex));
+  }
+
+  function isExecutivePhase(value: Phase): boolean {
+    return (
+      value === 'policy-peek' ||
+      value === 'investigate' ||
+      value === 'special-election' ||
+      value === 'execution'
+    );
+  }
+
+  function canContinueAIExecutivePower(): boolean {
+    return isExecutivePhase(phase) && aiCanAct(president) && !aiThinking;
   }
 
   function createAbortController() {
@@ -430,10 +591,446 @@
     throw new Error(lastError || 'AI did not return a valid move.');
   }
 
+  function fallbackAIExecutiveMove(
+    state: SecretHitlerState,
+    legalMoves: SecretHitlerMove[],
+  ): SecretHitlerMove | undefined {
+    if (!isExecutivePhase(state.phase)) {
+      return undefined;
+    }
+
+    if (state.phase === 'investigate' && state.investigationResult) {
+      return legalMoves.find((move) => move.kind === 'complete-investigation');
+    }
+
+    return legalMoves[0];
+  }
+
   function playerNameClasses(playerId: number): string {
-    return playerId === HUMAN_PLAYER_INDEX
-      ? 'text-sky-300'
-      : 'text-neutral-200';
+    return playerNameColorClasses[playerId % playerNameColorClasses.length];
+  }
+
+  function playerNameColor(playerId: number): string {
+    return playerNameColors[playerId % playerNameColors.length];
+  }
+
+  function lifeBadgeClasses(player: Player): string {
+    return player.alive
+      ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-100'
+      : 'border-red-400/50 bg-red-500/10 text-red-100';
+  }
+
+  function lifeBadgeLabel(player: Player): string {
+    return player.alive ? 'Alive' : 'Dead';
+  }
+
+  function germanPlayerName(playerId: number): string {
+    return germanPlayerNames[playerId % germanPlayerNames.length];
+  }
+
+  function displayNameFor(playerId: number): string {
+    return players[playerId]?.name ?? germanPlayerName(playerId);
+  }
+
+  function relationshipSummary(edge: RelationshipEdge): string {
+    if (edge.status === 'neutral') {
+      return `${displayNameFor(edge.from)} and ${displayNameFor(edge.to)}: Neutral`;
+    }
+    return `${displayNameFor(edge.from)} and ${displayNameFor(edge.to)}: ${edge.summary}`;
+  }
+
+  function completeRelationshipEdges(
+    tablePlayers: Player[],
+    analystEdges: RelationshipEdge[],
+  ): RelationshipEdge[] {
+    const analystReads = new Map<string, RelationshipEdge>();
+    for (const edge of analystEdges) {
+      const from = Math.min(edge.from, edge.to);
+      const to = Math.max(edge.from, edge.to);
+      const existing = analystReads.get(`${from}:${to}`);
+      if (!existing || relationshipRank(edge.status) >= relationshipRank(existing.status)) {
+        analystReads.set(`${from}:${to}`, { ...edge, from, to });
+      }
+    }
+
+    const edges: RelationshipEdge[] = [];
+    for (let left = 0; left < tablePlayers.length; left += 1) {
+      for (let right = left + 1; right < tablePlayers.length; right += 1) {
+        edges.push(
+          analystReads.get(`${left}:${right}`) ?? {
+            from: left,
+            to: right,
+            status: 'neutral',
+            summary: 'Neutral read',
+          },
+        );
+      }
+    }
+
+    return edges;
+  }
+
+  function normalizeRelationshipStatus(value: unknown): RelationshipStatus | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const normalized = value.trim().toLowerCase().replace(/[_-]/g, ' ');
+    if (normalized === 'trust' || normalized === 'trusting') {
+      return 'trust';
+    }
+    if (normalized === 'neutral') {
+      return 'neutral';
+    }
+    if (normalized === 'suspicious' || normalized === 'suspect') {
+      return 'suspicious';
+    }
+    if (
+      normalized === 'accused' ||
+      normalized === 'accusing fascist' ||
+      normalized === 'accuses fascist' ||
+      normalized === 'fascist accusation'
+    ) {
+      return 'accused';
+    }
+    return undefined;
+  }
+
+  function numericPlayerId(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+      return Number(value);
+    }
+    return undefined;
+  }
+
+  function relationshipPairCount(count: number): number {
+    return (count * (count - 1)) / 2;
+  }
+
+  function tableReadSnapshotKey(profile: ProviderModelProfile): string {
+    return JSON.stringify({
+      profileId: profile.id,
+      provider: profile.provider,
+      model: profile.model,
+      players: players.map((player) => ({
+        id: player.id,
+        name: player.name,
+        alive: player.alive,
+      })),
+      publicChat: chatMessages.map(({ playerId, playerName, body, turn, phase }) => ({
+        playerId,
+        playerName,
+        body,
+        turn,
+        phase,
+      })),
+    });
+  }
+
+  function parseTableReadResponse(response: string): ParsedTableRead {
+    const payload = JSON.parse(extractJsonObject(response)) as {
+      relationships?: unknown;
+    };
+    if (!Array.isArray(payload.relationships)) {
+      throw new Error('Table read response must include relationships.');
+    }
+
+    const playerIds = new Set(players.map((player) => player.id));
+    const edges = new Map<string, RelationshipEdge>();
+    let rejectedCount = 0;
+    for (const item of payload.relationships) {
+      if (!item || typeof item !== 'object') {
+        rejectedCount += 1;
+        continue;
+      }
+
+      const candidate = item as {
+        from?: unknown;
+        to?: unknown;
+        status?: unknown;
+        summary?: unknown;
+      };
+      const from = numericPlayerId(candidate.from);
+      const to = numericPlayerId(candidate.to);
+      const status = normalizeRelationshipStatus(candidate.status);
+      if (
+        from === undefined ||
+        to === undefined ||
+        from === to ||
+        !playerIds.has(from) ||
+        !playerIds.has(to) ||
+        !status
+      ) {
+        rejectedCount += 1;
+        continue;
+      }
+
+      const left = Math.min(from, to);
+      const right = Math.max(from, to);
+      const key = `${left}:${right}`;
+      const existing = edges.get(key);
+      const nextEdge = {
+        from: left,
+        to: right,
+        status,
+        summary:
+          typeof candidate.summary === 'string' && candidate.summary.trim()
+            ? candidate.summary.trim().slice(0, 120)
+            : relationshipLabel(status),
+      };
+      if (!existing || relationshipRank(nextEdge.status) >= relationshipRank(existing.status)) {
+        edges.set(key, nextEdge);
+      }
+    }
+
+    if (edges.size === 0 && rejectedCount > 0) {
+      throw new Error(
+        `Table read response had ${rejectedCount} invalid relationship entr${rejectedCount === 1 ? 'y' : 'ies'}.`,
+      );
+    }
+
+    return {
+      edges: Array.from(edges.values()),
+      rejectedCount,
+      returnedPairCount: edges.size,
+    };
+  }
+
+  function extractJsonObject(response: string): string {
+    const trimmed = response.trim();
+    const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const candidate = fenced?.[1]?.trim() ?? trimmed;
+    const start = candidate.indexOf('{');
+    const end = candidate.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      return candidate;
+    }
+    return candidate.slice(start, end + 1);
+  }
+
+  function selectTableReadProfile(profileId: string) {
+    tableReadProfileId = profileId;
+    tableReadWarning = '';
+    tableReadStatus = '';
+    tableReadEdges = [];
+    lastSuccessfulTableReadKey = '';
+    tableReadController?.abort();
+    if (profileId && chatMessages.length) {
+      void requestTableReads();
+    }
+  }
+
+  function maybeAutoReadRoom() {
+    if (!tableReadProfileId || chatMessages.length === 0 || tableReadThinking) {
+      return;
+    }
+
+    const key = `${turn}:${phase}:${chatMessages.length}`;
+    if (lastAutoTableReadKey === key) {
+      return;
+    }
+
+    lastAutoTableReadKey = key;
+    void requestTableReads({ silent: true });
+  }
+
+  async function requestTableReads(opts: { silent?: boolean } = {}) {
+    const profile = configuredProfileById(tableReadProfileId);
+    if (!profile || tableReadThinking) {
+      return;
+    }
+    if (chatMessages.length === 0) {
+      tableReadEdges = [];
+      lastSuccessfulTableReadKey = '';
+      if (!opts.silent) {
+        tableReadWarning = 'No public chat yet.';
+        tableReadStatus = '';
+      }
+      return;
+    }
+
+    const snapshotKey = tableReadSnapshotKey(profile);
+    if (snapshotKey === lastSuccessfulTableReadKey && tableReadEdges.length) {
+      if (!opts.silent) {
+        tableReadWarning = '';
+        tableReadStatus = 'Room read is already up to date for the current chat.';
+      }
+      return;
+    }
+
+    tableReadThinking = true;
+    tableReadWarning = '';
+    tableReadStatus = opts.silent ? 'Auto-reading room...' : 'Reading room...';
+    tableReadController?.abort();
+    tableReadController = createAbortController();
+    const providerId = profile.provider as ProviderId;
+    const expectedPairCount = relationshipPairCount(players.length);
+    const messages = [
+      {
+        role: 'user' as const,
+        content: JSON.stringify({
+          game: 'secret-hitler',
+          players: players.map((player) => ({
+            id: player.id,
+            name: player.name,
+            alive: player.alive,
+          })),
+          publicChat: chatMessages
+            .slice(-40)
+            .map(({ id: _id, ...item }) => item),
+          expectedRelationships: expectedPairCount,
+          instructions: [
+            'Return exactly one relationship entry for every unordered pair of players.',
+            'Use neutral when public chat does not clearly support trust, suspicion, or accusation.',
+            'Do not omit quiet pairs.',
+            'Keep summaries under 80 characters.',
+          ],
+          responseSchema: {
+            relationships: [
+              {
+                from: 0,
+                to: 1,
+                status: 'trust | neutral | suspicious | accused',
+                summary: 'short public reason',
+              },
+            ],
+          },
+        }),
+      },
+    ];
+    let lastError = '';
+
+    try {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const result = await getProvider(providerId).complete({
+          apiKey: keys[providerId],
+          endpointUrl: providerEndpointFor(providerId, keys),
+          model: profile.model,
+          system: [
+            'You are a neutral table-read analyst for a Secret Hitler game.',
+            'Use only public chat and public player names. Do not infer from hidden roles, private hands, or secret information.',
+            `Return exactly ${expectedPairCount} relationship entries: one for every unordered player pair.`,
+            'Use neutral for unclear, quiet, or unsupported pairs. Do not omit pairs.',
+            'Return pairs in stable ascending order by from, then to.',
+            'Statuses are trust, neutral, suspicious, or accused. accused means a player is being treated as Fascist/Hitler, not merely discussing Fascist policies.',
+            'Return exactly one complete minified JSON object: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}]}.',
+            'No markdown, no code fences, no prose, no trailing commas.',
+          ].join(' '),
+          messages,
+          responseFormat: 'json',
+          temperature: 0,
+          maxTokens: 3200,
+          signal: tableReadController.signal,
+        });
+
+        lastUsage = result.usage;
+        totalUsage = addUsage(totalUsage, result.usage);
+
+        try {
+          const parsed = parseTableReadResponse(result.text);
+          if (parsed.returnedPairCount < expectedPairCount && attempt < 3) {
+            lastError = `Only ${parsed.returnedPairCount}/${expectedPairCount} player pairs were returned.`;
+            messages.push(
+              { role: 'assistant' as const, content: result.text.slice(0, 4000) },
+              {
+                role: 'user' as const,
+                content: `Partial relationship map: ${lastError}. Return all ${expectedPairCount} unordered player pairs. Use neutral for pairs with no clear evidence. Return exactly one JSON object with {"relationships":[...]}.`,
+              },
+            );
+            continue;
+          }
+
+          tableReadEdges = parsed.edges;
+          lastSuccessfulTableReadKey = snapshotKey;
+          tableReadWarning = '';
+          tableReadStatus =
+            parsed.returnedPairCount >= expectedPairCount
+              ? `Room read updated with all ${expectedPairCount} relationships mapped.`
+              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} relationships. Missing pairs are shown neutral.`;
+          return;
+        } catch (error) {
+          lastError =
+            error instanceof Error ? error.message : 'Invalid table-read JSON.';
+          messages.push(
+            { role: 'assistant' as const, content: result.text.slice(0, 4000) },
+            {
+              role: 'user' as const,
+              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries, one for every unordered player pair. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}]}. Valid statuses: trust, neutral, suspicious, accused.`,
+            },
+          );
+        }
+      }
+
+      throw new Error(lastError || 'Analyst did not return valid JSON.');
+    } catch (error) {
+      if (!tableReadController.signal.aborted) {
+        tableReadWarning =
+          error instanceof Error
+            ? `Read Room failed: ${error.message}`
+            : 'Read Room failed.';
+        tableReadStatus = 'Last read failed. Try again, or select a stricter model.';
+      }
+    } finally {
+      tableReadThinking = false;
+    }
+  }
+
+  function relationshipRank(status: RelationshipStatus): number {
+    if (status === 'accused') {
+      return 3;
+    }
+    if (status === 'suspicious') {
+      return 2;
+    }
+    if (status === 'trust') {
+      return 1;
+    }
+    return 0;
+  }
+
+  function relationshipLabel(status: RelationshipStatus): string {
+    if (status === 'accused') {
+      return 'Accusing fascist';
+    }
+    if (status === 'suspicious') {
+      return 'Suspicious';
+    }
+    if (status === 'trust') {
+      return 'Trusting';
+    }
+    return 'Neutral';
+  }
+
+  function relationshipStroke(status: RelationshipStatus): string {
+    if (status === 'accused') {
+      return '#f87171';
+    }
+    if (status === 'suspicious') {
+      return '#fbbf24';
+    }
+    if (status === 'trust') {
+      return '#34d399';
+    }
+    return '#525252';
+  }
+
+  function relationshipStrokeWidth(status: RelationshipStatus): number {
+    return status === 'neutral' ? 0.4 : 1.6;
+  }
+
+  function relationshipOpacity(status: RelationshipStatus): number {
+    return status === 'neutral' ? 0.22 : 0.78;
+  }
+
+  function relationshipNodePosition(index: number, count: number) {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(1, count);
+    return {
+      x: 50 + Math.cos(angle) * 38,
+      y: 50 + Math.sin(angle) * 38,
+    };
   }
 
   function isQuestion(body: string): boolean {
@@ -550,7 +1147,7 @@
   }
 
   async function runAI() {
-    if (aiThinking || phase === 'game-over' || winner) {
+    if (aiThinking || ballotRevealPending || phase === 'game-over' || winner) {
       return;
     }
 
@@ -579,14 +1176,60 @@
           break;
         }
 
-        const move = await requestAIAction(
-          state,
-          player,
-          legalMoves,
-          profile,
-          aiController.signal,
-        );
-        loadAdapterState(secretHitlerAdapter.applyMove(state, move));
+        let move: SecretHitlerMove;
+        try {
+          move = await requestAIAction(
+            state,
+            player,
+            legalMoves,
+            profile,
+            aiController.signal,
+          );
+        } catch (error) {
+          const fallbackMove = fallbackAIExecutiveMove(state, legalMoves);
+          if (!fallbackMove) {
+            throw error;
+          }
+
+          move = fallbackMove;
+          aiWarning = `${
+            state.players[player]?.name ?? 'AI player'
+          } did not return a valid executive move, so a legal fallback was used.`;
+        }
+
+        if (state.phase === 'voting' && move.kind === 'vote') {
+          const voted = {
+            ...stateWithTableTalk(state, player, move.tableTalk),
+            votes: { ...state.votes, [player]: move.vote },
+          };
+          if (allBallotsSubmitted(voted)) {
+            loadAdapterState(voted);
+            pauseForBallotReveal();
+            break;
+          }
+        }
+
+        const nextState = secretHitlerAdapter.applyMove(state, move);
+        loadAdapterState(nextState);
+        if (move.kind === 'execute') {
+          const target = state.players[move.playerId];
+          if (target) {
+            lastExecutionNotice = `${target.name} was executed.`;
+            message =
+              target.role === 'hitler'
+                ? 'Hitler was executed. Liberals win.'
+                : `${target.name} was executed.`;
+          }
+        }
+        if (
+          nextState.phase === 'nomination' &&
+          (nextState.turn !== state.turn || state.phase === 'veto')
+        ) {
+          maybeAutoReadRoom();
+        }
+        if (state.phase !== nextState.phase && isExecutivePhase(nextState.phase)) {
+          break;
+        }
       }
     } catch (error) {
       if (!aiController.signal.aborted) {
@@ -712,6 +1355,7 @@
 
     nominee = playerId;
     votes = Object.fromEntries(alivePlayers.map((item) => [item.id, null]));
+    ballotRevealPending = false;
     phase = 'voting';
     message = `${presidentName} nominated ${player.name}. Cast votes.`;
     void runAI();
@@ -728,14 +1372,39 @@
   function castHumanVote(vote: Exclude<Vote, null>) {
     recordVote(HUMAN_PLAYER_INDEX, vote);
     if (alivePlayers.every((player) => votes[player.id])) {
-      resolveVote();
+      pauseForBallotReveal();
       return;
     }
     void runAI();
   }
 
   function canManuallyVote(player: Player): boolean {
-    return phase === 'voting' && player.id === HUMAN_PLAYER_INDEX && player.alive;
+    return (
+      phase === 'voting' &&
+      !ballotRevealPending &&
+      player.id === HUMAN_PLAYER_INDEX &&
+      player.alive
+    );
+  }
+
+  function voteLabel(vote: Vote): string {
+    if (vote === 'ja') {
+      return 'Ja';
+    }
+    if (vote === 'nein') {
+      return 'Nein';
+    }
+    return 'Awaiting';
+  }
+
+  function voteRevealClasses(vote: Vote): string {
+    if (vote === 'ja') {
+      return 'border-emerald-300/60 bg-emerald-400/15 text-emerald-100';
+    }
+    if (vote === 'nein') {
+      return 'border-red-300/60 bg-red-400/15 text-red-100';
+    }
+    return 'border-neutral-700 bg-neutral-950 text-neutral-500';
   }
 
   function reshuffleIfNeeded() {
@@ -771,6 +1440,8 @@
       return;
     }
 
+    ballotRevealPending = false;
+
     if (!passed) {
       failElection('Government rejected.');
       void runAI();
@@ -803,6 +1474,7 @@
   function failElection(reason: string) {
     electionTracker += 1;
     votes = {};
+    ballotRevealPending = false;
     nominee = null;
     presidentHand = [];
     chancellorHand = [];
@@ -815,6 +1487,7 @@
     message = `${reason} Election tracker advanced.`;
     advancePresident();
     phase = 'nomination';
+    maybeAutoReadRoom();
   }
 
   function enactTopPolicyFromDeck() {
@@ -838,6 +1511,7 @@
       message = `Election tracker filled. Top ${policyLabel(topPolicy)} policy enacted with no executive power.`;
       advancePresident();
       phase = 'nomination';
+      maybeAutoReadRoom();
     }
   }
 
@@ -871,7 +1545,9 @@
     discardPile = [...discardPile, ...chancellorHand.filter((_, item) => item !== index)];
     chancellorHand = [];
     enactPolicy(policy);
-    void runAI();
+    if (!isExecutivePhase(phase)) {
+      void runAI();
+    }
   }
 
   function requestVeto() {
@@ -956,17 +1632,13 @@
     advancePresident();
     phase = 'nomination';
     turn += 1;
+    maybeAutoReadRoom();
   }
 
   function advancePresident() {
     if (specialReturnPresident !== null) {
       const returnPresident = specialReturnPresident;
       specialReturnPresident = null;
-
-      if (president === returnPresident) {
-        president = nextAliveAfter(president);
-        return;
-      }
 
       if (players[returnPresident]?.alive) {
         president = returnPresident;
@@ -991,7 +1663,12 @@
 
   function investigate(playerId: number) {
     const player = players[playerId];
-    if (phase !== 'investigate' || !player || player.id === president) {
+    if (
+      phase !== 'investigate' ||
+      !humanIsPresident ||
+      !player ||
+      player.id === president
+    ) {
       return;
     }
 
@@ -1009,7 +1686,12 @@
 
   function chooseSpecialPresident(playerId: number) {
     const player = players[playerId];
-    if (phase !== 'special-election' || !player?.alive || player.id === president) {
+    if (
+      phase !== 'special-election' ||
+      !humanIsPresident ||
+      !player?.alive ||
+      player.id === president
+    ) {
       return;
     }
 
@@ -1025,13 +1707,19 @@
 
   function executePlayer(playerId: number) {
     const player = players[playerId];
-    if (phase !== 'execution' || !player?.alive || player.id === president) {
+    if (
+      phase !== 'execution' ||
+      !humanIsPresident ||
+      !player?.alive ||
+      player.id === president
+    ) {
       return;
     }
 
     players = players.map((item) =>
       item.id === playerId ? { ...item, alive: false } : item,
     );
+    lastExecutionNotice = `${player.name} was executed.`;
 
     if (player.role === 'hitler') {
       winner = 'Liberals win because Hitler was executed.';
@@ -1101,7 +1789,7 @@
   function sendChatMessage() {
     const body = chatDraft.trim();
     const author = players[HUMAN_PLAYER_INDEX];
-    if (!body || !author) {
+    if (!body || !author?.alive) {
       return;
     }
 
@@ -1126,6 +1814,7 @@
     }
     aiController?.abort();
     chatReplyController?.abort();
+    tableReadController?.abort();
   });
 </script>
 
@@ -1183,6 +1872,14 @@
           class="mt-4 rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-sm text-sky-100"
         >
           {message}
+        </div>
+      {/if}
+
+      {#if lastExecutionNotice}
+        <div
+          class="mt-3 rounded-md border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100"
+        >
+          Execution resolved: {lastExecutionNotice}
         </div>
       {/if}
 
@@ -1309,14 +2006,19 @@
               <p class="mt-2 text-sm text-neutral-400">
                 Proposed government: {presidentName} and {nomineeName}
               </p>
+              {#if ballotRevealPending}
+                <p class="mt-1 text-xs text-amber-200">
+                  Ballots are revealed. Continue when you are ready.
+                </p>
+              {/if}
             </div>
             <button
               class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
               type="button"
-              disabled={!allVotesCast}
-              on:click={resolveVote}
+              disabled={!ballotRevealPending || !allVotesCast}
+              on:click={continueAfterBallotReveal}
             >
-              Resolve Vote
+              {ballotRevealPending ? 'Next' : 'Waiting for ballots'}
             </button>
           </div>
           <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1324,7 +2026,13 @@
               <div class="rounded-md border border-neutral-800 bg-neutral-900 p-2">
                 <div class="flex items-center justify-between gap-2">
                   <div class="text-sm font-medium">{player.name}</div>
-                  {#if votes[player.id]}
+                  {#if ballotRevealPending && votes[player.id]}
+                    <span
+                      class={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${voteRevealClasses(votes[player.id])}`}
+                    >
+                      {voteLabel(votes[player.id])}
+                    </span>
+                  {:else if votes[player.id]}
                     <span
                       class="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-0.5 text-[10px] text-emerald-100"
                     >
@@ -1361,9 +2069,17 @@
                   </div>
                 {:else}
                   <div
-                    class="mt-2 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-center text-xs text-neutral-500"
+                    class={`mt-2 rounded-md border px-3 py-2 text-center text-xs ${
+                      ballotRevealPending
+                        ? voteRevealClasses(votes[player.id])
+                        : 'border-neutral-800 bg-neutral-950 text-neutral-500'
+                    }`}
                   >
-                    Private ballot controlled by {player.name}
+                    {#if ballotRevealPending}
+                      Vote: {voteLabel(votes[player.id])}
+                    {:else}
+                      Private ballot controlled by {player.name}
+                    {/if}
                   </div>
                 {/if}
               </div>
@@ -1468,7 +2184,18 @@
             </p>
           {/if}
         {:else if phase === 'policy-peek'}
-          <h2 class="text-sm font-semibold">Policy Peek</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold">Policy Peek</h2>
+            {#if canContinueAIExecutivePower()}
+              <button
+                class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+                type="button"
+                on:click={() => void runAI()}
+              >
+                Next
+              </button>
+            {/if}
+          </div>
           <p class="mt-2 text-sm text-neutral-400">
             {#if canViewPresidentCards()}
               President privately views the top three policies.
@@ -1504,7 +2231,18 @@
             </button>
           {/if}
         {:else if phase === 'investigate'}
-          <h2 class="text-sm font-semibold">Investigate Loyalty</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold">Investigate Loyalty</h2>
+            {#if canContinueAIExecutivePower()}
+              <button
+                class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+                type="button"
+                on:click={() => void runAI()}
+              >
+                Next
+              </button>
+            {/if}
+          </div>
           <p class="mt-2 text-sm text-neutral-400">
             Choose a player to reveal their party membership.
           </p>
@@ -1523,36 +2261,230 @@
             </button>
           {/if}
         {:else if phase === 'special-election'}
-          <h2 class="text-sm font-semibold">Special Election</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold">Special Election</h2>
+            {#if canContinueAIExecutivePower()}
+              <button
+                class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+                type="button"
+                on:click={() => void runAI()}
+              >
+                Next
+              </button>
+            {/if}
+          </div>
           <p class="mt-2 text-sm text-neutral-400">
             Choose a living player to become the next President. The presidency
             returns to the normal order afterward.
           </p>
         {:else if phase === 'execution'}
-          <h2 class="text-sm font-semibold">Execution</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold">Execution</h2>
+            {#if canContinueAIExecutivePower()}
+              <button
+                class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+                type="button"
+                on:click={() => void runAI()}
+              >
+                Let {presidentName} Execute
+              </button>
+            {/if}
+          </div>
           <p class="mt-2 text-sm text-neutral-400">
-            Choose one living player to execute. If Hitler is executed, Liberals
-            win immediately.
+            {presidentName} has the execution power. If Hitler is executed,
+            Liberals win immediately.
           </p>
+          {#if canContinueAIExecutivePower()}
+            <p class="mt-1 text-xs text-amber-200">
+              Press the button to let the AI President choose a target.
+            </p>
+          {:else if !humanIsPresident}
+            <p class="mt-1 text-xs text-amber-200">
+              Waiting for {presidentName}. Assign a model to this President if
+              you want them to resolve execution.
+            </p>
+          {/if}
         {:else}
           <h2 class="text-sm font-semibold">Game Over</h2>
           <p class="mt-2 text-sm text-neutral-400">{winner}</p>
         {/if}
       </section>
+
+      <section class="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold">Table Reads</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <select
+              class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+              value={tableReadProfileId}
+              disabled={configuredProfiles.length === 0 || tableReadThinking}
+              on:change={(event) => selectTableReadProfile(event.currentTarget.value)}
+            >
+              <option value="">Neutral analyst</option>
+              {#each configuredProfiles as profile (profile.id)}
+                <option value={profile.id}>
+                  {profileLabel(profile)}
+                </option>
+              {/each}
+            </select>
+            <button
+              class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-100 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40"
+              type="button"
+              disabled={!tableReadProfileId || tableReadThinking || chatMessages.length === 0}
+              on:click={() => void requestTableReads()}
+            >
+              {tableReadThinking ? 'Reading...' : 'Read room'}
+            </button>
+          </div>
+        </div>
+        {#if tableReadWarning}
+          <div
+            class="mt-3 rounded-md border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-xs text-amber-100"
+          >
+            {tableReadWarning}
+          </div>
+        {:else if tableReadStatus}
+          <div
+            class="mt-3 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs text-neutral-300"
+          >
+            {tableReadStatus}
+          </div>
+        {:else if !tableReadProfileId}
+          <p class="mt-2 text-xs text-neutral-500">
+            Select a configured model profile to act as the neutral analyst.
+          </p>
+        {/if}
+
+        <div class="mt-3 grid gap-4 lg:grid-cols-[1fr_240px]">
+          <svg
+            class="h-56 w-full rounded-md border border-neutral-900 bg-neutral-950"
+            viewBox="0 0 100 100"
+            role="img"
+            aria-label="Trust and suspicion relationships between players"
+          >
+            {#each relationshipEdges as edge}
+              {@const fromPosition = relationshipNodePosition(edge.from, players.length)}
+              {@const toPosition = relationshipNodePosition(edge.to, players.length)}
+              <line
+                x1={fromPosition.x}
+                y1={fromPosition.y}
+                x2={toPosition.x}
+                y2={toPosition.y}
+                stroke={relationshipStroke(edge.status)}
+                stroke-width={relationshipStrokeWidth(edge.status)}
+                opacity={relationshipOpacity(edge.status)}
+                stroke-linecap="round"
+              >
+                <title>{relationshipSummary(edge)}</title>
+              </line>
+            {/each}
+            {#each players as player, index}
+              {@const position = relationshipNodePosition(index, players.length)}
+              <circle
+                cx={position.x}
+                cy={position.y}
+                r="5.5"
+                fill={player.id === HUMAN_PLAYER_INDEX ? '#0c4a6e' : '#171717'}
+                stroke={player.alive ? '#737373' : '#404040'}
+                stroke-width="0.8"
+              />
+              <text
+                x={position.x}
+                y={position.y + 11}
+                text-anchor="middle"
+                class="text-[4.6px] font-semibold"
+                style={`fill:${playerNameColor(player.id)}`}
+              >
+                {player.name.replace(' (You)', '')}
+              </text>
+            {/each}
+          </svg>
+
+          <div class="min-h-0">
+            <div class="flex flex-wrap gap-2 text-[10px] text-neutral-400">
+              {#each relationshipLegend as status}
+                <span class="inline-flex items-center gap-1">
+                  <span
+                    class="h-2 w-4 rounded-full"
+                    style={`background:${relationshipStroke(status)}`}
+                  ></span>
+                  {relationshipLabel(status)}
+                </span>
+              {/each}
+            </div>
+
+            <div class="mt-3 max-h-52 space-y-1 overflow-y-auto pr-1 text-[11px] text-neutral-400">
+              {#if tableReadEdges.length}
+                {#each relationshipEdges as edge}
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="h-2 w-2 rounded-full"
+                      style={`background:${relationshipStroke(edge.status)}`}
+                    ></span>
+                    <span class={edge.status === 'neutral' ? 'text-neutral-500' : ''}>
+                      <span
+                        class="font-semibold"
+                        style={`color:${playerNameColor(edge.from)}`}
+                      >
+                        {displayNameFor(edge.from)}
+                      </span>
+                      <span class="text-neutral-500"> and </span>
+                      <span
+                        class="font-semibold"
+                        style={`color:${playerNameColor(edge.to)}`}
+                      >
+                        {displayNameFor(edge.to)}
+                      </span>
+                      <span>: {edge.summary}</span>
+                    </span>
+                  </div>
+                {/each}
+              {:else if activeRelationshipEdges.length}
+                {#each activeRelationshipEdges as edge}
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="h-2 w-2 rounded-full"
+                      style={`background:${relationshipStroke(edge.status)}`}
+                    ></span>
+                    <span>
+                      <span
+                        class="font-semibold"
+                        style={`color:${playerNameColor(edge.from)}`}
+                      >
+                        {displayNameFor(edge.from)}
+                      </span>
+                      <span class="text-neutral-500"> and </span>
+                      <span
+                        class="font-semibold"
+                        style={`color:${playerNameColor(edge.to)}`}
+                      >
+                        {displayNameFor(edge.to)}
+                      </span>
+                      <span>: {edge.summary}</span>
+                    </span>
+                  </div>
+                {/each}
+              {:else}
+                <div>No strong reads yet. Everyone starts neutral.</div>
+              {/if}
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
 
     <aside
-      class="h-[calc(100vh-8rem)] min-h-0 rounded-md border border-neutral-800 bg-neutral-900 p-4"
+      class="flex h-[calc(100vh-8rem)] min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900 p-4"
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-sm font-semibold">Players</h2>
         <span class="text-xs text-neutral-500">
-          Viewing as {players[HUMAN_PLAYER_INDEX]?.name ?? 'Player 1'}
+          Viewing as {players[HUMAN_PLAYER_INDEX]?.name ?? germanPlayerName(0)}
         </span>
       </div>
 
       <div
-        class={`mt-3 grid max-h-[calc(100vh-12rem)] gap-3 overflow-y-auto pr-1 ${
+        class={`mt-3 grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1 ${
           players.length > 5 ? 'grid-cols-2' : 'grid-cols-1'
         }`}
       >
@@ -1571,8 +2503,17 @@
           >
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class={`text-sm font-medium ${playerNameClasses(player.id)}`}>
-                  {player.name}
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class={`text-sm font-medium ${playerNameClasses(player.id)}`}>
+                    {player.name}
+                  </span>
+                  <span
+                    class={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase leading-none ${lifeBadgeClasses(
+                      player,
+                    )}`}
+                  >
+                    {lifeBadgeLabel(player)}
+                  </span>
                 </div>
                 <div class="text-xs text-neutral-500">
                   {playerStatus(player)}
@@ -1625,7 +2566,10 @@
                 <button
                   class="rounded-md border border-amber-300/50 px-3 py-1.5 text-xs text-amber-100 hover:border-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  disabled={!player.alive || player.id === president || Boolean(investigationResult)}
+                  disabled={!humanIsPresident ||
+                    !player.alive ||
+                    player.id === president ||
+                    Boolean(investigationResult)}
                   on:click={() => investigate(player.id)}
                 >
                   Investigate
@@ -1636,7 +2580,7 @@
                 <button
                   class="rounded-md border border-emerald-400/50 px-3 py-1.5 text-xs text-emerald-100 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  disabled={!player.alive || player.id === president}
+                  disabled={!humanIsPresident || !player.alive || player.id === president}
                   on:click={() => chooseSpecialPresident(player.id)}
                 >
                   Choose President
@@ -1647,7 +2591,7 @@
                 <button
                   class="rounded-md border border-red-400/50 px-3 py-1.5 text-xs text-red-100 hover:border-red-300 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
-                  disabled={!player.alive || player.id === president}
+                  disabled={!humanIsPresident || !player.alive || player.id === president}
                   on:click={() => executePlayer(player.id)}
                 >
                   Execute
@@ -1667,7 +2611,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h2 class="text-sm font-semibold">Table Chat</h2>
           <span class="text-xs text-neutral-500">
-            Speaking as {players[HUMAN_PLAYER_INDEX]?.name ?? 'Player 1'}
+            Speaking as {players[HUMAN_PLAYER_INDEX]?.name ?? germanPlayerName(0)}
           </span>
         </div>
 
@@ -1701,9 +2645,12 @@
 
         <div class="mt-3 shrink-0">
           <textarea
-            class="h-20 w-full resize-none rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600"
+            class="h-20 w-full resize-none rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
             maxlength="500"
-            placeholder={`Message as ${players[HUMAN_PLAYER_INDEX]?.name ?? 'Player 1'}`}
+            placeholder={humanCanChat
+              ? `Message as ${humanPlayer?.name ?? germanPlayerName(0)}`
+              : 'Executed players cannot chat'}
+            disabled={!humanCanChat}
             bind:value={chatDraft}
             on:keydown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -1714,12 +2661,14 @@
           ></textarea>
           <div class="mt-2 flex items-center justify-between gap-2">
             <span class="text-[10px] text-neutral-600">
-              Enter sends. Shift+Enter adds a line.
+              {humanCanChat
+                ? 'Enter sends. Shift+Enter adds a line.'
+                : 'You have been executed and can no longer talk.'}
             </span>
             <button
               class="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-600"
               type="button"
-              disabled={!chatDraft.trim()}
+              disabled={!humanCanChat || !chatDraft.trim()}
               on:click={sendChatMessage}
             >
               Send

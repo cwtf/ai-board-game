@@ -155,10 +155,6 @@ function advancePresident(state: SecretHitlerState): SecretHitlerState {
     const returnPresident = state.specialReturnPresident;
     const nextState = { ...state, specialReturnPresident: null };
 
-    if (state.president === returnPresident) {
-      return { ...nextState, president: nextAliveAfter(nextState, state.president) };
-    }
-
     if (state.players[returnPresident]?.alive) {
       return { ...nextState, president: returnPresident };
     }

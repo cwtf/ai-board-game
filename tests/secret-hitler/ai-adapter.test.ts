@@ -209,4 +209,58 @@ describe('Secret Hitler AI adapter', () => {
       },
     ]);
   });
+
+  it('unlocks the matching executive power when a fascist policy is enacted', () => {
+    const cases = [
+      { playerCount: 5, existingFascists: 2, expectedPhase: 'policy-peek' },
+      { playerCount: 5, existingFascists: 3, expectedPhase: 'execution' },
+      { playerCount: 7, existingFascists: 1, expectedPhase: 'investigate' },
+      { playerCount: 7, existingFascists: 2, expectedPhase: 'special-election' },
+    ] as const;
+
+    for (const item of cases) {
+      const state = secretHitlerAdapter.init({
+        seed: `power-${item.playerCount}-${item.existingFascists}`,
+        playerCount: item.playerCount,
+        aiPlayerIndices: [],
+      });
+      state.phase = 'chancellor-discard';
+      state.president = 0;
+      state.nominee = 1;
+      state.fascistPolicies = item.existingFascists;
+      state.chancellorHand = ['fascist', 'liberal'];
+      state.drawPile = ['liberal', 'fascist', 'liberal', 'fascist'];
+
+      const next = secretHitlerAdapter.applyMove(state, {
+        id: 'chancellor-enact:0',
+        kind: 'chancellor-enact',
+        index: 0,
+      }) as SecretHitlerState;
+
+      expect(next.fascistPolicies).toBe(item.existingFascists + 1);
+      expect(next.phase).toBe(item.expectedPhase);
+    }
+  });
+
+  it('returns special-election presidency to the stored normal-order player even after they served the special term', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'special-return',
+      playerCount: 7,
+      aiPlayerIndices: [],
+    });
+    state.phase = 'policy-peek';
+    state.president = 2;
+    state.previousChancellor = 2;
+    state.specialReturnPresident = 2;
+    state.peekedPolicies = ['liberal', 'fascist', 'fascist'];
+
+    const next = secretHitlerAdapter.applyMove(state, {
+      id: 'complete-policy-peek',
+      kind: 'complete-policy-peek',
+    }) as SecretHitlerState;
+
+    expect(next.phase).toBe('nomination');
+    expect(next.president).toBe(2);
+    expect(next.specialReturnPresident).toBeNull();
+  });
 });
