@@ -14,6 +14,7 @@ export interface GameMeta {
   hiddenInformation: boolean;
   estimatedAITurnTokens: number;
   docPath: string;
+  videoPath?: string;
 }
 
 export interface GameAdapter<State, Move> {

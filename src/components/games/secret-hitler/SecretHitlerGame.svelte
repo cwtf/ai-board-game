@@ -177,6 +177,7 @@
   let lastSuccessfulTableReadKey = '';
   let lastAutoTableReadKey = '';
   let lastExecutionNotice = '';
+  let lastExecutivePowerNotice = '';
   let aiThinking = false;
   let aiWarning = '';
   let aiController: globalThis.AbortController | undefined;
@@ -443,6 +444,7 @@
     lastAutoTableReadKey = '';
     lastSuccessfulTableReadKey = '';
     lastExecutionNotice = '';
+    lastExecutivePowerNotice = '';
     answeredQuestionKeys.clear();
     aiWarning = '';
     lastUsage = undefined;
@@ -1221,6 +1223,11 @@
                 : `${target.name} was executed.`;
           }
         }
+        if (state.phase !== nextState.phase && isExecutivePhase(nextState.phase)) {
+          lastExecutivePowerNotice = `${
+            powerLabels[nextState.phase as ExecutivePower]
+          } unlocked from Fascist policy ${nextState.fascistPolicies}.`;
+        }
         if (
           nextState.phase === 'nomination' &&
           (nextState.turn !== state.turn || state.phase === 'veto')
@@ -1611,11 +1618,20 @@
       if (power !== 'none') {
         phase = power;
         message = `${presidentName} must resolve ${powerLabels[power]}.`;
+        lastExecutivePowerNotice = `${powerLabels[power]} unlocked from Fascist policy ${fascistPolicies}.`;
         if (power === 'policy-peek') {
           peekedPolicies = drawPile.slice(0, 3);
         }
         return;
       }
+    }
+
+    if (policy === 'fascist' && opts.chaos) {
+      lastExecutivePowerNotice =
+        `Fascist policy ${fascistPolicies} was enacted by the election tracker, so no executive power resolves.`;
+    } else if (policy === 'fascist') {
+      lastExecutivePowerNotice =
+        `Fascist policy ${fascistPolicies} has no executive power for ${playerCount} players.`;
     }
 
     message = `${policyLabel(policy)} policy enacted.`;
@@ -1880,6 +1896,14 @@
           class="mt-3 rounded-md border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-100"
         >
           Execution resolved: {lastExecutionNotice}
+        </div>
+      {/if}
+
+      {#if lastExecutivePowerNotice}
+        <div
+          class="mt-3 rounded-md border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-sm text-amber-100"
+        >
+          {lastExecutivePowerNotice}
         </div>
       {/if}
 

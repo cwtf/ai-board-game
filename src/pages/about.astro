@@ -14,18 +14,93 @@ import '../styles/global.css';
   </head>
   <body class="min-h-screen bg-neutral-950 text-neutral-100">
     <Header client:load backHref="/" />
-    <main class="mx-auto max-w-3xl px-6 py-16">
+    <main class="mx-auto max-w-5xl px-6 py-16">
       <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
         About
       </p>
-      <h1 class="mt-4 text-4xl font-semibold tracking-normal">
-        Work in progress
+      <h1 class="mt-4 max-w-3xl text-4xl font-semibold tracking-normal sm:text-5xl">
+        A local-first board game table for AI opponents.
       </h1>
-      <p class="mt-4 text-neutral-300">
-        This page will describe the project, its local-first BYOK approach, and
-        how the board game engines use AI providers. The details are still being
-        shaped.
-      </p>
+      <div class="mt-6 max-w-3xl space-y-4 text-base leading-7 text-neutral-300">
+        <p>
+          AI Board Games is a browser-based playground for running tabletop
+          games against configurable AI players. You pick a game, choose which
+          model controls each seat, and keep the rules engine, board state, and
+          UI running locally in your browser.
+        </p>
+        <p>
+          The project uses a bring-your-own-key model. Provider credentials are
+          saved in browser storage on your machine, and AI turns are sent only to
+          the provider and model profile you select. The goal is to make it easy
+          to compare different models inside the same board game without hiding
+          the game state or player controls.
+        </p>
+      </div>
+
+      <section class="mt-10 grid gap-4 md:grid-cols-3">
+        <div class="rounded-md border border-neutral-800 bg-neutral-900 p-5">
+          <h2 class="text-lg font-semibold tracking-normal">Playable Games</h2>
+          <p class="mt-3 text-sm leading-6 text-neutral-400">
+            Splendor and Secret Hitler are currently implemented. Exploding
+            Kittens is listed as a future game.
+          </p>
+        </div>
+        <div class="rounded-md border border-neutral-800 bg-neutral-900 p-5">
+          <h2 class="text-lg font-semibold tracking-normal">AI Seating</h2>
+          <p class="mt-3 text-sm leading-6 text-neutral-400">
+            Supported games can assign different configured model profiles to
+            different players, while Player 1 can remain human.
+          </p>
+        </div>
+        <div class="rounded-md border border-neutral-800 bg-neutral-900 p-5">
+          <h2 class="text-lg font-semibold tracking-normal">Local State</h2>
+          <p class="mt-3 text-sm leading-6 text-neutral-400">
+            Game engines and provider settings run client-side. API keys are
+            stored in local browser storage for this local-first workflow.
+          </p>
+        </div>
+      </section>
+
+      <section class="mt-12 rounded-md border border-neutral-800 bg-neutral-900 p-6">
+        <h2 class="text-2xl font-semibold tracking-normal">
+          Tools and Frameworks
+        </h2>
+        <div class="mt-6 grid gap-6 md:grid-cols-2">
+          <div>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-neutral-400">
+              Application
+            </h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-neutral-300">
+              <li>Astro for the static site shell and page routing.</li>
+              <li>Svelte for interactive game and settings components.</li>
+              <li>TypeScript for typed game state, adapters, and UI logic.</li>
+              <li>Tailwind CSS for layout and visual styling.</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-neutral-400">
+              Development
+            </h3>
+            <ul class="mt-3 space-y-2 text-sm leading-6 text-neutral-300">
+              <li>VS Codium as the local editor.</li>
+              <li>Codex as the AI coding assistant used during development.</li>
+              <li>Vitest for rules and AI-adapter tests.</li>
+              <li>Astro Check for type and component diagnostics.</li>
+              <li>ESLint for linting JavaScript, TypeScript, Astro, and Svelte.</li>
+              <li>Prettier with Astro and Svelte plugins for formatting.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-6 rounded-md border border-neutral-800 bg-neutral-950 p-6">
+        <h2 class="text-xl font-semibold tracking-normal">Current Direction</h2>
+        <p class="mt-3 max-w-3xl text-sm leading-6 text-neutral-400">
+          The roadmap is focused on making the games more complete, improving AI
+          turn reliability, and making hidden-information games easier to follow
+          with clear public logs, table chat, and model-readable game prompts.
+        </p>
+      </section>
     </main>
   </body>
 </html>

@@ -12,7 +12,9 @@ export const games: GameMeta[] = [
     maxPlayers: 4,
     hiddenInformation: true,
     estimatedAITurnTokens: 400,
-    docPath: 'https://www.youtube.com/watch?v=dmc8vTLHsCg',
+    docPath:
+      'https://cdn.svc.asmodee.net/production-spacecowboys/uploads/2025/10/SCSPL01EN_SPLENDOR_RULES_LIGHT.pdf',
+    videoPath: 'https://www.youtube.com/watch?v=dmc8vTLHsCg',
   },
   {
     id: 'secret-hitler',
@@ -24,6 +26,7 @@ export const games: GameMeta[] = [
     hiddenInformation: true,
     estimatedAITurnTokens: 700,
     docPath: 'https://www.secrethitler.com/assets/Secret_Hitler_Rules.pdf',
+    videoPath: 'https://www.youtube.com/watch?v=mbGXIDYdtas',
   },
   {
     id: 'exploding-kittens',
@@ -34,6 +37,7 @@ export const games: GameMeta[] = [
     maxPlayers: 5,
     hiddenInformation: true,
     estimatedAITurnTokens: 600,
-    docPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
+    docPath: 'https://www.explodingkittens.com/pages/how-to-play-exploding-kittens',
+    videoPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
   },
 ];

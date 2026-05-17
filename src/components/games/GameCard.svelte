@@ -11,6 +11,11 @@
   $: rulesHref = /^https?:\/\//.test(game.docPath)
     ? game.docPath
     : `/${game.docPath}`;
+  $: videoHref = game.videoPath
+    ? /^https?:\/\//.test(game.videoPath)
+      ? game.videoPath
+      : `/${game.videoPath}`
+    : '';
   $: implemented = game.id === 'splendor' || game.id === 'secret-hitler';
   $: needsProvider = game.id === 'splendor';
   $: playable = implemented && (!needsProvider || canPlay);
@@ -63,13 +68,23 @@
         {implemented && needsProvider ? 'Play' : 'Coming Soon'}
       </button>
     {/if}
+    {#if videoHref}
+      <a
+        class="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-500"
+        href={videoHref}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Watch 3-minute video
+      </a>
+    {/if}
     <a
       class="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-500"
       href={rulesHref}
       target="_blank"
       rel="noreferrer"
     >
-      View rules
+      View Rules
     </a>
   </div>
 </article>

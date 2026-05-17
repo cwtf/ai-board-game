@@ -242,6 +242,35 @@ describe('Secret Hitler AI adapter', () => {
     }
   });
 
+  it('unlocks the second execution after a prior execution has already happened', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'second-execution',
+      playerCount: 7,
+      aiPlayerIndices: [],
+    });
+    state.phase = 'chancellor-discard';
+    state.president = 0;
+    state.nominee = 1;
+    state.fascistPolicies = 4;
+    state.players[6] = { ...state.players[6], alive: false };
+    state.chancellorHand = ['fascist', 'liberal'];
+    state.drawPile = ['liberal', 'fascist', 'liberal', 'fascist'];
+
+    const next = secretHitlerAdapter.applyMove(state, {
+      id: 'chancellor-enact:0',
+      kind: 'chancellor-enact',
+      index: 0,
+    }) as SecretHitlerState;
+
+    expect(next.fascistPolicies).toBe(5);
+    expect(next.phase).toBe('execution');
+    expect(secretHitlerAdapter.legalMoves(next, next.president)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'execute' }),
+      ]),
+    );
+  });
+
   it('returns special-election presidency to the stored normal-order player even after they served the special term', () => {
     const state = secretHitlerAdapter.init({
       seed: 'special-return',
