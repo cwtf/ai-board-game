@@ -131,11 +131,30 @@ def parse_asset_prompts(markdown: str) -> list[tuple[str, str]]:
     return entries
 
 
+def safe_asset_label(rel_path: str) -> str:
+    labels = {
+        "ballots/ja.png": "approval ballot card",
+        "ballots/nein.png": "rejection ballot card",
+        "roles/liberal.png": "blue civic secret role card",
+        "roles/fascist.png": "red serpent secret role card",
+        "roles/hitler.png": "red viper leader secret role card",
+        "party/liberal.png": "blue civic party membership card",
+        "party/fascist.png": "red serpent party membership card",
+        "policies/liberal.png": "blue civic policy card",
+        "policies/fascist.png": "red serpent policy card",
+        "boards/liberal-board.png": "blue civic policy board",
+        "boards/fascist-board.png": "red serpent policy board",
+        "tokens/election-tracker.png": "election tracker token",
+        "backs/dossier-back.png": "dossier card back",
+    }
+    return labels.get(rel_path, "board-game UI asset")
+
+
 def build_prompt(global_style: str, rel_path: str, asset_prompt: str) -> str:
     parts = []
     if global_style:
         parts.append(global_style)
-    parts.append(f"Asset path: {rel_path}.")
+    parts.append(f"Asset type: {safe_asset_label(rel_path)}.")
     parts.append(asset_prompt)
     parts.append(
         "Generate one finished image asset only. Keep the composition clean and "
