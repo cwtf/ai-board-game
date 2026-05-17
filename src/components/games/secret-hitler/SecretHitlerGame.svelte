@@ -692,9 +692,9 @@
 
   function relationshipSummary(edge: RelationshipEdge): string {
     if (edge.status === 'neutral') {
-      return `${displayNameFor(edge.from)} and ${displayNameFor(edge.to)}: Neutral`;
+      return `${displayNameFor(edge.from)} -> ${displayNameFor(edge.to)}: Neutral`;
     }
-    return `${displayNameFor(edge.from)} and ${displayNameFor(edge.to)}: ${edge.summary}`;
+    return `${displayNameFor(edge.from)} -> ${displayNameFor(edge.to)}: ${edge.summary}`;
   }
 
   function completeRelationshipEdges(
@@ -703,24 +703,25 @@
   ): RelationshipEdge[] {
     const analystReads = new Map<string, RelationshipEdge>();
     for (const edge of analystEdges) {
-      const from = Math.min(edge.from, edge.to);
-      const to = Math.max(edge.from, edge.to);
-      const existing = analystReads.get(relationshipKey(from, to));
+      const existing = analystReads.get(relationshipKey(edge.from, edge.to));
       if (
         !existing ||
         relationshipRank(edge.status) >= relationshipRank(existing.status)
       ) {
-        analystReads.set(relationshipKey(from, to), { ...edge, from, to });
+        analystReads.set(relationshipKey(edge.from, edge.to), edge);
       }
     }
 
     const edges: RelationshipEdge[] = [];
-    for (let left = 0; left < tablePlayers.length; left += 1) {
-      for (let right = left + 1; right < tablePlayers.length; right += 1) {
+    for (let from = 0; from < tablePlayers.length; from += 1) {
+      for (let to = 0; to < tablePlayers.length; to += 1) {
+        if (from === to) {
+          continue;
+        }
         edges.push(
-          analystReads.get(relationshipKey(left, right)) ?? {
-            from: left,
-            to: right,
+          analystReads.get(relationshipKey(from, to)) ?? {
+            from,
+            to,
             status: 'neutral',
             summary: 'Neutral read',
           },
@@ -732,7 +733,7 @@
   }
 
   function relationshipKey(from: number, to: number): string {
-    return `${Math.min(from, to)}:${Math.max(from, to)}`;
+    return `${from}->${to}`;
   }
 
   function mergeTableReadEdges(
@@ -746,21 +747,15 @@
 
     for (const edge of newEdges) {
       const key = relationshipKey(edge.from, edge.to);
-      const normalizedEdge = {
-        ...edge,
-        from: Math.min(edge.from, edge.to),
-        to: Math.max(edge.from, edge.to),
-      };
-
-      if (normalizedEdge.status === 'neutral') {
+      if (edge.status === 'neutral') {
         const existing = merged.get(key);
         if (!existing || existing.status === 'neutral') {
-          merged.set(key, normalizedEdge);
+          merged.set(key, edge);
         }
         continue;
       }
 
-      merged.set(key, normalizedEdge);
+      merged.set(key, edge);
     }
 
     return Array.from(merged.values()).sort(
@@ -807,7 +802,7 @@
   }
 
   function relationshipPairCount(count: number): number {
-    return (count * (count - 1)) / 2;
+    return count * (count - 1);
   }
 
   function tableReadSnapshotKey(profile: ProviderModelProfile): string {
@@ -870,13 +865,11 @@
         continue;
       }
 
-      const left = Math.min(from, to);
-      const right = Math.max(from, to);
-      const key = relationshipKey(left, right);
+      const key = relationshipKey(from, to);
       const existing = edges.get(key);
       const nextEdge = {
-        from: left,
-        to: right,
+        from,
+        to,
         status,
         summary:
           typeof candidate.summary === 'string' && candidate.summary.trim()
@@ -999,10 +992,11 @@
           expectedRelationships: expectedPairCount,
           instructions: [
             'Update the savedRoomState using only new public evidence from chat.',
-            'Return exactly one relationship entry for every unordered pair of players.',
-            'Use neutral when there is no new finding for a pair; neutral will not erase an existing non-neutral saved read.',
-            'Return trust, suspicious, or accused only when public chat supports a new or changed association.',
-            'Do not omit quiet pairs.',
+            'Return exactly one directed relationship entry for every ordered player pair where from and to are different.',
+            'A from->to read means what the from player appears to feel or signal toward the to player; it does not imply the reverse direction.',
+            'Use neutral when there is no new finding for a directed pair; neutral will not erase an existing non-neutral saved read.',
+            'Return trust, suspicious, or accused only when public chat supports a new or changed directed association.',
+            'Do not omit quiet directed pairs.',
             'Keep summaries under 80 characters.',
           ],
           responseSchema: {
@@ -1030,9 +1024,10 @@
             'You are a neutral table-read analyst for a Secret Hitler game.',
             'Use only public chat and public player names. Do not infer from hidden roles, private hands, or secret information.',
             'You are updating a saved room-state graph. Preserve prior non-neutral associations unless newer public chat supports changing them.',
-            'A neutral output means no new finding for that pair; it must not be used to erase prior trust, suspicion, or accusation.',
-            `Return exactly ${expectedPairCount} relationship entries: one for every unordered player pair.`,
-            'Use neutral for unclear, quiet, unsupported, or unchanged pairs. Do not omit pairs.',
+            'Relationships are directional: A trusting B does not mean B trusts A. Analyze each ordered from->to direction independently.',
+            'A neutral output means no new finding for that directed pair; it must not be used to erase prior trust, suspicion, or accusation.',
+            `Return exactly ${expectedPairCount} relationship entries: one for every ordered player pair where from and to are different.`,
+            'Use neutral for unclear, quiet, unsupported, or unchanged directed pairs. Do not omit pairs.',
             'Return pairs in stable ascending order by from, then to.',
             'Statuses are trust, neutral, suspicious, or accused. accused means a player is being treated as Fascist/Hitler, not merely discussing Fascist policies.',
             'Return exactly one complete minified JSON object: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}]}.',
@@ -1051,7 +1046,7 @@
         try {
           const parsed = parseTableReadResponse(result.text);
           if (parsed.returnedPairCount < expectedPairCount && attempt < 3) {
-            lastError = `Only ${parsed.returnedPairCount}/${expectedPairCount} player pairs were returned.`;
+            lastError = `Only ${parsed.returnedPairCount}/${expectedPairCount} directed reads were returned.`;
             messages.push(
               {
                 role: 'assistant' as const,
@@ -1059,7 +1054,7 @@
               },
               {
                 role: 'user' as const,
-                content: `Partial relationship map: ${lastError}. Return all ${expectedPairCount} unordered player pairs. Use neutral for pairs with no new finding; neutral will not erase saved non-neutral reads. Return exactly one JSON object with {"relationships":[...]}.`,
+                content: `Partial relationship map: ${lastError}. Return all ${expectedPairCount} ordered directed player pairs where from and to differ. Use neutral for directed pairs with no new finding; neutral will not erase saved non-neutral reads. Return exactly one JSON object with {"relationships":[...]}.`,
               },
             );
             continue;
@@ -1082,8 +1077,8 @@
           tableReadWarning = '';
           tableReadStatus =
             parsed.returnedPairCount >= expectedPairCount
-              ? `Room read updated with all ${expectedPairCount} relationships mapped; ${preservedCount} saved non-neutral read${preservedCount === 1 ? '' : 's'} preserved.`
-              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} relationships; saved non-neutral reads were preserved.`;
+              ? `Room read updated with all ${expectedPairCount} directed reads mapped; ${preservedCount} saved non-neutral read${preservedCount === 1 ? '' : 's'} preserved.`
+              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} directed reads; saved non-neutral reads were preserved.`;
           return;
         } catch (error) {
           lastError =
@@ -1092,7 +1087,7 @@
             { role: 'assistant' as const, content: result.text.slice(0, 4000) },
             {
               role: 'user' as const,
-              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries, one for every unordered player pair. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no new finding"}]}. Valid statuses: trust, neutral, suspicious, accused. Neutral means no new finding and will not erase saved non-neutral reads.`,
+              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries, one for every ordered directed player pair where from and to differ. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no new finding"}]}. Valid statuses: trust, neutral, suspicious, accused. Neutral means no new finding and will not erase saved non-neutral reads.`,
             },
           );
         }
@@ -1158,6 +1153,32 @@
 
   function relationshipOpacity(status: RelationshipStatus): number {
     return status === 'neutral' ? 0.22 : 0.78;
+  }
+
+  function relationshipMarkerId(status: RelationshipStatus): string {
+    return `relationship-arrow-${status}`;
+  }
+
+  function relationshipPath(edge: RelationshipEdge, count: number): string {
+    const fromPosition = relationshipNodePosition(edge.from, count);
+    const toPosition = relationshipNodePosition(edge.to, count);
+    const deltaX = toPosition.x - fromPosition.x;
+    const deltaY = toPosition.y - fromPosition.y;
+    const distance = Math.hypot(deltaX, deltaY) || 1;
+    const unitX = deltaX / distance;
+    const unitY = deltaY / distance;
+    const nodePadding = 7.2;
+    const startX = fromPosition.x + unitX * nodePadding;
+    const startY = fromPosition.y + unitY * nodePadding;
+    const endX = toPosition.x - unitX * nodePadding;
+    const endY = toPosition.y - unitY * nodePadding;
+    const curveOffset = edge.status === 'neutral' ? 4.8 : 6.2;
+    const controlX = (startX + endX) / 2 + -unitY * curveOffset;
+    const controlY = (startY + endY) / 2 + unitX * curveOffset;
+
+    return `M ${startX.toFixed(2)} ${startY.toFixed(2)} Q ${controlX.toFixed(
+      2,
+    )} ${controlY.toFixed(2)} ${endX.toFixed(2)} ${endY.toFixed(2)}`;
   }
 
   function relationshipNodePosition(index: number, count: number) {
@@ -2333,9 +2354,11 @@
                   {/if}
                 </div>
                 {#if canManuallyVote(player)}
-                  <div class="mt-2 grid grid-cols-2 gap-2">
+                  <div
+                    class="mt-2 flex min-h-[7.5rem] items-center justify-center gap-3 rounded-md border border-neutral-800 bg-neutral-950 p-2"
+                  >
                     <button
-                      class={`overflow-hidden rounded-md border p-1 transition hover:border-emerald-200 ${
+                      class={`w-16 overflow-hidden rounded-md border p-1 transition hover:border-emerald-200 ${
                         votes[player.id] === 'ja'
                           ? 'border-emerald-300 bg-emerald-400/20'
                           : 'border-neutral-700 bg-neutral-950'
@@ -2345,14 +2368,14 @@
                       aria-label="Vote Ja"
                     >
                       <img
-                        class="aspect-[2/3] w-full rounded object-cover"
+                        class="aspect-[2/3] h-24 w-full rounded object-cover"
                         src={ballotAssets.ja}
                         alt=""
                         aria-hidden="true"
                       />
                     </button>
                     <button
-                      class={`overflow-hidden rounded-md border p-1 transition hover:border-red-200 ${
+                      class={`w-16 overflow-hidden rounded-md border p-1 transition hover:border-red-200 ${
                         votes[player.id] === 'nein'
                           ? 'border-red-300 bg-red-400/20'
                           : 'border-neutral-700 bg-neutral-950'
@@ -2362,7 +2385,7 @@
                       aria-label="Vote Nein"
                     >
                       <img
-                        class="aspect-[2/3] w-full rounded object-cover"
+                        class="aspect-[2/3] h-24 w-full rounded object-cover"
                         src={ballotAssets.nein}
                         alt=""
                         aria-hidden="true"
@@ -2724,27 +2747,36 @@
             role="img"
             aria-label="Trust and suspicion relationships between players"
           >
+            <defs>
+              {#each relationshipLegend as status}
+                <marker
+                  id={relationshipMarkerId(status)}
+                  viewBox="0 0 10 10"
+                  refX="8.2"
+                  refY="5"
+                  markerWidth="3.6"
+                  markerHeight="3.6"
+                  orient="auto-start-reverse"
+                >
+                  <path
+                    d="M 0 0 L 10 5 L 0 10 z"
+                    fill={relationshipStroke(status)}
+                  />
+                </marker>
+              {/each}
+            </defs>
             {#each relationshipEdges as edge}
-              {@const fromPosition = relationshipNodePosition(
-                edge.from,
-                players.length,
-              )}
-              {@const toPosition = relationshipNodePosition(
-                edge.to,
-                players.length,
-              )}
-              <line
-                x1={fromPosition.x}
-                y1={fromPosition.y}
-                x2={toPosition.x}
-                y2={toPosition.y}
+              <path
+                d={relationshipPath(edge, players.length)}
+                fill="none"
                 stroke={relationshipStroke(edge.status)}
                 stroke-width={relationshipStrokeWidth(edge.status)}
                 opacity={relationshipOpacity(edge.status)}
                 stroke-linecap="round"
+                marker-end={`url(#${relationshipMarkerId(edge.status)})`}
               >
                 <title>{relationshipSummary(edge)}</title>
-              </line>
+              </path>
             {/each}
             {#each players as player, index}
               {@const position = relationshipNodePosition(
@@ -2805,7 +2837,7 @@
                       >
                         {displayNameFor(edge.from)}
                       </span>
-                      <span class="text-neutral-500"> and </span>
+                      <span class="text-neutral-500"> -> </span>
                       <span
                         class="font-semibold"
                         style={`color:${playerNameColor(edge.to)}`}
@@ -2830,7 +2862,7 @@
                       >
                         {displayNameFor(edge.from)}
                       </span>
-                      <span class="text-neutral-500"> and </span>
+                      <span class="text-neutral-500"> -> </span>
                       <span
                         class="font-semibold"
                         style={`color:${playerNameColor(edge.to)}`}
