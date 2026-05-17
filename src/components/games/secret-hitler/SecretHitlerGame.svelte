@@ -297,6 +297,8 @@
   $: activeRelationshipEdges = relationshipEdges.filter(
     (edge) => edge.status !== 'neutral',
   );
+  $: tableReadChartViewBox = createTableReadChartViewBox(tableReadZoom);
+  $: tableReadChartScale = `${tableReadZoom}%`;
 
   function refreshKeys() {
     keys = getStoredKeys();
@@ -1239,8 +1241,8 @@
     return `relationship-arrow-${status}`;
   }
 
-  function tableReadChartViewBox(): string {
-    const scale = Math.max(1, tableReadZoom / 100);
+  function createTableReadChartViewBox(zoom: number): string {
+    const scale = Math.max(1, zoom / 100);
     const size = 100 / scale;
     const origin = (100 - size) / 2;
     return `${origin.toFixed(2)} ${origin.toFixed(2)} ${size.toFixed(
@@ -2872,11 +2874,12 @@
 
         <div class="mt-3 grid gap-4 lg:grid-cols-[1fr_240px]">
           <div
-            class="h-56 w-full overflow-hidden rounded-md border border-neutral-900 bg-neutral-950"
+            class="h-56 w-full overflow-auto rounded-md border border-neutral-900 bg-neutral-950"
           >
             <svg
-              class="block h-full w-full"
-              viewBox={tableReadChartViewBox()}
+              class="block max-w-none"
+              style={`width:${tableReadChartScale}; min-width:100%; height:${tableReadChartScale}; min-height:100%;`}
+              viewBox={tableReadChartViewBox}
               role="img"
               aria-label="Trust and suspicion relationships between players"
             >
