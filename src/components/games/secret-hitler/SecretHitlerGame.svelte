@@ -1563,8 +1563,13 @@
     }
   }
 
-  function visibleRoleFor(viewerId: number, target: Player): Role | null {
-    if (phase === 'game-over' || winner) {
+  function visibleRoleFor(
+    viewerId: number,
+    target: Player,
+    currentPhase = phase,
+    winnerText = winner,
+  ): Role | null {
+    if (currentPhase === 'game-over' || winnerText) {
       return target.role;
     }
 
@@ -2608,7 +2613,7 @@
               </button>
             {/if}
           </div>
-          <div class="mt-3 grid max-w-md grid-cols-2 gap-2">
+          <div class="mt-3 grid max-w-lg grid-cols-3 gap-2">
             {#each chancellorHand as policy, index}
               {#if canViewChancellorCards()}
                 <button
@@ -3037,7 +3042,12 @@
         }`}
       >
         {#each players as player}
-          {@const visibleRole = visibleRoleFor(identityViewer, player)}
+          {@const visibleRole = visibleRoleFor(
+            identityViewer,
+            player,
+            phase,
+            winner,
+          )}
           <div
             class={`flex h-[17.5rem] flex-col overflow-hidden rounded-md border p-3 ${
               !player.alive
