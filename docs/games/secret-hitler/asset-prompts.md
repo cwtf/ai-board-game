@@ -5,7 +5,7 @@ Use these prompts to generate original UI assets for the Secret Hitler game impl
 Expected output paths:
 
 - Ballots: `public/assets/secret-hitler/ballots/ja.png`, `public/assets/secret-hitler/ballots/nein.png`
-- Secret roles: `public/assets/secret-hitler/roles/liberal.png`, `public/assets/secret-hitler/roles/fascist.png`, `public/assets/secret-hitler/roles/hitler.png`
+- Secret roles: `public/assets/secret-hitler/roles/liberal-panda.png`, `public/assets/secret-hitler/roles/liberal-cat.png`, `public/assets/secret-hitler/roles/liberal-dog.png`, `public/assets/secret-hitler/roles/liberal-parrot.png`, `public/assets/secret-hitler/roles/liberal-chicken.png`, `public/assets/secret-hitler/roles/liberal-racoon.png`, `public/assets/secret-hitler/roles/liberal-rat.png`, `public/assets/secret-hitler/roles/fascist-snake.png`, `public/assets/secret-hitler/roles/fascist-lizard.png`, `public/assets/secret-hitler/roles/hitler-velociraptor.png`
 - Party membership: `public/assets/secret-hitler/party/liberal.png`, `public/assets/secret-hitler/party/fascist.png`
 - Policies: `public/assets/secret-hitler/policies/liberal.png`, `public/assets/secret-hitler/policies/fascist.png`
 - Boards: `public/assets/secret-hitler/boards/liberal-board.png`, `public/assets/secret-hitler/boards/fascist-board.png`
@@ -55,24 +55,72 @@ official ballot art, copied NEIN card, real political symbols, campaign poster, 
 
 ## Secret Role Cards
 
-Use a vertical 2:3 card ratio. These cards are private identity components, so they should feel like sealed dossier cards. Include the role name only if the generator can produce clean text; otherwise create text-free versions and let the UI overlay labels.
+Use a vertical 2:3 card ratio. These cards are private identity components, so they should feel like formal 1930s-era political portrait dossiers. Frame each animal character in portrait style, wearing a smart politician outfit from the 1930s. Keep the visual mood close to a tense social-deduction role card without copying official role-card layout, typography, symbols, or portraits. Prefer text-free cards and let the UI overlay labels.
 
-### `roles/liberal.png`
+Shared role-card consistency direction:
 
 ```text
-Vertical 2:3 secret role card, sealed civic dossier for a fictional liberal reformer. Navy-blue and cream palette, art deco city hall window, fountain pen, folded parliamentary notes, restrained hopeful lighting, official-looking but fictional identity card, premium board-game illustration, original design. Optional clean title text: "LIBERAL". No official game art, no real politician, no real-world insignia.
+Original portrait role card illustration for a web-based social deduction board game, vertical 2:3 ratio, centered anthropomorphic animal politician, formal 1930s studio portrait pose, tailored suit or statesperson outfit, art deco rectangular portrait frame, aged dossier paper, theatrical civic lighting, clean readable silhouette, premium tabletop role-card asset, no readable text, no numbers, no watermark, no logos, no copied official game layout, no real-world political insignia, no real dictator likeness.
 ```
 
-### `roles/fascist.png`
+### `roles/liberal-panda.png`
 
 ```text
-Vertical 2:3 secret role card, sealed conspirator dossier for a fictional serpent faction operative. Deep crimson, charcoal, brass, sharp art deco shadows, gloved hand near a sealed envelope, coded paper slips without readable text, coiled snake emblem, lizard-scale embossing, tense clandestine mood, premium board-game illustration, original design. Optional clean title text: "SERPENT". No official game art, no real-world insignia.
+Vertical 2:3 secret role portrait card for a fictional liberal panda politician. A dignified anthropomorphic panda wearing a cream 1930s linen suit, navy tie, brass cufflinks, and round spectacles, posed calmly with one paw resting on a closed civic folder. Gentle but serious expression, idealistic reformer energy, trustworthy and composed. Navy-blue, cream, brass, and warm paper tones, restrained hopeful lighting, art deco civic office background, original design. No official game art, no real politician, no real-world insignia.
 ```
 
-### `roles/hitler.png`
+### `roles/liberal-cat.png`
 
 ```text
-Vertical 2:3 secret role card, sealed central-villain dossier for a fictional serpent faction leader in a social deduction game. Avoid likeness to any real person; show only an ominous empty podium, backlit silhouette from behind, heavy curtains, crimson and black art deco composition, confidential folder, coiled serpent motif, premium board-game illustration, original design. Optional clean title text: "VIPER". No photorealistic portrait, no real public figure likeness, no real-world insignia.
+Vertical 2:3 secret role portrait card for a fictional liberal cat politician. A sharp anthropomorphic cat wearing a tailored 1930s charcoal suit, ivory shirt, silk tie, and neat pocket square, seated in a formal portrait pose with alert eyes and refined confidence. Elegant, diplomatic, slightly suspicious but civic-minded. Navy-blue, cream, charcoal, and brass palette, art deco city hall background, original design. No official game art, no real politician, no real-world insignia.
+```
+
+### `roles/liberal-dog.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional liberal dog politician. A loyal anthropomorphic dog wearing a 1930s brown tweed suit, waistcoat, dark tie, and polished lapel pin with a fictional abstract civic emblem. Upright posture, warm serious eyes, dependable public servant mood, one paw near a sealed document folder. Navy-blue, cream, brass, and walnut palette, formal civic portrait lighting, original design. No official game art, no real politician, no real-world insignia.
+```
+
+### `roles/liberal-parrot.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional liberal parrot politician. A colorful anthropomorphic parrot wearing a refined 1930s navy suit, gold-trimmed waistcoat, and formal tie, posed like a persuasive parliamentary speaker. Bright feathers, intelligent expression, confident reformist energy, one wing slightly raised as if mid-speech. Cream dossier paper, brass art deco frame, navy civic chamber background, original design. No official game art, no real politician, no real-world insignia.
+```
+
+### `roles/liberal-chicken.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional liberal chicken politician. A proud anthropomorphic chicken wearing a smart 1930s burgundy-brown suit, cream shirt, and neat tie, standing in a formal civic portrait pose. Slightly pompous but sincere expression, polished statesperson energy, feather details crisp and dignified rather than silly. Navy-blue, cream, brass, and warm paper tones, art deco municipal background, original design. No official game art, no real politician, no real-world insignia.
+```
+
+### `roles/liberal-racoon.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional liberal racoon politician. A clever anthropomorphic racoon wearing a 1930s dark navy suit, waistcoat, slim tie, and brass tie clip, posed with folded hands and a calculating but principled expression. Smart civic strategist mood, subtle dossier documents in the background, cream paper, brass art deco frame, original design. No official game art, no real politician, no real-world insignia.
+```
+
+### `roles/liberal-rat.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional liberal rat politician. A serious anthropomorphic rat wearing a modest 1930s grey suit, dark waistcoat, narrow tie, and small round spectacles, posed as a principled underdog reformer. Intelligent eyes, reserved dignity, cautious but honest civic mood, no villainous styling. Navy-blue, cream, charcoal, and brass palette, formal dossier portrait, original design. No official game art, no real politician, no real-world insignia.
+```
+
+### `roles/fascist-snake.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional authoritarian snake politician. A sinister anthropomorphic snake wearing a sharp 1930s black suit, crimson tie, brass cufflinks, and formal gloves, posed in a controlled official portrait. Cold intelligent eyes, coiled posture, elegant menace, fictional serpent faction mood, abstract serpent lapel emblem only. Deep crimson, charcoal, brass, smoky black, and muted cream palette, art deco shadowed chamber background, original design. No official game art, no real-world insignia, no swastikas, no Nazi symbols, no SS symbols, no real fascist emblems, no real politician likeness.
+```
+
+### `roles/fascist-lizard.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional authoritarian lizard politician. A severe anthropomorphic lizard wearing a tailored 1930s charcoal military-inspired formal suit, crimson pocket square, brass buttons with fictional geometric markings, and black gloves. Upright posture, cold expression, authoritarian cabinet minister mood, reptile scales subtly highlighted. Deep crimson, charcoal, brass, smoky black, and muted cream palette, art deco severe government interior, original design. No official game art, no real-world insignia, no swastikas, no Nazi symbols, no SS symbols, no real fascist emblems, no real politician likeness.
+```
+
+### `roles/hitler-velociraptor.png`
+
+```text
+Vertical 2:3 secret role portrait card for a fictional hidden-dictator velociraptor leader in a social deduction game. A commanding anthropomorphic velociraptor wearing a dramatic 1930s-inspired black formal suit, high-collared overcoat, crimson tie, brass accents, and polished gloves. Formal authoritarian portrait pose, intense stare, theatrical menace, charismatic danger, sharp silhouette, narrow snout, alert predatory eyes, subtle feathers or scales, clawed hands resting near a sealed dossier. Deep crimson, charcoal, brass, smoky black, and muted cream palette, art deco curtains and fictional government chamber background, original design. No official game art, no real-world insignia, no swastikas, no Nazi symbols, no SS symbols, no real fascist emblems, no real politician likeness, do not depict or resemble any real historical dictator.
 ```
 
 ## Party Membership Cards
