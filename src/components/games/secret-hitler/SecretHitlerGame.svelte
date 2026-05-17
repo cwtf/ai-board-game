@@ -184,11 +184,21 @@
     liberal: `${secretHitlerAssetBase}/policies/liberal.png`,
     fascist: `${secretHitlerAssetBase}/policies/fascist.png`,
   };
-  const roleAssets: Record<Role, string> = {
-    liberal: `${secretHitlerAssetBase}/roles/liberal.png`,
-    fascist: `${secretHitlerAssetBase}/roles/fascist.png`,
-    hitler: `${secretHitlerAssetBase}/roles/hitler.png`,
-  };
+  const liberalRoleAssets = [
+    `${secretHitlerAssetBase}/roles/liberal-cat.png`,
+    `${secretHitlerAssetBase}/roles/liberal-chicken.png`,
+    `${secretHitlerAssetBase}/roles/liberal-dog.png`,
+    `${secretHitlerAssetBase}/roles/liberal-panda.png`,
+    `${secretHitlerAssetBase}/roles/liberal-parrot.png`,
+    `${secretHitlerAssetBase}/roles/liberal-racoon.png`,
+    `${secretHitlerAssetBase}/roles/liberal-rat.png`,
+  ];
+  const fascistRoleAssets = [
+    `${secretHitlerAssetBase}/roles/fascist-crocodile.png`,
+    `${secretHitlerAssetBase}/roles/fascist-lizard.png`,
+    `${secretHitlerAssetBase}/roles/fascist-snake.png`,
+  ];
+  const hitlerRoleAsset = `${secretHitlerAssetBase}/roles/hitler-velociraptor.png`;
   const partyAssets: Record<Party, string> = {
     liberal: `${secretHitlerAssetBase}/party/liberal.png`,
     fascist: `${secretHitlerAssetBase}/party/fascist.png`,
@@ -1473,6 +1483,10 @@
   }
 
   function visibleRoleFor(viewerId: number, target: Player): Role | null {
+    if (phase === 'game-over' || winner) {
+      return target.role;
+    }
+
     const viewer = players[viewerId];
     if (!viewer) {
       return null;
@@ -1953,8 +1967,23 @@
     return partyAssets[partyForRole(role)];
   }
 
-  function roleAsset(role: Role | null): string {
-    return role ? roleAssets[role] : dossierBackAsset;
+  function roleAssetForPlayer(
+    player: Player,
+    visibleRole: Role | null,
+  ): string {
+    if (!visibleRole) {
+      return dossierBackAsset;
+    }
+
+    if (visibleRole === 'hitler') {
+      return hitlerRoleAsset;
+    }
+
+    if (visibleRole === 'fascist') {
+      return fascistRoleAssets[player.id % fascistRoleAssets.length];
+    }
+
+    return liberalRoleAssets[player.id % liberalRoleAssets.length];
   }
 
   function roleCardLabel(role: Role | null): string {
@@ -3016,7 +3045,7 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
-                    src={roleAsset(visibleRole)}
+                    src={roleAssetForPlayer(player, visibleRole)}
                     alt={roleCardLabel(visibleRole)}
                   />
                   <div
@@ -3033,6 +3062,25 @@
                     src={partyAssetForRole(visibleRole)}
                     alt={`${partyLabel(visibleRole)} membership`}
                   />
+                </div>
+              {:else}
+                <div class="w-20 shrink-0">
+                  <div
+                    class={`overflow-hidden rounded-md border p-1 ${roleBadgeClasses(
+                      null,
+                    )}`}
+                  >
+                    <img
+                      class="aspect-[2/3] w-full rounded object-cover"
+                      src={dossierBackAsset}
+                      alt="Hidden party membership"
+                    />
+                    <div
+                      class="mt-1 truncate text-center text-[10px] font-semibold"
+                    >
+                      Hidden
+                    </div>
+                  </div>
                 </div>
               {/if}
             </div>
