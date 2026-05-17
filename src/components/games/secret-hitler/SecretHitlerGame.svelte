@@ -44,6 +44,7 @@
     id: number;
     name: string;
     role: Role;
+    roleAsset: string;
     alive: boolean;
   }
 
@@ -210,7 +211,7 @@
 
   let keys: StoredKeys = {};
   let playerCount = 5;
-  let seed = 'secret-table';
+  let seed = '';
   let players: Player[] = [];
   let president = 0;
   let nominee: number | null = null;
@@ -300,6 +301,12 @@
     keys = getStoredKeys();
   }
 
+  function createGameSeed(): string {
+    return `game-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+  }
+
   function toAdapterState(): SecretHitlerState {
     return {
       seed,
@@ -329,8 +336,40 @@
     };
   }
 
+  function statePlayerRoleAsset(
+    player: SecretHitlerState['players'][number],
+  ): string | undefined {
+    return 'roleAsset' in player && typeof player.roleAsset === 'string'
+      ? player.roleAsset
+      : undefined;
+  }
+
+  function fallbackRoleAsset(role: Role): string {
+    if (role === 'hitler') {
+      return hitlerRoleAsset;
+    }
+
+    return role === 'fascist' ? fascistRoleAssets[0] : liberalRoleAssets[0];
+  }
+
+  function hydratePlayersWithRoleAssets(
+    nextPlayers: SecretHitlerState['players'],
+  ): Player[] {
+    const currentRoleAssets = new Map(
+      players.map((player) => [player.id, player.roleAsset]),
+    );
+
+    return nextPlayers.map((player) => ({
+      ...player,
+      roleAsset:
+        statePlayerRoleAsset(player) ??
+        currentRoleAssets.get(player.id) ??
+        fallbackRoleAsset(player.role),
+    }));
+  }
+
   function loadAdapterState(state: SecretHitlerState) {
-    players = state.players;
+    players = hydratePlayersWithRoleAssets(state.players);
     president = state.president;
     nominee = state.nominee;
     previousPresident = state.previousPresident;
@@ -471,8 +510,33 @@
     );
   }
 
+  function roleAssetForRole(
+    role: Role,
+    liberalAssets: string[],
+    fascistAssets: string[],
+  ): string {
+    if (role === 'hitler') {
+      return hitlerRoleAsset;
+    }
+
+    if (role === 'fascist') {
+      return fascistAssets.shift() ?? fascistRoleAssets[0];
+    }
+
+    return liberalAssets.shift() ?? liberalRoleAssets[0];
+  }
+
   function startGame() {
+    seed = createGameSeed();
     const roles = rolesFor(playerCount);
+    const shuffledLiberalAssets = shuffle(
+      liberalRoleAssets,
+      'liberal-portraits',
+    );
+    const shuffledFascistAssets = shuffle(
+      fascistRoleAssets,
+      'fascist-portraits',
+    );
     players = roles.map((role, index) => ({
       id: index,
       name:
@@ -480,6 +544,11 @@
           ? `${germanPlayerName(index)} (You)`
           : germanPlayerName(index),
       role,
+      roleAsset: roleAssetForRole(
+        role,
+        shuffledLiberalAssets,
+        shuffledFascistAssets,
+      ),
       alive: true,
     }));
     president = 0;
@@ -1979,11 +2048,7 @@
       return hitlerRoleAsset;
     }
 
-    if (visibleRole === 'fascist') {
-      return fascistRoleAssets[player.id % fascistRoleAssets.length];
-    }
-
-    return liberalRoleAssets[player.id % liberalRoleAssets.length];
+    return player.roleAsset;
   }
 
   function roleCardLabel(role: Role | null): string {
@@ -2097,6 +2162,7 @@
             <input
               class="ml-2 w-32 rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
               bind:value={seed}
+              readonly
             />
           </label>
           <button
