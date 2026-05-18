@@ -1,0 +1,7 @@
+{
+  "name": "ai-board-game",
+  "compatibility_date": "2026-05-18",
+  "assets": {
+    "directory": "./dist"
+  }
+}
