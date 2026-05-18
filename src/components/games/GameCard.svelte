@@ -2,7 +2,6 @@
   import type { GameMeta } from '@/lib/games/registry';
 
   export let game: GameMeta;
-  export let canPlay = false;
 
   $: playerCount =
     game.minPlayers === game.maxPlayers
@@ -17,8 +16,7 @@
       : `/${game.videoPath}`
     : '';
   $: implemented = game.id === 'splendor' || game.id === 'secret-hitler';
-  $: needsProvider = game.id === 'splendor';
-  $: playable = implemented && (!needsProvider || canPlay);
+  $: playable = implemented;
 </script>
 
 <article
@@ -63,9 +61,9 @@
         class="cursor-not-allowed rounded-md bg-neutral-700 px-4 py-2 text-sm font-medium text-neutral-400"
         type="button"
         disabled
-        title={implemented && needsProvider ? 'Set up your AI key first' : 'Coming soon'}
+        title="Coming soon"
       >
-        {implemented && needsProvider ? 'Play' : 'Coming Soon'}
+        Coming Soon
       </button>
     {/if}
     {#if videoHref}

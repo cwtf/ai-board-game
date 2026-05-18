@@ -233,6 +233,7 @@
   let investigationResult = '';
   let message = '';
   let winner = '';
+  let gameOverDismissed = false;
   let turn = 1;
   let chatDraft = '';
   let chatMessages: ChatMessage[] = [];
@@ -593,6 +594,7 @@
     investigationResult = '';
     message = 'Nominate a Chancellor.';
     winner = '';
+    gameOverDismissed = false;
     turn = 1;
     chatDraft = '';
     chatMessages = [];
@@ -2117,6 +2119,22 @@
     return 'border-red-300/60 bg-red-400/10 text-red-100';
   }
 
+  function winnerLabel(): string {
+    if (winner.startsWith('Liberals')) {
+      return 'Liberals win';
+    }
+    if (winner.startsWith('Fascists')) {
+      return 'Fascists win';
+    }
+    return 'Game ended';
+  }
+
+  function winnerBadgeClasses(): string {
+    return winner.startsWith('Liberals')
+      ? 'border-blue-300/60 bg-blue-400/10 text-blue-100'
+      : 'border-red-300/60 bg-red-400/10 text-red-100';
+  }
+
   function playerStatus(player: Player): string {
     if (!player.alive) {
       return 'Executed';
@@ -3321,3 +3339,139 @@
     </aside>
   </div>
 </section>
+
+{#if winner && !gameOverDismissed}
+  <div
+    class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/85 px-4 py-6"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="secret-hitler-game-over-title"
+  >
+    <div
+      class="max-h-full w-full max-w-4xl overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
+    >
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2
+            id="secret-hitler-game-over-title"
+            class="text-xl font-semibold tracking-normal"
+          >
+            Game Over
+          </h2>
+          <p class="mt-1 text-sm text-neutral-400">{winner}</p>
+        </div>
+        <span
+          class={`rounded-full border px-3 py-1 text-xs font-semibold uppercase ${winnerBadgeClasses()}`}
+        >
+          {winnerLabel()}
+        </span>
+      </div>
+
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
+        <div class="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+          <div class="text-xs uppercase text-neutral-500">Policies</div>
+          <div class="mt-2 flex items-center gap-3 text-sm">
+            <span class="font-semibold text-blue-100">
+              {liberalPolicies}/5 Liberal
+            </span>
+            <span class="text-neutral-600">-</span>
+            <span class="font-semibold text-red-100">
+              {fascistPolicies}/6 Fascist
+            </span>
+          </div>
+        </div>
+        <div class="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+          <div class="text-xs uppercase text-neutral-500">Final turn</div>
+          <div class="mt-2 text-sm font-semibold text-neutral-100">
+            Turn {turn}
+          </div>
+        </div>
+        <div class="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+          <div class="text-xs uppercase text-neutral-500">
+            Election tracker
+          </div>
+          <div class="mt-2 text-sm font-semibold text-neutral-100">
+            {electionTracker}/3 failed governments
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 space-y-2">
+        {#each players as player (player.id)}
+          {@const finalRoleAsset = roleAssetForPlayer(player, player.role)}
+          {@const finalPartyAsset = partyAssetForRole(player.role)}
+          <div
+            class="grid items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3 sm:grid-cols-[auto_1fr_auto]"
+          >
+            <div class="flex items-center gap-3">
+              <img
+                class="h-16 w-11 rounded border border-neutral-700 object-cover"
+                src={finalRoleAsset}
+                alt={`${player.name} role card`}
+              />
+              <img
+                class="h-16 w-11 rounded border border-neutral-700 object-cover"
+                src={finalPartyAsset}
+                alt={`${partyLabel(player.role)} party card`}
+              />
+            </div>
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  class={`font-medium ${playerNameClasses(player.id)}`}
+                >
+                  {player.name}
+                </span>
+                <span
+                  class={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase leading-none ${lifeBadgeClasses(
+                    player,
+                  )}`}
+                >
+                  {lifeBadgeLabel(player)}
+                </span>
+              </div>
+              <div class="mt-1 flex flex-wrap gap-2 text-xs text-neutral-400">
+                <span
+                  class={`rounded-full border px-2 py-0.5 ${roleBadgeClasses(
+                    player.role,
+                  )}`}
+                >
+                  {roleLabel(player.role)}
+                </span>
+                <span
+                  class={`rounded-full border px-2 py-0.5 ${roleBadgeClasses(
+                    partyForRole(player.role),
+                  )}`}
+                >
+                  {partyLabel(player.role)} team
+                </span>
+              </div>
+            </div>
+            <div class="text-sm text-neutral-400 sm:text-right">
+              {player.alive ? 'Survived' : 'Executed'}
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <div class="mt-5 flex justify-end gap-2">
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            gameOverDismissed = true;
+          }}
+        >
+          View board
+        </button>
+        <button
+          class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+          type="button"
+          on:click={startGame}
+        >
+          New game
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
