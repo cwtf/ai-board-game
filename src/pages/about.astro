@@ -1,16 +1,16 @@
 ---
 import Header from '@/components/shell/Header.svelte';
+import SEO from '@/components/shell/SEO.astro';
 import '../styles/global.css';
 ---
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>About | AI Board Game Platform</title>
+    <SEO
+      title="About | AI Board Game Platform"
+      description="Learn how AI Board Games runs local-first tabletop game engines with configurable AI model profiles and browser-stored provider keys."
+      path="/about"
+    />
   </head>
   <body class="min-h-screen bg-neutral-950 text-neutral-100">
     <Header client:load backHref="/" />
@@ -93,7 +93,7 @@ import '../styles/global.css';
       </section>
 
       <p class="mt-10 text-center text-xs text-neutral-500">
-        No AIs were tortured during the making of this site.
+        No AIs were harmed during the making of this site.
       </p>
     </main>
   </body>

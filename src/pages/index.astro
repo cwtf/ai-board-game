@@ -1,17 +1,17 @@
 ---
 import GameGrid from '@/components/games/GameGrid.svelte';
 import Header from '@/components/shell/Header.svelte';
+import SEO from '@/components/shell/SEO.astro';
 import '../styles/global.css';
 ---
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>AI Board Game Platform</title>
+    <SEO
+      title="AI Board Game Platform | Local AI Tabletop Games"
+      description="Play local-first board games against configurable AI opponents with bring-your-own-key provider settings."
+      path="/"
+    />
   </head>
   <body class="bg-neutral-950 text-neutral-100">
     <Header client:load />

@@ -1,17 +1,18 @@
 ---
 import SettingsPanel from '@/components/ai/SettingsPanel.svelte';
 import Header from '@/components/shell/Header.svelte';
+import SEO from '@/components/shell/SEO.astro';
 import '../styles/global.css';
 ---
 
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>Settings | AI Board Game Platform</title>
+    <SEO
+      title="Settings | AI Board Game Platform"
+      description="Configure local browser provider keys and AI model profiles for AI Board Game Platform."
+      path="/settings"
+      noindex
+    />
   </head>
   <body class="min-h-screen bg-neutral-950 text-neutral-100">
     <Header client:load backHref="/" />
