@@ -1,7 +1,13 @@
 {
-  "name": "ai-board-game",
-  "compatibility_date": "2026-05-18",
-  "assets": {
-    "directory": "./dist"
-  }
+	"compatibility_date": "2026-05-18",
+	"compatibility_flags": ["global_fetch_strictly_public"],
+	"name": "board-game",
+	"main": "@astrojs/cloudflare/entrypoints/server",
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true
+	}
 }
