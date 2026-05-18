@@ -9,6 +9,7 @@ describe('Secret Hitler AI adapter', () => {
     const prompt = secretHitlerAdapter.systemPrompt();
 
     expect(prompt).toContain('exactly one assigned player');
+    expect(prompt).toContain('assignedPlayer with your exact id and name');
     expect(prompt).toContain(
       'only the information your player is allowed to know',
     );
@@ -27,6 +28,31 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('Liberals should');
     expect(prompt).toContain('Fascists should');
     expect(prompt).toContain('Hitler should');
+  });
+
+  it('serializes the assigned player identity explicitly', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'assigned-player',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.players[2].name = 'Ada';
+
+    const payload = JSON.parse(
+      secretHitlerAdapter.serializeForAI(state, 2, []),
+    ) as {
+      player: number;
+      assignedPlayer: { id: number; name: string } | null;
+      state: {
+        player: number;
+        players: Array<{ id: number; name: string }>;
+      };
+    };
+
+    expect(payload.player).toBe(2);
+    expect(payload.assignedPlayer).toEqual({ id: 2, name: 'Ada' });
+    expect(payload.state.player).toBe(2);
+    expect(payload.state.players[2]).toMatchObject({ id: 2, name: 'Ada' });
   });
 
   it('serializes core win-condition rules alongside the board state', () => {

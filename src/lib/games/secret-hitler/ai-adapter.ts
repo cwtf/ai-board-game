@@ -927,6 +927,7 @@ export const secretHitlerAdapter: GameAdapter<
   systemPrompt() {
     return [
       'You are playing Secret Hitler as exactly one assigned player.',
+      'The payload includes assignedPlayer with your exact id and name; use that identity when speaking in tableTalk.',
       'You will receive only the information your player is allowed to know: your own role, legally visible teammate roles, public board state, public chat, and any private policy hand or executive-result field that belongs to you.',
       'Never claim certainty from hidden information you cannot see. Do not assume unseen policy cards, unseen roles, private ballots, or private discards.',
       'You may use tableTalk to persuade, question, accuse, defend, coordinate, misdirect, or bluff in character for your assigned role.',
@@ -941,9 +942,16 @@ export const secretHitlerAdapter: GameAdapter<
     ].join(' ');
   },
   serializeForAI(state, player, moves) {
+    const assignedPlayer =
+      state.players.find((candidate) => candidate.id === player) ??
+      state.players[player];
+
     return JSON.stringify({
       game: 'secret-hitler',
       player,
+      assignedPlayer: assignedPlayer
+        ? { id: assignedPlayer.id, name: assignedPlayer.name }
+        : null,
       rules: rulesSummary,
       state: publicStateFor(state, player),
       legalMoves: moves.map((move) => ({
