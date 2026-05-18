@@ -355,19 +355,38 @@
     return role === 'fascist' ? fascistRoleAssets[0] : liberalRoleAssets[0];
   }
 
+  function roleAssetMatchesRole(asset: string, role: Role): boolean {
+    if (role === 'hitler') {
+      return asset === hitlerRoleAsset;
+    }
+
+    return role === 'fascist'
+      ? fascistRoleAssets.includes(asset)
+      : liberalRoleAssets.includes(asset);
+  }
+
+  function safeRoleAssetForRole(asset: string | undefined, role: Role): string {
+    return asset && roleAssetMatchesRole(asset, role)
+      ? asset
+      : fallbackRoleAsset(role);
+  }
+
   function hydratePlayersWithRoleAssets(
     nextPlayers: SecretHitlerState['players'],
   ): Player[] {
-    const currentRoleAssets = new Map(
-      players.map((player) => [player.id, player.roleAsset]),
+    const currentPlayersById = new Map(
+      players.map((player) => [player.id, player]),
     );
 
     return nextPlayers.map((player) => ({
       ...player,
-      roleAsset:
+      roleAsset: safeRoleAssetForRole(
         statePlayerRoleAsset(player) ??
-        currentRoleAssets.get(player.id) ??
-        fallbackRoleAsset(player.role),
+          (currentPlayersById.get(player.id)?.role === player.role
+            ? currentPlayersById.get(player.id)?.roleAsset
+            : undefined),
+        player.role,
+      ),
     }));
   }
 
@@ -2065,7 +2084,7 @@
       return hitlerRoleAsset;
     }
 
-    return player.roleAsset;
+    return safeRoleAssetForRole(player.roleAsset, visibleRole);
   }
 
   function roleCardLabel(role: Role | null): string {
@@ -2126,9 +2145,8 @@
     maybeRequestQuestionReplies(item);
   }
 
-  startGame();
-
   onMount(() => {
+    startGame();
     refreshKeys();
     window.addEventListener('storage', refreshKeys);
     window.addEventListener('byok-keys-changed', refreshKeys);
@@ -3048,6 +3066,10 @@
             phase,
             winner,
           )}
+          {@const visibleRoleAsset = roleAssetForPlayer(player, visibleRole)}
+          {@const visiblePartyAsset = visibleRole
+            ? partyAssetForRole(visibleRole)
+            : dossierBackAsset}
           <div
             class={`flex h-[17.5rem] flex-col overflow-hidden rounded-md border p-3 ${
               !player.alive
@@ -3163,11 +3185,13 @@
                     visibleRole,
                   )}`}
                 >
-                  <img
-                    class="aspect-[2/3] w-full rounded object-cover"
-                    src={roleAssetForPlayer(player, visibleRole)}
-                    alt={roleCardLabel(visibleRole)}
-                  />
+                  {#key visibleRoleAsset}
+                    <img
+                      class="aspect-[2/3] w-full rounded object-cover"
+                      src={visibleRoleAsset}
+                      alt={roleCardLabel(visibleRole)}
+                    />
+                  {/key}
                   <div
                     class="mt-1 truncate text-center text-[10px] font-semibold"
                   >
@@ -3177,11 +3201,13 @@
               </div>
               {#if visibleRole}
                 <div class="w-20 shrink-0">
-                  <img
-                    class="aspect-[2/3] w-full rounded-md border border-amber-100/20 object-cover"
-                    src={partyAssetForRole(visibleRole)}
-                    alt={`${partyLabel(visibleRole)} membership`}
-                  />
+                  {#key visiblePartyAsset}
+                    <img
+                      class="aspect-[2/3] w-full rounded-md border border-amber-100/20 object-cover"
+                      src={visiblePartyAsset}
+                      alt={`${partyLabel(visibleRole)} membership`}
+                    />
+                  {/key}
                 </div>
               {:else}
                 <div class="w-20 shrink-0">
