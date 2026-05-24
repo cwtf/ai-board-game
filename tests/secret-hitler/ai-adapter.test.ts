@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applySecretHitlerMemoryPatch,
   createSecretHitlerAIMemory,
+  createSecretHitlerPublicInfluencePatch,
   parseSecretHitlerAIResponse,
   secretHitlerAdapter,
   serializeSecretHitlerForAI,
@@ -328,6 +329,36 @@ describe('Secret Hitler AI adapter', () => {
         updatedAtTurn: 1,
       },
     ]);
+  });
+
+  it('turns public human persuasion into a cautious memory patch', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'public-influence',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.players[2].name = 'Marta';
+
+    const patch = createSecretHitlerPublicInfluencePatch({
+      speakerName: 'Player 1',
+      body: 'I do not trust Marta after that vote.',
+      players: state.players,
+      currentTurn: 3,
+    });
+
+    expect(patch).toEqual({
+      publicClaim:
+        'Player 1 publicly pushed suspicion: "I do not trust Marta after that vote."',
+      playerReads: [
+        {
+          playerId: 2,
+          read: 'suspicious',
+          reason:
+            'Player 1 publicly pushed suspicion; treat as persuasion, not proof.',
+          updatedAtTurn: 3,
+        },
+      ],
+    });
   });
 
   it('rejects malformed or illegal model responses', () => {

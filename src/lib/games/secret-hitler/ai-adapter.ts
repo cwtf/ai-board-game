@@ -64,6 +64,13 @@ export interface SecretHitlerMemoryPatch {
   playerReads?: SecretHitlerPlayerRead[];
 }
 
+export interface SecretHitlerPublicInfluenceOptions {
+  speakerName: string;
+  body: string;
+  players: Array<Pick<SecretHitlerPlayer, 'id' | 'name'>>;
+  currentTurn?: number;
+}
+
 export interface SecretHitlerState {
   seed: string;
   players: SecretHitlerPlayer[];
@@ -225,6 +232,80 @@ function cleanMemoryText(value: unknown): string | undefined {
   return trimmed ? trimmed.slice(0, maxMemoryTextLength) : undefined;
 }
 
+function normalizeInfluenceText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function playerAliases(
+  player: Pick<SecretHitlerPlayer, 'id' | 'name'>,
+): string[] {
+  const withoutParenthetical = player.name.replace(/\s*\([^)]*\)/g, '');
+  return Array.from(
+    new Set(
+      [player.name, withoutParenthetical, `player ${player.id + 1}`]
+        .map(normalizeInfluenceText)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function influenceReadFor(body: string): SecretHitlerMemoryRead | undefined {
+  const text = normalizeInfluenceText(body);
+  const accusedTerms = [
+    'is fascist',
+    'is hitler',
+    'as fascist',
+    'as hitler',
+    'must be fascist',
+    'must be hitler',
+    'execute',
+    'shoot',
+  ];
+  if (accusedTerms.some((term) => text.includes(term))) {
+    return 'accused';
+  }
+
+  const suspiciousTerms = [
+    'sus',
+    'suspicious',
+    'dont trust',
+    'do not trust',
+    'distrust',
+    'lying',
+    'liar',
+    'sketchy',
+    'unsafe',
+    'bad vote',
+  ];
+  if (suspiciousTerms.some((term) => text.includes(term))) {
+    return 'suspicious';
+  }
+
+  const trustTerms = [
+    'trust',
+    'seems liberal',
+    'looks liberal',
+    'safe',
+    'clear',
+    'good vote',
+    'support',
+    'back',
+  ];
+  if (trustTerms.some((term) => text.includes(term))) {
+    return 'trust';
+  }
+
+  return undefined;
+}
+
+function quoteForMemory(body: string): string {
+  const compact = body.replace(/\s+/g, ' ').trim();
+  return compact.length > 90 ? `${compact.slice(0, 87)}...` : compact;
+}
+
 function cleanPlayerRead(
   value: unknown,
   allowedPlayerIds?: Set<number>,
@@ -367,6 +448,41 @@ export function applySecretHitlerMemoryPatch(
       sanitizedPatch.privateNote,
     ),
     playerReads: Array.from(readsByPlayer.values()).slice(-20),
+  };
+}
+
+export function createSecretHitlerPublicInfluencePatch({
+  speakerName,
+  body,
+  players,
+  currentTurn,
+}: SecretHitlerPublicInfluenceOptions): SecretHitlerMemoryPatch | undefined {
+  const read = influenceReadFor(body);
+  const normalizedBody = normalizeInfluenceText(body);
+  const mentionedPlayers = players.filter((player) =>
+    playerAliases(player).some((alias) => normalizedBody.includes(alias)),
+  );
+
+  if (!read || mentionedPlayers.length === 0) {
+    return undefined;
+  }
+
+  const quote = quoteForMemory(body);
+  const direction =
+    read === 'trust'
+      ? 'trust'
+      : read === 'accused'
+        ? 'accusation'
+        : 'suspicion';
+
+  return {
+    publicClaim: `${speakerName} publicly pushed ${direction}: "${quote}"`,
+    playerReads: mentionedPlayers.map((player) => ({
+      playerId: player.id,
+      read,
+      reason: `${speakerName} publicly pushed ${direction}; treat as persuasion, not proof.`,
+      updatedAtTurn: currentTurn,
+    })),
   };
 }
 

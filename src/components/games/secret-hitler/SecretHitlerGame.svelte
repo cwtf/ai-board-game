@@ -5,6 +5,7 @@
   import {
     applySecretHitlerMemoryPatch,
     createSecretHitlerAIMemory,
+    createSecretHitlerPublicInfluencePatch,
     parseSecretHitlerAIResponse,
     parseSecretHitlerTableTalkResponse,
     secretHitlerAdapter,
@@ -711,6 +712,28 @@
         },
       ),
     };
+  }
+
+  function applyHumanInfluenceMemory(item: ChatMessage) {
+    const patch = createSecretHitlerPublicInfluencePatch({
+      speakerName: item.playerName,
+      body: item.body,
+      players,
+      currentTurn: item.turn,
+    });
+    if (!patch) {
+      return;
+    }
+
+    for (const player of players) {
+      if (
+        player.id !== item.playerId &&
+        player.alive &&
+        modelProfileForPlayer(player.id)
+      ) {
+        applyMemoryPatchForPlayer(player.id, patch);
+      }
+    }
   }
 
   function modelProfileForPlayer(playerIndex: number) {
@@ -2217,6 +2240,7 @@
     }
 
     const item = appendChatMessage(author, body);
+    applyHumanInfluenceMemory(item);
     chatDraft = '';
     maybeRequestQuestionReplies(item);
   }
