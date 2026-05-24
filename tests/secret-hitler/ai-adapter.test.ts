@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applySecretHitlerMemoryPatch,
+  assessSecretHitlerPublicSpeech,
   assessSecretHitlerStrategicMove,
   chooseSecretHitlerStrategicFallback,
   createSecretHitlerAIMemory,
@@ -26,6 +27,7 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('Never claim certainty from hidden information');
     expect(prompt).toContain('Do not make your next move obvious');
     expect(prompt).toContain('Never announce private policy choices');
+    expect(prompt).toContain('private policy phases');
     expect(prompt).toContain('Liberals win at 5 Liberal policies');
     expect(prompt).toContain('Fascists win at 6 Fascist policies');
     expect(prompt).toContain(
@@ -185,6 +187,48 @@ describe('Secret Hitler AI adapter', () => {
       kind: 'chancellor-enact',
       index: 1,
     });
+  });
+
+  it('flags public table talk that leaks private policy handling', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'private-policy-speech',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.players[2] = {
+      id: 2,
+      name: 'Lukas',
+      role: 'hitler',
+      alive: true,
+    };
+    state.phase = 'president-discard';
+    state.president = 2;
+    state.nominee = 3;
+    state.presidentHand = ['liberal', 'fascist', 'fascist'];
+
+    expect(
+      assessSecretHitlerPublicSpeech(state, 2, {
+        id: 'president-discard:0',
+        kind: 'president-discard',
+        index: 0,
+        tableTalk:
+          "I received a mixed bag. I'll discard a liberal to push the fascist agenda forward.",
+      }),
+    ).toMatchObject({
+      ok: false,
+      reason:
+        'Public tableTalk reveals hidden-team identity, hidden-team agenda, or hidden-team intent.',
+    });
+
+    expect(
+      assessSecretHitlerPublicSpeech(state, 2, {
+        id: 'president-discard:0',
+        kind: 'president-discard',
+        index: 0,
+        tableTalk:
+          'This ticket passed, so I am sending it forward. We can judge the outcome publicly.',
+      }),
+    ).toEqual({ ok: true });
   });
 
   it('briefs early voters not to reflexively reject unknown governments', () => {

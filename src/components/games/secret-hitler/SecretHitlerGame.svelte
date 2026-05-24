@@ -4,6 +4,7 @@
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
     applySecretHitlerMemoryPatch,
+    assessSecretHitlerPublicSpeech,
     assessSecretHitlerStrategicMove,
     chooseSecretHitlerStrategicFallback,
     createSecretHitlerAIMemory,
@@ -847,6 +848,13 @@
     let lastError = '';
     let strategicFallback: SecretHitlerMove | undefined;
     let strategicFallbackReason = '';
+    let quietSpeechFallback:
+      | {
+          move: SecretHitlerMove;
+          memoryPatch?: SecretHitlerMemoryPatch;
+        }
+      | undefined;
+    let quietSpeechFallbackReason = '';
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       const result = await provider.complete({
@@ -893,6 +901,33 @@
           }
           break;
         }
+        const speechAssessment = assessSecretHitlerPublicSpeech(
+          state,
+          player,
+          parsed.value.move,
+        );
+        if (!speechAssessment.ok) {
+          lastError = speechAssessment.reason ?? 'Unsafe public tableTalk.';
+          quietSpeechFallback = {
+            move: {
+              ...parsed.value.move,
+              tableTalk: undefined,
+            } as SecretHitlerMove,
+            memoryPatch: parsed.value.memoryPatch,
+          };
+          quietSpeechFallbackReason = lastError;
+          if (attempt < 3) {
+            messages.push(
+              { role: 'assistant' as const, content: result.text },
+              {
+                role: 'user' as const,
+                content: `Unsafe public tableTalk: ${lastError} Keep the same strategic objective, but do not reveal private hand contents, policy colors received, discard/enact choices, hidden role, or hidden-team intent. Return exactly one JSON object with a legal moveId and safe optional tableTalk.`,
+              },
+            );
+            continue;
+          }
+          break;
+        }
         return parsed.value;
       }
 
@@ -912,6 +947,15 @@
         warning: `${
           state.players[player]?.name ?? 'AI player'
         } repeatedly chose a move that conflicted with their hidden objective, so a safer legal move was used. ${strategicFallbackReason}`,
+      };
+    }
+
+    if (quietSpeechFallback) {
+      return {
+        ...quietSpeechFallback,
+        warning: `${
+          state.players[player]?.name ?? 'AI player'
+        } repeatedly wrote unsafe public table talk, so the move was kept but the public message was suppressed. ${quietSpeechFallbackReason}`,
       };
     }
 
