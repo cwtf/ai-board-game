@@ -12,6 +12,7 @@
     serializeSecretHitlerForAI,
     type SecretHitlerAIMemory,
     type SecretHitlerChatMessage,
+    type SecretHitlerLegislativeHistoryEntry,
     type SecretHitlerMemoryPatch,
     type SecretHitlerMove,
     type SecretHitlerState,
@@ -250,6 +251,7 @@
   let winner = '';
   let gameOverDismissed = false;
   let turn = 1;
+  let legislativeHistory: SecretHitlerLegislativeHistoryEntry[] = [];
   let chatDraft = '';
   let chatMessages: ChatMessage[] = [];
   let tableReadProfileId = '';
@@ -352,6 +354,7 @@
       winner: winner ? (winner.startsWith('Liberals') ? 0 : 1) : null,
       winnerText: winner,
       turn,
+      legislativeHistory,
       chatMessages: chatMessages.map(
         ({ id: _id, ...item }) => item,
       ) satisfies SecretHitlerChatMessage[],
@@ -429,6 +432,7 @@
     investigationResult = state.investigationResult;
     winner = state.winnerText;
     turn = state.turn;
+    legislativeHistory = state.legislativeHistory;
     chatMessages = state.chatMessages.map((item, index) => ({
       id: `chat-${index}-${item.turn}-${item.playerId}-${item.phase}`,
       ...item,
@@ -617,6 +621,7 @@
     winner = '';
     gameOverDismissed = false;
     turn = 1;
+    legislativeHistory = [];
     chatDraft = '';
     chatMessages = [];
     tableReadEdges = [];
@@ -656,6 +661,39 @@
 
   function policyLabel(policy: Policy): string {
     return policy === 'liberal' ? 'Liberal' : 'Fascist';
+  }
+
+  function legislativePlayerRef(playerId: number | null) {
+    if (playerId === null) {
+      return null;
+    }
+
+    const player = players[playerId];
+    return player ? { id: player.id, name: player.name } : null;
+  }
+
+  function recordLegislativeHistory(
+    policy: Policy,
+    opts: { chaos?: boolean } = {},
+  ) {
+    const source = opts.chaos ? 'election-tracker' : 'government';
+    const presidentId =
+      source === 'government' ? (previousPresident ?? president) : null;
+    const chancellorId =
+      source === 'government' ? (previousChancellor ?? nominee) : null;
+
+    legislativeHistory = [
+      ...legislativeHistory,
+      {
+        turn,
+        policy,
+        source,
+        president: legislativePlayerRef(presidentId),
+        chancellor: legislativePlayerRef(chancellorId),
+        liberalPoliciesAfter: liberalPolicies,
+        fascistPoliciesAfter: fascistPolicies,
+      },
+    ];
   }
 
   function configuredProfileById(
@@ -2130,6 +2168,7 @@
       }
     }
 
+    recordLegislativeHistory(policy, opts);
     electionTracker = 0;
 
     if (winner) {

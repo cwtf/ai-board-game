@@ -18,6 +18,7 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain(
       'only the information your player is allowed to know',
     );
+    expect(prompt).toContain('legislative history');
     expect(prompt).toContain('Never claim certainty from hidden information');
     expect(prompt).toContain('Do not make your next move obvious');
     expect(prompt).toContain('Never announce private policy choices');
@@ -174,6 +175,46 @@ describe('Secret Hitler AI adapter', () => {
     expect(payload.neutralTableSummary.turnSummaries[0].claims).toEqual([
       'Player 2 claimed the ticket felt too quiet.',
     ]);
+  });
+
+  it('records public legislative history for enacted policies', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'legislative-history',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.phase = 'chancellor-discard';
+    state.turn = 3;
+    state.president = 1;
+    state.nominee = 4;
+    state.previousPresident = 1;
+    state.previousChancellor = 4;
+    state.chancellorHand = ['liberal', 'fascist'];
+
+    const next = secretHitlerAdapter.applyMove(state, {
+      id: 'chancellor-enact:0',
+      kind: 'chancellor-enact',
+      index: 0,
+    }) as SecretHitlerState;
+
+    expect(next.legislativeHistory).toEqual([
+      {
+        turn: 3,
+        policy: 'liberal',
+        source: 'government',
+        president: { id: 1, name: 'Player 2' },
+        chancellor: { id: 4, name: 'Player 5' },
+        liberalPoliciesAfter: 1,
+        fascistPoliciesAfter: 0,
+      },
+    ]);
+
+    const payload = JSON.parse(serializeSecretHitlerForAI(next, 2, [])) as {
+      state: {
+        legislativeHistory: SecretHitlerState['legislativeHistory'];
+      };
+    };
+    expect(payload.state.legislativeHistory).toEqual(next.legislativeHistory);
   });
 
   it('serializes only legally visible identities for each player', () => {

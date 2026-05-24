@@ -76,6 +76,16 @@ export interface SecretHitlerNeutralTableSummary {
   turnSummaries: SecretHitlerNeutralTurnSummary[];
 }
 
+export interface SecretHitlerLegislativeHistoryEntry {
+  turn: number;
+  policy: SecretHitlerPolicy;
+  source: 'government' | 'election-tracker';
+  president: Pick<SecretHitlerPlayer, 'id' | 'name'> | null;
+  chancellor: Pick<SecretHitlerPlayer, 'id' | 'name'> | null;
+  liberalPoliciesAfter: number;
+  fascistPoliciesAfter: number;
+}
+
 export interface SecretHitlerPublicInfluenceOptions {
   speakerName: string;
   body: string;
@@ -105,6 +115,7 @@ export interface SecretHitlerState {
   winner: number | null;
   winnerText: string;
   turn: number;
+  legislativeHistory: SecretHitlerLegislativeHistoryEntry[];
   chatMessages: SecretHitlerChatMessage[];
 }
 
@@ -687,6 +698,48 @@ function drawThreePolicies(state: SecretHitlerState): {
   };
 }
 
+function historyPlayerRef(
+  state: SecretHitlerState,
+  playerId: number | null,
+): Pick<SecretHitlerPlayer, 'id' | 'name'> | null {
+  if (playerId === null) {
+    return null;
+  }
+
+  const player = state.players[playerId];
+  return player ? { id: player.id, name: player.name } : null;
+}
+
+function legislativeHistoryEntry(
+  state: SecretHitlerState,
+  policy: SecretHitlerPolicy,
+  opts: {
+    chaos?: boolean;
+    liberalPoliciesAfter: number;
+    fascistPoliciesAfter: number;
+  },
+): SecretHitlerLegislativeHistoryEntry {
+  const source = opts.chaos ? 'election-tracker' : 'government';
+  const presidentId =
+    source === 'government'
+      ? (state.previousPresident ?? state.president)
+      : null;
+  const chancellorId =
+    source === 'government'
+      ? (state.previousChancellor ?? state.nominee)
+      : null;
+
+  return {
+    turn: state.turn,
+    policy,
+    source,
+    president: historyPlayerRef(state, presidentId),
+    chancellor: historyPlayerRef(state, chancellorId),
+    liberalPoliciesAfter: opts.liberalPoliciesAfter,
+    fascistPoliciesAfter: opts.fascistPoliciesAfter,
+  };
+}
+
 function finishLegislativeTurn(state: SecretHitlerState): SecretHitlerState {
   return {
     ...advancePresident({
@@ -708,13 +761,23 @@ function enactPolicy(
   policy: SecretHitlerPolicy,
   opts: { chaos?: boolean } = {},
 ): SecretHitlerState {
+  const liberalPoliciesAfter =
+    policy === 'liberal' ? state.liberalPolicies + 1 : state.liberalPolicies;
+  const fascistPoliciesAfter =
+    policy === 'fascist' ? state.fascistPolicies + 1 : state.fascistPolicies;
   const nextState = {
     ...state,
-    liberalPolicies:
-      policy === 'liberal' ? state.liberalPolicies + 1 : state.liberalPolicies,
-    fascistPolicies:
-      policy === 'fascist' ? state.fascistPolicies + 1 : state.fascistPolicies,
+    liberalPolicies: liberalPoliciesAfter,
+    fascistPolicies: fascistPoliciesAfter,
     electionTracker: 0,
+    legislativeHistory: [
+      ...state.legislativeHistory,
+      legislativeHistoryEntry(state, policy, {
+        chaos: opts.chaos,
+        liberalPoliciesAfter,
+        fascistPoliciesAfter,
+      }),
+    ],
   };
 
   if (nextState.liberalPolicies >= 5) {
@@ -844,6 +907,7 @@ function publicStateFor(state: SecretHitlerState, viewer: number) {
     electionTracker: state.electionTracker,
     liberalPolicies: state.liberalPolicies,
     fascistPolicies: state.fascistPolicies,
+    legislativeHistory: state.legislativeHistory,
     drawPileCount: state.drawPile.length,
     discardPileCount: state.discardPile.length,
     votes: Object.fromEntries(
@@ -1073,6 +1137,7 @@ export const secretHitlerAdapter: GameAdapter<
       winner: null,
       winnerText: '',
       turn: 1,
+      legislativeHistory: [],
       chatMessages: [],
     };
   },
@@ -1408,7 +1473,7 @@ export const secretHitlerAdapter: GameAdapter<
     return [
       'You are playing Secret Hitler as exactly one assigned player.',
       'The payload includes assignedPlayer with your exact id and name; use that identity when speaking in tableTalk.',
-      'You will receive only the information your player is allowed to know: your own role, legally visible teammate roles, public board state, public chat, and any private policy hand or executive-result field that belongs to you.',
+      'You will receive only the information your player is allowed to know: your own role, legally visible teammate roles, public board state, public legislative history, public chat, and any private policy hand or executive-result field that belongs to you.',
       'Never claim certainty from hidden information you cannot see. Do not assume unseen policy cards, unseen roles, private ballots, or private discards.',
       'You may use tableTalk to persuade, question, accuse, defend, coordinate, misdirect, or bluff in character for your assigned role.',
       'Do not make your next move obvious in tableTalk. Never announce private policy choices, planned discards/enactments, intended executions, intended investigations, or hidden-team plans before making the move.',
