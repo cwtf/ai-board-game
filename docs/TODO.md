@@ -153,6 +153,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 - [ ] Mobile-optimised layouts.
 - [ ] Difficulty presets (model + temperature + retry count).
 - [ ] Per-seat AI configuration: let each AI player use a different configured provider/model in Splendor, then extract the assignment UI/config shape for future games.
+- [ ] Extract the Secret Hitler AI decision pipeline before considering LangGraph.
 - [ ] Smarter Favor response from AI targets (currently random in v1).
 - [ ] Add a third game to validate the abstraction (Love Letter, Coup, Hanabi). Each = one new doc under `docs/games/` + one new adapter.
 - [ ] Optional thin proxy worker template for users who'd rather keep the key server-side.

@@ -87,4 +87,5 @@ In the Cloudflare dashboard, the build command is `npm run build` and the output
 - Shared architecture: [docs/DESIGN.md](docs/DESIGN.md)
 - Implementation plan: [docs/TODO.md](docs/TODO.md)
 - Splendor spec: [docs/games/splendor.md](docs/games/splendor.md)
+- Secret Hitler AI notes: [docs/games/secret-hitler.md](docs/games/secret-hitler.md)
 - Exploding Kittens spec: [docs/games/exploding-kittens.md](docs/games/exploding-kittens.md)
