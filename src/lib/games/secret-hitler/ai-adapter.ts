@@ -86,6 +86,11 @@ export interface SecretHitlerLegislativeHistoryEntry {
   fascistPoliciesAfter: number;
 }
 
+export interface SecretHitlerStrategicAssessment {
+  ok: boolean;
+  reason?: string;
+}
+
 export interface SecretHitlerPublicInfluenceOptions {
   speakerName: string;
   body: string;
@@ -700,6 +705,28 @@ function policyActionGuidanceFor(
     );
   }
 
+  if (state.phase === 'voting') {
+    guidance.push(
+      'Voting guidance: do not default to nein just because roles are hidden. In the early game, approving plausible governments creates policy history and voting evidence.',
+    );
+
+    if (state.fascistPolicies < 3) {
+      guidance.push(
+        'The Hitler-Chancellor instant win is not active before three Fascist policies, so do not reject a ticket solely because the nominee could secretly be Hitler.',
+      );
+    } else if (party === 'liberal') {
+      guidance.push(
+        'With three or more Fascist policies enacted, Liberal players should be much more cautious about Chancellor nominees who could be Hitler.',
+      );
+    }
+
+    if (state.electionTracker >= 2) {
+      guidance.push(
+        'The election tracker is at two failed governments; another failed vote top-decks a policy, so reject only when that risk is acceptable.',
+      );
+    }
+  }
+
   if (state.phase === 'president-discard' && viewer === state.president) {
     if (party === 'liberal') {
       guidance.push(
@@ -1020,12 +1047,176 @@ function currentVoter(state: SecretHitlerState): number {
   );
 }
 
+function policyAfterDiscard(
+  policies: SecretHitlerPolicy[],
+  index: number,
+): SecretHitlerPolicy[] {
+  return policies.filter((_, item) => item !== index);
+}
+
+export function assessSecretHitlerStrategicMove(
+  state: SecretHitlerState,
+  player: number,
+  move: SecretHitlerMove,
+): SecretHitlerStrategicAssessment {
+  const role = state.players[player]?.role;
+  if (!role) {
+    return { ok: true };
+  }
+
+  const party = partyFor(role);
+  if (
+    move.kind === 'chancellor-enact' &&
+    state.phase === 'chancellor-discard' &&
+    player === state.nominee
+  ) {
+    const chosenPolicy = state.chancellorHand[move.index];
+    if (
+      party === 'fascist' &&
+      state.liberalPolicies >= 4 &&
+      chosenPolicy === 'liberal' &&
+      state.chancellorHand.includes('fascist')
+    ) {
+      return {
+        ok: false,
+        reason:
+          'Fascist Chancellor would enact the fifth Liberal policy while a Fascist policy is available.',
+      };
+    }
+
+    if (
+      party === 'liberal' &&
+      state.fascistPolicies >= 5 &&
+      chosenPolicy === 'fascist' &&
+      state.chancellorHand.includes('liberal')
+    ) {
+      return {
+        ok: false,
+        reason:
+          'Liberal Chancellor would enact the sixth Fascist policy while a Liberal policy is available.',
+      };
+    }
+  }
+
+  if (
+    move.kind === 'president-discard' &&
+    state.phase === 'president-discard' &&
+    player === state.president
+  ) {
+    const chosenPolicy = state.presidentHand[move.index];
+    const remaining = policyAfterDiscard(state.presidentHand, move.index);
+    if (
+      party === 'fascist' &&
+      state.liberalPolicies >= 4 &&
+      chosenPolicy === 'fascist' &&
+      state.presidentHand.includes('liberal') &&
+      !remaining.includes('fascist')
+    ) {
+      return {
+        ok: false,
+        reason:
+          'Fascist President would pass only Liberal policies to the Chancellor when the fifth Liberal policy would win.',
+      };
+    }
+
+    if (
+      party === 'liberal' &&
+      state.fascistPolicies >= 5 &&
+      chosenPolicy === 'liberal' &&
+      remaining.includes('fascist') &&
+      !remaining.includes('liberal')
+    ) {
+      return {
+        ok: false,
+        reason:
+          'Liberal President would pass only Fascist policies to the Chancellor when the sixth Fascist policy would win.',
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+export function chooseSecretHitlerStrategicFallback(
+  state: SecretHitlerState,
+  player: number,
+  moves: SecretHitlerMove[],
+): SecretHitlerMove | undefined {
+  const role = state.players[player]?.role;
+  if (!role) {
+    return undefined;
+  }
+
+  const party = partyFor(role);
+  if (
+    state.phase === 'chancellor-discard' &&
+    player === state.nominee &&
+    party === 'fascist' &&
+    state.liberalPolicies >= 4
+  ) {
+    return moves.find(
+      (move) =>
+        move.kind === 'chancellor-enact' &&
+        state.chancellorHand[move.index] === 'fascist',
+    );
+  }
+
+  if (
+    state.phase === 'chancellor-discard' &&
+    player === state.nominee &&
+    party === 'liberal' &&
+    state.fascistPolicies >= 5
+  ) {
+    return moves.find(
+      (move) =>
+        move.kind === 'chancellor-enact' &&
+        state.chancellorHand[move.index] === 'liberal',
+    );
+  }
+
+  if (
+    state.phase === 'president-discard' &&
+    player === state.president &&
+    party === 'fascist' &&
+    state.liberalPolicies >= 4
+  ) {
+    return moves.find((move) => {
+      if (move.kind !== 'president-discard') {
+        return false;
+      }
+      return policyAfterDiscard(state.presidentHand, move.index).includes(
+        'fascist',
+      );
+    });
+  }
+
+  if (
+    state.phase === 'president-discard' &&
+    player === state.president &&
+    party === 'liberal' &&
+    state.fascistPolicies >= 5
+  ) {
+    return moves.find((move) => {
+      if (move.kind !== 'president-discard') {
+        return false;
+      }
+      return policyAfterDiscard(state.presidentHand, move.index).includes(
+        'liberal',
+      );
+    });
+  }
+
+  return undefined;
+}
+
 function moveLabel(move: SecretHitlerMove, state?: SecretHitlerState): string {
   switch (move.kind) {
     case 'nominate':
       return `Nominate Player ${move.playerId + 1} as Chancellor`;
     case 'vote':
-      return `Vote ${move.vote}`;
+      return move.vote === 'ja'
+        ? 'Vote ja (approve the proposed government)'
+        : 'Vote nein (reject the proposed government)';
     case 'president-discard':
       return state?.presidentHand[move.index]
         ? `President discards ${state.presidentHand[move.index]} policy at index ${move.index}`

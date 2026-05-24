@@ -4,6 +4,8 @@
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
     applySecretHitlerMemoryPatch,
+    assessSecretHitlerStrategicMove,
+    chooseSecretHitlerStrategicFallback,
     createSecretHitlerAIMemory,
     createSecretHitlerPublicInfluencePatch,
     parseSecretHitlerAIResponse,
@@ -826,6 +828,7 @@
   ): Promise<{
     move: SecretHitlerMove;
     memoryPatch?: SecretHitlerMemoryPatch;
+    warning?: string;
   }> {
     const providerId = profile.provider as ProviderId;
     const provider = getProvider(providerId);
@@ -842,6 +845,8 @@
       },
     ];
     let lastError = '';
+    let strategicFallback: SecretHitlerMove | undefined;
+    let strategicFallbackReason = '';
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       const result = await provider.complete({
@@ -863,6 +868,31 @@
         currentTurn: state.turn,
       });
       if (parsed.ok) {
+        const assessment = assessSecretHitlerStrategicMove(
+          state,
+          player,
+          parsed.value.move,
+        );
+        if (!assessment.ok) {
+          lastError = assessment.reason ?? 'Strategic contradiction.';
+          strategicFallback ??= chooseSecretHitlerStrategicFallback(
+            state,
+            player,
+            legalMoves,
+          );
+          strategicFallbackReason = lastError;
+          if (attempt < 3) {
+            messages.push(
+              { role: 'assistant' as const, content: result.text },
+              {
+                role: 'user' as const,
+                content: `Strategic contradiction: ${lastError} Reconsider your move using private.role, private.party, private.objective, and private.actionGuidance. Return exactly one JSON object with a legal moveId and optional tableTalk.`,
+              },
+            );
+            continue;
+          }
+          break;
+        }
         return parsed.value;
       }
 
@@ -874,6 +904,15 @@
           content: `Invalid response: ${parsed.error}. Return exactly one JSON object with a legal moveId from the legalMoves list and optional tableTalk.`,
         },
       );
+    }
+
+    if (strategicFallback) {
+      return {
+        move: strategicFallback,
+        warning: `${
+          state.players[player]?.name ?? 'AI player'
+        } repeatedly chose a move that conflicted with their hidden objective, so a safer legal move was used. ${strategicFallbackReason}`,
+      };
     }
 
     throw new Error(lastError || 'AI did not return a valid move.');
@@ -1730,6 +1769,9 @@
           );
           move = action.move;
           memoryPatch = action.memoryPatch;
+          if (action.warning) {
+            aiWarning = action.warning;
+          }
         } catch (error) {
           const fallbackMove = fallbackAIExecutiveMove(state, legalMoves);
           if (!fallbackMove) {

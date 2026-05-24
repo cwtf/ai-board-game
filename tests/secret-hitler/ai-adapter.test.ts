@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   applySecretHitlerMemoryPatch,
+  assessSecretHitlerStrategicMove,
+  chooseSecretHitlerStrategicFallback,
   createSecretHitlerAIMemory,
   createSecretHitlerPublicInfluencePatch,
   parseSecretHitlerAIResponse,
@@ -145,6 +147,82 @@ describe('Secret Hitler AI adapter', () => {
     expect(payload.legalMoves.map((move) => move.label)).toEqual([
       'Chancellor enacts liberal policy at index 0',
       'Chancellor enacts fascist policy at index 1',
+    ]);
+  });
+
+  it('flags and reranks obvious hidden-objective policy contradictions', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'strategic-rerank',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.players[1] = {
+      id: 1,
+      name: 'Felix',
+      role: 'fascist',
+      alive: true,
+    };
+    state.phase = 'chancellor-discard';
+    state.president = 0;
+    state.nominee = 1;
+    state.liberalPolicies = 4;
+    state.chancellorHand = ['liberal', 'fascist'];
+    const moves = secretHitlerAdapter.legalMoves(state, 1);
+
+    const assessment = assessSecretHitlerStrategicMove(state, 1, {
+      id: 'chancellor-enact:0',
+      kind: 'chancellor-enact',
+      index: 0,
+    });
+
+    expect(assessment).toMatchObject({
+      ok: false,
+      reason:
+        'Fascist Chancellor would enact the fifth Liberal policy while a Fascist policy is available.',
+    });
+    expect(chooseSecretHitlerStrategicFallback(state, 1, moves)).toEqual({
+      id: 'chancellor-enact:1',
+      kind: 'chancellor-enact',
+      index: 1,
+    });
+  });
+
+  it('briefs early voters not to reflexively reject unknown governments', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'early-voting-guidance',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.phase = 'voting';
+    state.turn = 1;
+    state.president = 0;
+    state.nominee = 1;
+    state.fascistPolicies = 0;
+    state.votes = Object.fromEntries(
+      state.players.map((player) => [player.id, null]),
+    );
+    state.votes[0] = 'ja';
+    state.votes[1] = 'ja';
+    const moves = secretHitlerAdapter.legalMoves(state, 2);
+
+    const payload = JSON.parse(serializeSecretHitlerForAI(state, 2, moves)) as {
+      state: {
+        private: {
+          actionGuidance: string[];
+        };
+      };
+      legalMoves: Array<{ label: string }>;
+    };
+
+    expect(payload.state.private.actionGuidance.join(' ')).toContain(
+      'do not default to nein just because roles are hidden',
+    );
+    expect(payload.state.private.actionGuidance.join(' ')).toContain(
+      'approving plausible governments creates policy history',
+    );
+    expect(payload.legalMoves.map((move) => move.label)).toEqual([
+      'Vote ja (approve the proposed government)',
+      'Vote nein (reject the proposed government)',
     ]);
   });
 
