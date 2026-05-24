@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applySecretHitlerMemoryPatch,
+  createSecretHitlerAIMemory,
+  parseSecretHitlerAIResponse,
   secretHitlerAdapter,
+  serializeSecretHitlerForAI,
   type SecretHitlerState,
 } from '@/lib/games/secret-hitler/ai-adapter';
 
@@ -24,6 +28,8 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('public reasoning');
     expect(prompt).toContain('tableTalk');
     expect(prompt).toContain('moveId');
+    expect(prompt).toContain('privateMemory');
+    expect(prompt).toContain('memoryPatch');
     expect(prompt).toContain('Do not include prose');
     expect(prompt).toContain('Liberals should');
     expect(prompt).toContain('Fascists should');
@@ -87,6 +93,38 @@ describe('Secret Hitler AI adapter', () => {
     });
     expect(payload.rules.importantRules.join(' ')).toContain(
       'Hitler becoming Chancellor does not create a Fascist win while there are zero, one, or two Fascist policies enacted.',
+    );
+  });
+
+  it('serializes only the acting player private memory', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'memory',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    const memory = {
+      publicClaims: ['I said Player 4 was worth testing.'],
+      privateNotes: ['Protect Player 2 without sounding coordinated.'],
+      playerReads: [
+        {
+          playerId: 3,
+          read: 'trust' as const,
+          reason: 'Backed my nomination.',
+        },
+      ],
+    };
+
+    const payload = JSON.parse(
+      serializeSecretHitlerForAI(state, 1, [], memory),
+    ) as {
+      privateMemory: typeof memory;
+      responseSchema: { memoryPatch: unknown };
+    };
+
+    expect(payload.privateMemory).toEqual(memory);
+    expect(payload.responseSchema.memoryPatch).toBeTruthy();
+    expect(JSON.stringify(payload)).not.toContain(
+      'other players private memory',
     );
   });
 
@@ -210,6 +248,86 @@ describe('Secret Hitler AI adapter', () => {
         tableTalk: 'I can take Chancellor if the table trusts this pairing.',
       },
     });
+  });
+
+  it('parses and applies bounded private memory patches', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'memory-patch',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    const moves = secretHitlerAdapter.legalMoves(state, 0);
+    const parsed = parseSecretHitlerAIResponse(
+      JSON.stringify({
+        moveId: moves[0].id,
+        memoryPatch: {
+          publicClaim: 'I framed this as a cautious test.',
+          privateNote: 'Avoid linking myself too closely to Player 2.',
+          playerReads: [
+            {
+              playerId: 1,
+              read: 'suspicious',
+              reason: 'Pushed back too quickly.',
+            },
+            {
+              playerId: 999,
+              read: 'trust',
+              reason: 'Invalid player should be ignored.',
+            },
+          ],
+        },
+      }),
+      moves,
+      {
+        playerIds: state.players.map((player) => player.id),
+        currentTurn: state.turn,
+      },
+    );
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: {
+        move: moves[0],
+        memoryPatch: {
+          publicClaim: 'I framed this as a cautious test.',
+          privateNote: 'Avoid linking myself too closely to Player 2.',
+          playerReads: [
+            {
+              playerId: 1,
+              read: 'suspicious',
+              reason: 'Pushed back too quickly.',
+              updatedAtTurn: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    if (!parsed.ok) {
+      throw new Error(parsed.error);
+    }
+
+    const memory = applySecretHitlerMemoryPatch(
+      createSecretHitlerAIMemory(),
+      parsed.value.memoryPatch,
+      {
+        playerIds: state.players.map((player) => player.id),
+        currentTurn: state.turn,
+      },
+    );
+
+    expect(memory.publicClaims).toEqual(['I framed this as a cautious test.']);
+    expect(memory.privateNotes).toEqual([
+      'Avoid linking myself too closely to Player 2.',
+    ]);
+    expect(memory.playerReads).toEqual([
+      {
+        playerId: 1,
+        read: 'suspicious',
+        reason: 'Pushed back too quickly.',
+        updatedAtTurn: 1,
+      },
+    ]);
   });
 
   it('rejects malformed or illegal model responses', () => {

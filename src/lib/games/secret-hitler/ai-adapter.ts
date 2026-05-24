@@ -39,6 +39,31 @@ export interface SecretHitlerChatMessage {
   phase: SecretHitlerPhase;
 }
 
+export type SecretHitlerMemoryRead =
+  | 'trust'
+  | 'neutral'
+  | 'suspicious'
+  | 'accused';
+
+export interface SecretHitlerPlayerRead {
+  playerId: number;
+  read: SecretHitlerMemoryRead;
+  reason: string;
+  updatedAtTurn?: number;
+}
+
+export interface SecretHitlerAIMemory {
+  publicClaims: string[];
+  privateNotes: string[];
+  playerReads: SecretHitlerPlayerRead[];
+}
+
+export interface SecretHitlerMemoryPatch {
+  publicClaim?: string;
+  privateNote?: string;
+  playerReads?: SecretHitlerPlayerRead[];
+}
+
 export interface SecretHitlerState {
   seed: string;
   players: SecretHitlerPlayer[];
@@ -91,7 +116,27 @@ export type SecretHitlerMove =
 interface AIMovePayload {
   moveId?: unknown;
   tableTalk?: unknown;
+  memoryPatch?: unknown;
 }
+
+interface SecretHitlerAIResponse {
+  move: SecretHitlerMove;
+  memoryPatch?: SecretHitlerMemoryPatch;
+}
+
+interface MemoryPatchOptions {
+  playerIds?: Iterable<number>;
+  currentTurn?: number;
+}
+
+const maxMemoryItems = 8;
+const maxMemoryTextLength = 180;
+const memoryReadValues = new Set<SecretHitlerMemoryRead>([
+  'trust',
+  'neutral',
+  'suspicious',
+  'accused',
+]);
 
 const roleCounts: Record<number, { liberals: number; fascists: number }> = {
   5: { liberals: 3, fascists: 1 },
@@ -165,6 +210,164 @@ function shuffle<T>(items: T[], seed: string): T[] {
     [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
   }
   return copy;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function cleanMemoryText(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxMemoryTextLength) : undefined;
+}
+
+function cleanPlayerRead(
+  value: unknown,
+  allowedPlayerIds?: Set<number>,
+  currentTurn?: number,
+): SecretHitlerPlayerRead | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const playerId = value.playerId;
+  const read = value.read;
+  const reason = cleanMemoryText(value.reason);
+  if (
+    !Number.isInteger(playerId) ||
+    typeof read !== 'string' ||
+    !memoryReadValues.has(read as SecretHitlerMemoryRead) ||
+    !reason ||
+    (allowedPlayerIds && !allowedPlayerIds.has(playerId as number))
+  ) {
+    return undefined;
+  }
+
+  return {
+    playerId: playerId as number,
+    read: read as SecretHitlerMemoryRead,
+    reason,
+    updatedAtTurn: currentTurn,
+  };
+}
+
+function appendBounded(items: string[], item?: string): string[] {
+  if (!item) {
+    return items.slice(-maxMemoryItems);
+  }
+
+  return [...items, item].slice(-maxMemoryItems);
+}
+
+function allowedPlayerIdSet(
+  options: MemoryPatchOptions = {},
+): Set<number> | undefined {
+  return options.playerIds ? new Set(options.playerIds) : undefined;
+}
+
+export function createSecretHitlerAIMemory(): SecretHitlerAIMemory {
+  return {
+    publicClaims: [],
+    privateNotes: [],
+    playerReads: [],
+  };
+}
+
+export function sanitizeSecretHitlerAIMemory(
+  memory?: SecretHitlerAIMemory,
+  options: MemoryPatchOptions = {},
+): SecretHitlerAIMemory {
+  if (!memory) {
+    return createSecretHitlerAIMemory();
+  }
+
+  const allowedIds = allowedPlayerIdSet(options);
+  return {
+    publicClaims: memory.publicClaims
+      .map(cleanMemoryText)
+      .filter((item): item is string => Boolean(item))
+      .slice(-maxMemoryItems),
+    privateNotes: memory.privateNotes
+      .map(cleanMemoryText)
+      .filter((item): item is string => Boolean(item))
+      .slice(-maxMemoryItems),
+    playerReads: memory.playerReads
+      .map((item) => cleanPlayerRead(item, allowedIds, item.updatedAtTurn))
+      .filter((item): item is SecretHitlerPlayerRead => Boolean(item))
+      .slice(-20),
+  };
+}
+
+export function parseSecretHitlerMemoryPatch(
+  value: unknown,
+  options: MemoryPatchOptions = {},
+): SecretHitlerMemoryPatch | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const allowedIds = allowedPlayerIdSet(options);
+  const publicClaim = cleanMemoryText(value.publicClaim);
+  const privateNote = cleanMemoryText(value.privateNote);
+  const playerReads = Array.isArray(value.playerReads)
+    ? value.playerReads
+        .map((item) => cleanPlayerRead(item, allowedIds, options.currentTurn))
+        .filter((item): item is SecretHitlerPlayerRead => Boolean(item))
+        .slice(0, 10)
+    : undefined;
+
+  if (
+    !publicClaim &&
+    !privateNote &&
+    (!playerReads || playerReads.length === 0)
+  ) {
+    return undefined;
+  }
+
+  return {
+    publicClaim,
+    privateNote,
+    playerReads,
+  };
+}
+
+export function applySecretHitlerMemoryPatch(
+  memory: SecretHitlerAIMemory | undefined,
+  patch: SecretHitlerMemoryPatch | undefined,
+  options: MemoryPatchOptions = {},
+): SecretHitlerAIMemory {
+  const current = sanitizeSecretHitlerAIMemory(memory, options);
+  if (!patch) {
+    return current;
+  }
+
+  const sanitizedPatch = parseSecretHitlerMemoryPatch(patch, options);
+  if (!sanitizedPatch) {
+    return current;
+  }
+
+  const readsByPlayer = new Map(
+    current.playerReads.map((read) => [read.playerId, read]),
+  );
+  for (const read of sanitizedPatch.playerReads ?? []) {
+    readsByPlayer.set(read.playerId, read);
+  }
+
+  return {
+    publicClaims: appendBounded(
+      current.publicClaims,
+      sanitizedPatch.publicClaim,
+    ),
+    privateNotes: appendBounded(
+      current.privateNotes,
+      sanitizedPatch.privateNote,
+    ),
+    playerReads: Array.from(readsByPlayer.values()).slice(-20),
+  };
 }
 
 function rolesFor(playerCount: number, seed: string): SecretHitlerRole[] {
@@ -547,6 +750,109 @@ function moveLabel(move: SecretHitlerMove): string {
       return `Choose Player ${move.playerId + 1} for special election`;
     case 'execute':
       return `Execute Player ${move.playerId + 1}`;
+  }
+}
+
+export function serializeSecretHitlerForAI(
+  state: SecretHitlerState,
+  player: number,
+  moves: SecretHitlerMove[],
+  memory?: SecretHitlerAIMemory,
+): string {
+  const assignedPlayer =
+    state.players.find((candidate) => candidate.id === player) ??
+    state.players[player];
+
+  return JSON.stringify({
+    game: 'secret-hitler',
+    player,
+    assignedPlayer: assignedPlayer
+      ? { id: assignedPlayer.id, name: assignedPlayer.name }
+      : null,
+    rules: rulesSummary,
+    state: publicStateFor(state, player),
+    privateMemory: sanitizeSecretHitlerAIMemory(memory, {
+      playerIds: state.players.map((item) => item.id),
+    }),
+    legalMoves: moves.map((move) => ({
+      id: move.id,
+      kind: move.kind,
+      label: moveLabel(move),
+      move,
+    })),
+    responseSchema: {
+      moveId: 'string id from legalMoves',
+      tableTalk: 'optional public chat message as this player',
+      memoryPatch: {
+        publicClaim: 'optional short public stance you established',
+        privateNote: 'optional private intent or rationale for future turns',
+        playerReads:
+          'optional array of {playerId, read, reason}; read is trust, neutral, suspicious, or accused',
+      },
+    },
+  });
+}
+
+export function parseSecretHitlerAIResponse(
+  response: string,
+  moves: SecretHitlerMove[],
+  options: MemoryPatchOptions = {},
+): { ok: true; value: SecretHitlerAIResponse } | { ok: false; error: string } {
+  let payload: AIMovePayload;
+  try {
+    payload = JSON.parse(response) as AIMovePayload;
+  } catch {
+    return { ok: false, error: 'Response is not valid JSON.' };
+  }
+
+  if (typeof payload.moveId !== 'string') {
+    return { ok: false, error: 'Response must include a string moveId.' };
+  }
+
+  const move = moves.find((candidate) => candidate.id === payload.moveId);
+  if (!move) {
+    return { ok: false, error: `Move ${payload.moveId} is not legal.` };
+  }
+
+  if (
+    payload.tableTalk !== undefined &&
+    typeof payload.tableTalk !== 'string'
+  ) {
+    return { ok: false, error: 'tableTalk must be a string when provided.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      move: {
+        ...move,
+        tableTalk: payload.tableTalk?.slice(0, 500),
+      } as SecretHitlerMove,
+      memoryPatch: parseSecretHitlerMemoryPatch(payload.memoryPatch, options),
+    },
+  };
+}
+
+export function parseSecretHitlerTableTalkResponse(
+  response: string,
+  options: MemoryPatchOptions = {},
+): { tableTalk?: string; memoryPatch?: SecretHitlerMemoryPatch } | undefined {
+  try {
+    const payload = JSON.parse(response) as {
+      tableTalk?: unknown;
+      memoryPatch?: unknown;
+    };
+    const tableTalk =
+      typeof payload.tableTalk === 'string'
+        ? payload.tableTalk.trim().slice(0, 500)
+        : undefined;
+    const memoryPatch = parseSecretHitlerMemoryPatch(
+      payload.memoryPatch,
+      options,
+    );
+    return tableTalk || memoryPatch ? { tableTalk, memoryPatch } : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -938,65 +1244,16 @@ export const secretHitlerAdapter: GameAdapter<
       'Liberals should identify trust patterns, avoid electing suspicious Chancellors after three Fascist policies, and use investigations/executions to find Hitler.',
       'Fascists should protect Hitler, build plausible voting explanations, pass Fascist policies when useful, and create doubt without exposing team knowledge.',
       'Hitler should usually appear Liberal, avoid drawing execution pressure, and become Chancellor after three Fascist policies when it is likely to pass.',
-      'Each response must be one JSON object with moveId from the legalMoves list and optional tableTalk string. Do not include prose, markdown, or explanation outside the JSON.',
+      'The payload may include privateMemory from your own previous turns only; use it to keep your public claims, suspicions, cover story, and private plans consistent.',
+      'Each response must be one JSON object with moveId from the legalMoves list, optional tableTalk string, and optional memoryPatch object for your private future memory. Do not include prose, markdown, or explanation outside the JSON.',
     ].join(' ');
   },
   serializeForAI(state, player, moves) {
-    const assignedPlayer =
-      state.players.find((candidate) => candidate.id === player) ??
-      state.players[player];
-
-    return JSON.stringify({
-      game: 'secret-hitler',
-      player,
-      assignedPlayer: assignedPlayer
-        ? { id: assignedPlayer.id, name: assignedPlayer.name }
-        : null,
-      rules: rulesSummary,
-      state: publicStateFor(state, player),
-      legalMoves: moves.map((move) => ({
-        id: move.id,
-        kind: move.kind,
-        label: moveLabel(move),
-        move,
-      })),
-      responseSchema: {
-        moveId: 'string id from legalMoves',
-        tableTalk: 'optional public chat message as this player',
-      },
-    });
+    return serializeSecretHitlerForAI(state, player, moves);
   },
   parseAIMove(response, moves) {
-    let payload: AIMovePayload;
-    try {
-      payload = JSON.parse(response) as AIMovePayload;
-    } catch {
-      return { ok: false, error: 'Response is not valid JSON.' };
-    }
-
-    if (typeof payload.moveId !== 'string') {
-      return { ok: false, error: 'Response must include a string moveId.' };
-    }
-
-    const move = moves.find((candidate) => candidate.id === payload.moveId);
-    if (!move) {
-      return { ok: false, error: `Move ${payload.moveId} is not legal.` };
-    }
-
-    if (
-      payload.tableTalk !== undefined &&
-      typeof payload.tableTalk !== 'string'
-    ) {
-      return { ok: false, error: 'tableTalk must be a string when provided.' };
-    }
-
-    return {
-      ok: true,
-      move: {
-        ...move,
-        tableTalk: payload.tableTalk?.slice(0, 500),
-      } as SecretHitlerMove,
-    };
+    const parsed = parseSecretHitlerAIResponse(response, moves);
+    return parsed.ok ? { ok: true, move: parsed.value.move } : parsed;
   },
 };
 

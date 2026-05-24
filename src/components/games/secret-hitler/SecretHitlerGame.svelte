@@ -3,8 +3,15 @@
   import { getProvider } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
+    applySecretHitlerMemoryPatch,
+    createSecretHitlerAIMemory,
+    parseSecretHitlerAIResponse,
+    parseSecretHitlerTableTalkResponse,
     secretHitlerAdapter,
+    serializeSecretHitlerForAI,
+    type SecretHitlerAIMemory,
     type SecretHitlerChatMessage,
+    type SecretHitlerMemoryPatch,
     type SecretHitlerMove,
     type SecretHitlerState,
   } from '@/lib/games/secret-hitler/ai-adapter';
@@ -254,6 +261,7 @@
   let tableReadController: globalThis.AbortController | undefined;
   let lastUsage: TokenUsage | undefined;
   let totalUsage: TokenUsage = { input: 0, output: 0 };
+  let aiMemories: Record<number, SecretHitlerAIMemory> = {};
   const answeredQuestionKeys = new Set<string>();
   let playerProfileSelections: PlayerProfileSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
@@ -574,6 +582,9 @@
       ),
       alive: true,
     }));
+    aiMemories = Object.fromEntries(
+      players.map((player) => [player.id, createSecretHitlerAIMemory()]),
+    );
     president = 0;
     nominee = null;
     previousPresident = null;
@@ -673,6 +684,35 @@
     };
   }
 
+  function playerIds(): number[] {
+    return players.map((player) => player.id);
+  }
+
+  function memoryForPlayer(playerIndex: number): SecretHitlerAIMemory {
+    return aiMemories[playerIndex] ?? createSecretHitlerAIMemory();
+  }
+
+  function applyMemoryPatchForPlayer(
+    playerIndex: number,
+    patch?: SecretHitlerMemoryPatch,
+  ) {
+    if (!patch) {
+      return;
+    }
+
+    aiMemories = {
+      ...aiMemories,
+      [playerIndex]: applySecretHitlerMemoryPatch(
+        memoryForPlayer(playerIndex),
+        patch,
+        {
+          playerIds: playerIds(),
+          currentTurn: turn,
+        },
+      ),
+    };
+  }
+
   function modelProfileForPlayer(playerIndex: number) {
     const profileId = playerProfileSelections[playerIndex] ?? HUMAN_PROFILE;
     if (profileId === HUMAN_PROFILE) {
@@ -708,13 +748,21 @@
     legalMoves: SecretHitlerMove[],
     profile: ProviderModelProfile,
     signal?: AbortSignal,
-  ): Promise<SecretHitlerMove> {
+  ): Promise<{
+    move: SecretHitlerMove;
+    memoryPatch?: SecretHitlerMemoryPatch;
+  }> {
     const providerId = profile.provider as ProviderId;
     const provider = getProvider(providerId);
     const messages = [
       {
         role: 'user' as const,
-        content: secretHitlerAdapter.serializeForAI(state, player, legalMoves),
+        content: serializeSecretHitlerForAI(
+          state,
+          player,
+          legalMoves,
+          memoryForPlayer(player),
+        ),
       },
     ];
     let lastError = '';
@@ -734,9 +782,12 @@
 
       lastUsage = result.usage;
       totalUsage = addUsage(totalUsage, result.usage);
-      const parsed = secretHitlerAdapter.parseAIMove(result.text, legalMoves);
+      const parsed = parseSecretHitlerAIResponse(result.text, legalMoves, {
+        playerIds: state.players.map((item) => item.id),
+        currentTurn: state.turn,
+      });
       if (parsed.ok) {
-        return parsed.move;
+        return parsed.value;
       }
 
       lastError = parsed.error;
@@ -1322,17 +1373,6 @@
     return item;
   }
 
-  function parseTableTalkResponse(response: string): string | undefined {
-    try {
-      const payload = JSON.parse(response) as { tableTalk?: unknown };
-      return typeof payload.tableTalk === 'string'
-        ? payload.tableTalk.trim().slice(0, 500)
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   async function requestQuestionReplies(question: string, askerId: number) {
     const responders = players.filter(
       (player) =>
@@ -1357,14 +1397,16 @@
       try {
         const providerId = profile.provider as ProviderId;
         const responderContext = JSON.parse(
-          secretHitlerAdapter.serializeForAI(
+          serializeSecretHitlerForAI(
             toAdapterState(),
             responder.id,
             [],
+            memoryForPlayer(responder.id),
           ),
         ) as {
           rules: unknown;
           state: unknown;
+          privateMemory: unknown;
         };
         const result = await getProvider(providerId).complete({
           apiKey: keys[providerId],
@@ -1374,7 +1416,8 @@
             secretHitlerAdapter.systemPrompt(),
             'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
             'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
-            'Return exactly one JSON object: {"tableTalk":"your public reply"}.',
+            'You may include memoryPatch to preserve your public stance, private intent, or player reads for your own future turns.',
+            'Return exactly one JSON object: {"tableTalk":"your public reply","memoryPatch":{"publicClaim":"optional","privateNote":"optional","playerReads":[]}}.',
           ].join(' '),
           messages: [
             {
@@ -1386,8 +1429,12 @@
                 question,
                 rules: responderContext.rules,
                 state: responderContext.state,
+                privateMemory: responderContext.privateMemory,
                 publicChat: chatMessages.slice(-20),
-                responseSchema: { tableTalk: 'brief public reply' },
+                responseSchema: {
+                  tableTalk: 'brief public reply',
+                  memoryPatch: 'optional private memory update',
+                },
               }),
             },
           ],
@@ -1399,9 +1446,15 @@
 
         lastUsage = result.usage;
         totalUsage = addUsage(totalUsage, result.usage);
-        const reply = parseTableTalkResponse(result.text);
-        if (reply) {
-          appendChatMessage(responder, reply);
+        const reply = parseSecretHitlerTableTalkResponse(result.text, {
+          playerIds: playerIds(),
+          currentTurn: turn,
+        });
+        if (reply?.memoryPatch) {
+          applyMemoryPatchForPlayer(responder.id, reply.memoryPatch);
+        }
+        if (reply?.tableTalk) {
+          appendChatMessage(responder, reply.tableTalk);
         }
       } catch (error) {
         if (!signal.aborted) {
@@ -1457,14 +1510,17 @@
         }
 
         let move: SecretHitlerMove;
+        let memoryPatch: SecretHitlerMemoryPatch | undefined;
         try {
-          move = await requestAIAction(
+          const action = await requestAIAction(
             state,
             player,
             legalMoves,
             profile,
             aiController.signal,
           );
+          move = action.move;
+          memoryPatch = action.memoryPatch;
         } catch (error) {
           const fallbackMove = fallbackAIExecutiveMove(state, legalMoves);
           if (!fallbackMove) {
@@ -1484,6 +1540,7 @@
           };
           if (allBallotsSubmitted(voted)) {
             loadAdapterState(voted);
+            applyMemoryPatchForPlayer(player, memoryPatch);
             pauseForBallotReveal();
             break;
           }
@@ -1491,6 +1548,7 @@
 
         const nextState = secretHitlerAdapter.applyMove(state, move);
         loadAdapterState(nextState);
+        applyMemoryPatchForPlayer(player, memoryPatch);
         if (move.kind === 'execute') {
           const target = state.players[move.playerId];
           if (target) {
@@ -3387,9 +3445,7 @@
           </div>
         </div>
         <div class="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-          <div class="text-xs uppercase text-neutral-500">
-            Election tracker
-          </div>
+          <div class="text-xs uppercase text-neutral-500">Election tracker</div>
           <div class="mt-2 text-sm font-semibold text-neutral-100">
             {electionTracker}/3 failed governments
           </div>
@@ -3417,9 +3473,7 @@
             </div>
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <span
-                  class={`font-medium ${playerNameClasses(player.id)}`}
-                >
+                <span class={`font-medium ${playerNameClasses(player.id)}`}>
                   {player.name}
                 </span>
                 <span
