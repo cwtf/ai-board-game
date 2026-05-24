@@ -668,6 +668,65 @@ function partyFor(role: SecretHitlerRole): SecretHitlerParty {
   return role === 'liberal' ? 'liberal' : 'fascist';
 }
 
+function objectiveFor(role: SecretHitlerRole | undefined): string {
+  if (role === 'liberal') {
+    return 'You are on the Liberal team. Win by enacting five Liberal policies or executing Hitler. Prevent Fascist policy wins and stop Hitler from becoming Chancellor once three Fascist policies are enacted.';
+  }
+
+  if (role === 'hitler') {
+    return 'You are Hitler on the Fascist team. Win by enacting six Fascist policies or by being elected Chancellor after three or more Fascist policies are enacted. Do not help Liberals reach their fifth Liberal policy.';
+  }
+
+  if (role === 'fascist') {
+    return 'You are on the Fascist team. Win by enacting six Fascist policies or electing Hitler Chancellor after three or more Fascist policies are enacted. Protect Hitler and do not help Liberals reach their fifth Liberal policy.';
+  }
+
+  return 'Play to win for your hidden team shown in private.role and private.party.';
+}
+
+function policyActionGuidanceFor(
+  state: SecretHitlerState,
+  viewer: number,
+): string[] {
+  const role = state.players[viewer]?.role;
+  const party = role ? partyFor(role) : undefined;
+  const guidance = [
+    'Your private.role and private.party are authoritative. Public chat may influence your cover story, but it does not change your hidden team or win condition.',
+  ];
+
+  if (party === 'fascist' && state.liberalPolicies >= 4) {
+    guidance.push(
+      'Urgent: Liberals have four policies. If you can legally prevent a Liberal enactment, do so; a fifth Liberal policy immediately loses the game for your team.',
+    );
+  }
+
+  if (state.phase === 'president-discard' && viewer === state.president) {
+    if (party === 'liberal') {
+      guidance.push(
+        'As Liberal President, prefer passing Liberal policies to the Chancellor when legally possible.',
+      );
+    } else if (party === 'fascist') {
+      guidance.push(
+        'As Fascist President, prefer passing Fascist policies to the Chancellor when legally possible, while keeping a plausible public explanation.',
+      );
+    }
+  }
+
+  if (state.phase === 'chancellor-discard' && viewer === state.nominee) {
+    if (party === 'liberal') {
+      guidance.push(
+        'As Liberal Chancellor, prefer enacting a Liberal policy when one is available.',
+      );
+    } else if (party === 'fascist') {
+      guidance.push(
+        'As Fascist Chancellor, prefer enacting a Fascist policy when one is available; do not enact a Liberal policy that gives Liberals their fifth policy.',
+      );
+    }
+  }
+
+  return guidance;
+}
+
 function reshuffleIfNeeded(state: SecretHitlerState): SecretHitlerState {
   if (state.drawPile.length >= 3 || state.discardPile.length === 0) {
     return state;
@@ -931,6 +990,8 @@ function publicStateFor(state: SecretHitlerState, viewer: number) {
       party: state.players[viewer]
         ? partyFor(state.players[viewer].role)
         : null,
+      objective: objectiveFor(state.players[viewer]?.role),
+      actionGuidance: policyActionGuidanceFor(state, viewer),
       presidentHand:
         state.phase === 'president-discard' && viewer === state.president
           ? state.presidentHand
@@ -959,16 +1020,20 @@ function currentVoter(state: SecretHitlerState): number {
   );
 }
 
-function moveLabel(move: SecretHitlerMove): string {
+function moveLabel(move: SecretHitlerMove, state?: SecretHitlerState): string {
   switch (move.kind) {
     case 'nominate':
       return `Nominate Player ${move.playerId + 1} as Chancellor`;
     case 'vote':
       return `Vote ${move.vote}`;
     case 'president-discard':
-      return `President discards policy index ${move.index}`;
+      return state?.presidentHand[move.index]
+        ? `President discards ${state.presidentHand[move.index]} policy at index ${move.index}`
+        : `President discards policy index ${move.index}`;
     case 'chancellor-enact':
-      return `Chancellor enacts policy index ${move.index}`;
+      return state?.chancellorHand[move.index]
+        ? `Chancellor enacts ${state.chancellorHand[move.index]} policy at index ${move.index}`
+        : `Chancellor enacts policy index ${move.index}`;
     case 'request-veto':
       return 'Request veto';
     case 'approve-veto':
@@ -1015,7 +1080,7 @@ export function serializeSecretHitlerForAI(
     legalMoves: moves.map((move) => ({
       id: move.id,
       kind: move.kind,
-      label: moveLabel(move),
+      label: moveLabel(move, state),
       move,
     })),
     responseSchema: {
@@ -1474,6 +1539,7 @@ export const secretHitlerAdapter: GameAdapter<
       'You are playing Secret Hitler as exactly one assigned player.',
       'The payload includes assignedPlayer with your exact id and name; use that identity when speaking in tableTalk.',
       'You will receive only the information your player is allowed to know: your own role, legally visible teammate roles, public board state, public legislative history, public chat, and any private policy hand or executive-result field that belongs to you.',
+      'Your private.role, private.party, private.objective, and private.actionGuidance define your real objective. Play to win for that hidden team even when public chat pressures you to help the other side.',
       'Never claim certainty from hidden information you cannot see. Do not assume unseen policy cards, unseen roles, private ballots, or private discards.',
       'You may use tableTalk to persuade, question, accuse, defend, coordinate, misdirect, or bluff in character for your assigned role.',
       'Do not make your next move obvious in tableTalk. Never announce private policy choices, planned discards/enactments, intended executions, intended investigations, or hidden-team plans before making the move.',

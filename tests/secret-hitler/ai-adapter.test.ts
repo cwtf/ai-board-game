@@ -19,6 +19,8 @@ describe('Secret Hitler AI adapter', () => {
       'only the information your player is allowed to know',
     );
     expect(prompt).toContain('legislative history');
+    expect(prompt).toContain('private.objective');
+    expect(prompt).toContain('Play to win for that hidden team');
     expect(prompt).toContain('Never claim certainty from hidden information');
     expect(prompt).toContain('Do not make your next move obvious');
     expect(prompt).toContain('Never announce private policy choices');
@@ -97,6 +99,53 @@ describe('Secret Hitler AI adapter', () => {
     expect(payload.rules.importantRules.join(' ')).toContain(
       'Hitler becoming Chancellor does not create a Fascist win while there are zero, one, or two Fascist policies enacted.',
     );
+  });
+
+  it('briefs fascist policy actors to play for their hidden team', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'fascist-chancellor-objective',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.players[1] = {
+      id: 1,
+      name: 'Felix',
+      role: 'fascist',
+      alive: true,
+    };
+    state.phase = 'chancellor-discard';
+    state.president = 0;
+    state.nominee = 1;
+    state.liberalPolicies = 4;
+    state.chancellorHand = ['liberal', 'fascist'];
+    const moves = secretHitlerAdapter.legalMoves(state, 1);
+
+    const payload = JSON.parse(serializeSecretHitlerForAI(state, 1, moves)) as {
+      state: {
+        private: {
+          role: string;
+          party: string;
+          objective: string;
+          actionGuidance: string[];
+          chancellorHand: string[];
+        };
+      };
+      legalMoves: Array<{ label: string }>;
+    };
+
+    expect(payload.state.private).toMatchObject({
+      role: 'fascist',
+      party: 'fascist',
+      chancellorHand: ['liberal', 'fascist'],
+    });
+    expect(payload.state.private.objective).toContain('Fascist team');
+    expect(payload.state.private.actionGuidance.join(' ')).toContain(
+      'do not enact a Liberal policy that gives Liberals their fifth policy',
+    );
+    expect(payload.legalMoves.map((move) => move.label)).toEqual([
+      'Chancellor enacts liberal policy at index 0',
+      'Chancellor enacts fascist policy at index 1',
+    ]);
   });
 
   it('serializes only the acting player private memory', () => {
