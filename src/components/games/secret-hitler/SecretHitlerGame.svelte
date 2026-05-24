@@ -799,6 +799,7 @@
           player,
           legalMoves,
           memoryForPlayer(player),
+          tableReadTurnSummaries,
         ),
       },
     ];
@@ -1569,11 +1570,13 @@
             responder.id,
             [],
             memoryForPlayer(responder.id),
+            tableReadTurnSummaries,
           ),
         ) as {
           rules: unknown;
           state: unknown;
           privateMemory: unknown;
+          neutralTableSummary: unknown;
         };
         const result = await getProvider(providerId).complete({
           apiKey: keys[providerId],
@@ -1597,6 +1600,7 @@
                 rules: responderContext.rules,
                 state: responderContext.state,
                 privateMemory: responderContext.privateMemory,
+                neutralTableSummary: responderContext.neutralTableSummary,
                 publicChat: chatMessages.slice(-20),
                 responseSchema: {
                   tableTalk: 'brief public reply',

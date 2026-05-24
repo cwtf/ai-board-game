@@ -30,6 +30,7 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('tableTalk');
     expect(prompt).toContain('moveId');
     expect(prompt).toContain('privateMemory');
+    expect(prompt).toContain('neutralTableSummary');
     expect(prompt).toContain('memoryPatch');
     expect(prompt).toContain('Do not include prose');
     expect(prompt).toContain('Liberals should');
@@ -127,6 +128,52 @@ describe('Secret Hitler AI adapter', () => {
     expect(JSON.stringify(payload)).not.toContain(
       'other players private memory',
     );
+  });
+
+  it('serializes neutral public chat summaries as advisory context', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'neutral-chat-summary',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+
+    const payload = JSON.parse(
+      serializeSecretHitlerForAI(state, 1, [], undefined, [
+        {
+          turn: 2,
+          summary: 'Player 3 pushed Player 4 as a safer Chancellor.',
+          claims: ['Player 3 said Player 4 had voted consistently.'],
+        },
+        {
+          turn: 1,
+          summary: 'Player 1 asked why Player 2 voted nein.',
+          claims: ['Player 2 claimed the ticket felt too quiet.'],
+        },
+      ]),
+    ) as {
+      neutralTableSummary: {
+        source: string;
+        warning: string;
+        turnSummaries: Array<{
+          turn: number;
+          summary: string;
+          claims: string[];
+        }>;
+      };
+    };
+
+    expect(payload.neutralTableSummary.source).toBe(
+      'neutral public-chat analyst',
+    );
+    expect(payload.neutralTableSummary.warning).toContain(
+      'Advisory summary of public chat only',
+    );
+    expect(
+      payload.neutralTableSummary.turnSummaries.map((summary) => summary.turn),
+    ).toEqual([1, 2]);
+    expect(payload.neutralTableSummary.turnSummaries[0].claims).toEqual([
+      'Player 2 claimed the ticket felt too quiet.',
+    ]);
   });
 
   it('serializes only legally visible identities for each player', () => {

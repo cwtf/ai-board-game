@@ -64,6 +64,18 @@ export interface SecretHitlerMemoryPatch {
   playerReads?: SecretHitlerPlayerRead[];
 }
 
+export interface SecretHitlerNeutralTurnSummary {
+  turn: number;
+  summary: string;
+  claims: string[];
+}
+
+export interface SecretHitlerNeutralTableSummary {
+  source: 'neutral public-chat analyst';
+  warning: string;
+  turnSummaries: SecretHitlerNeutralTurnSummary[];
+}
+
 export interface SecretHitlerPublicInfluenceOptions {
   speakerName: string;
   body: string;
@@ -230,6 +242,49 @@ function cleanMemoryText(value: unknown): string | undefined {
 
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, maxMemoryTextLength) : undefined;
+}
+
+function sanitizeNeutralTurnSummary(
+  value: unknown,
+): SecretHitlerNeutralTurnSummary | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const turn = value.turn;
+  const summary = cleanMemoryText(value.summary);
+  if (!Number.isInteger(turn) || !summary) {
+    return undefined;
+  }
+
+  const claims = Array.isArray(value.claims)
+    ? value.claims
+        .map(cleanMemoryText)
+        .filter((claim): claim is string => Boolean(claim))
+        .slice(0, 4)
+    : [];
+
+  return {
+    turn: turn as number,
+    summary,
+    claims,
+  };
+}
+
+export function createSecretHitlerNeutralTableSummary(
+  turnSummaries: unknown[] = [],
+): SecretHitlerNeutralTableSummary {
+  return {
+    source: 'neutral public-chat analyst',
+    warning:
+      'Advisory summary of public chat only; treat as interpretation, not confirmed truth or private knowledge.',
+    turnSummaries: turnSummaries
+      .map(sanitizeNeutralTurnSummary)
+      .filter((summary): summary is SecretHitlerNeutralTurnSummary =>
+        Boolean(summary),
+      )
+      .sort((left, right) => left.turn - right.turn),
+  };
 }
 
 function normalizeInfluenceText(value: string): string {
@@ -874,6 +929,7 @@ export function serializeSecretHitlerForAI(
   player: number,
   moves: SecretHitlerMove[],
   memory?: SecretHitlerAIMemory,
+  neutralTurnSummaries: unknown[] = [],
 ): string {
   const assignedPlayer =
     state.players.find((candidate) => candidate.id === player) ??
@@ -890,6 +946,8 @@ export function serializeSecretHitlerForAI(
     privateMemory: sanitizeSecretHitlerAIMemory(memory, {
       playerIds: state.players.map((item) => item.id),
     }),
+    neutralTableSummary:
+      createSecretHitlerNeutralTableSummary(neutralTurnSummaries),
     legalMoves: moves.map((move) => ({
       id: move.id,
       kind: move.kind,
@@ -1361,6 +1419,7 @@ export const secretHitlerAdapter: GameAdapter<
       'Fascists should protect Hitler, build plausible voting explanations, pass Fascist policies when useful, and create doubt without exposing team knowledge.',
       'Hitler should usually appear Liberal, avoid drawing execution pressure, and become Chancellor after three Fascist policies when it is likely to pass.',
       'The payload may include privateMemory from your own previous turns only; use it to keep your public claims, suspicions, cover story, and private plans consistent.',
+      'The payload may include neutralTableSummary from a neutral public-chat analyst; treat it as advisory interpretation of public chat, not confirmed truth or private knowledge.',
       'Each response must be one JSON object with moveId from the legalMoves list, optional tableTalk string, and optional memoryPatch object for your private future memory. Do not include prose, markdown, or explanation outside the JSON.',
     ].join(' ');
   },
