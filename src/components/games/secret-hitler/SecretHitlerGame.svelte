@@ -74,8 +74,15 @@
     summary: string;
   }
 
+  interface TableTurnSummary {
+    turn: number;
+    summary: string;
+    claims: string[];
+  }
+
   interface ParsedTableRead {
     edges: RelationshipEdge[];
+    turnSummaries: TableTurnSummary[];
     rejectedCount: number;
     returnedPairCount: number;
   }
@@ -247,6 +254,8 @@
   let chatMessages: ChatMessage[] = [];
   let tableReadProfileId = '';
   let tableReadEdges: RelationshipEdge[] = [];
+  let tableReadTurnSummaries: TableTurnSummary[] = [];
+  let tableReadSummarizedChatCount = 0;
   let tableReadThinking = false;
   let tableReadWarning = '';
   let tableReadStatus = '';
@@ -611,6 +620,8 @@
     chatDraft = '';
     chatMessages = [];
     tableReadEdges = [];
+    tableReadTurnSummaries = [];
+    tableReadSummarizedChatCount = 0;
     tableReadWarning = '';
     lastAutoTableReadKey = '';
     lastSuccessfulTableReadKey = '';
@@ -658,6 +669,7 @@
       tableReadProfileId = fallbackProfileId;
       tableReadWarning = '';
       tableReadStatus = '';
+      tableReadSummarizedChatCount = 0;
       lastSuccessfulTableReadKey = '';
       return;
     }
@@ -668,6 +680,8 @@
     ) {
       tableReadProfileId = fallbackProfileId;
       tableReadEdges = [];
+      tableReadTurnSummaries = [];
+      tableReadSummarizedChatCount = 0;
       tableReadWarning = '';
       tableReadStatus = '';
       lastSuccessfulTableReadKey = '';
@@ -940,6 +954,23 @@
     );
   }
 
+  function mergeTurnSummaries(
+    savedSummaries: TableTurnSummary[],
+    newSummaries: TableTurnSummary[],
+  ): TableTurnSummary[] {
+    const merged = new Map<number, TableTurnSummary>();
+    for (const summary of savedSummaries) {
+      merged.set(summary.turn, summary);
+    }
+    for (const summary of newSummaries) {
+      merged.set(summary.turn, summary);
+    }
+
+    return Array.from(merged.values()).sort(
+      (left, right) => left.turn - right.turn,
+    );
+  }
+
   function normalizeRelationshipStatus(
     value: unknown,
   ): RelationshipStatus | undefined {
@@ -982,6 +1013,27 @@
     return count * (count - 1);
   }
 
+  function tableReadChatFrom(
+    snapshot: ChatMessage[],
+    startIndex: number,
+  ): Array<Omit<ChatMessage, 'id'> & { chatIndex: number }> {
+    return snapshot.slice(startIndex).map(({ id: _id, ...item }, offset) => ({
+      chatIndex: startIndex + offset,
+      ...item,
+    }));
+  }
+
+  function expectedTableReadTurns(
+    newPublicChat: Array<Pick<ChatMessage, 'turn'>>,
+  ): number[] {
+    return Array.from(
+      new Set([
+        ...tableReadTurnSummaries.map((summary) => summary.turn),
+        ...newPublicChat.map((item) => item.turn),
+      ]),
+    ).sort((left, right) => left - right);
+  }
+
   function tableReadSnapshotKey(profile: ProviderModelProfile): string {
     return JSON.stringify({
       profileId: profile.id,
@@ -992,6 +1044,7 @@
         name: player.name,
         alive: player.alive,
       })),
+      savedTurnSummaries: tableReadTurnSummaries,
       publicChat: chatMessages.map(
         ({ playerId, playerName, body, turn, phase }) => ({
           playerId,
@@ -1004,12 +1057,19 @@
     });
   }
 
-  function parseTableReadResponse(response: string): ParsedTableRead {
+  function parseTableReadResponse(
+    response: string,
+    expectedChatTurns: number[],
+  ): ParsedTableRead {
     const payload = JSON.parse(extractJsonObject(response)) as {
       relationships?: unknown;
+      turnSummaries?: unknown;
     };
     if (!Array.isArray(payload.relationships)) {
       throw new Error('Table read response must include relationships.');
+    }
+    if (!Array.isArray(payload.turnSummaries)) {
+      throw new Error('Table read response must include turnSummaries.');
     }
 
     const playerIds = new Set(players.map((player) => player.id));
@@ -1061,6 +1121,54 @@
       }
     }
 
+    const expectedTurns = new Set(expectedChatTurns);
+    const turnSummaries = new Map<number, TableTurnSummary>();
+    for (const item of payload.turnSummaries) {
+      if (!item || typeof item !== 'object') {
+        rejectedCount += 1;
+        continue;
+      }
+
+      const candidate = item as {
+        turn?: unknown;
+        summary?: unknown;
+        claims?: unknown;
+      };
+      const turn = numericPlayerId(candidate.turn);
+      const summary =
+        typeof candidate.summary === 'string'
+          ? candidate.summary.trim().slice(0, 220)
+          : '';
+      if (turn === undefined || !expectedTurns.has(turn) || !summary) {
+        rejectedCount += 1;
+        continue;
+      }
+
+      const claims = Array.isArray(candidate.claims)
+        ? candidate.claims
+            .filter((claim): claim is string => typeof claim === 'string')
+            .map((claim) => claim.trim())
+            .filter(Boolean)
+            .slice(0, 4)
+            .map((claim) => claim.slice(0, 140))
+        : [];
+
+      turnSummaries.set(turn, {
+        turn,
+        summary,
+        claims,
+      });
+    }
+
+    const missingTurns = [...expectedTurns].filter(
+      (turn) => !turnSummaries.has(turn),
+    );
+    if (missingTurns.length > 0) {
+      throw new Error(
+        `Table read response missed turn summar${missingTurns.length === 1 ? 'y' : 'ies'} for turn ${missingTurns.join(', ')}.`,
+      );
+    }
+
     if (edges.size === 0 && rejectedCount > 0) {
       throw new Error(
         `Table read response had ${rejectedCount} invalid relationship entr${rejectedCount === 1 ? 'y' : 'ies'}.`,
@@ -1069,6 +1177,9 @@
 
     return {
       edges: Array.from(edges.values()),
+      turnSummaries: Array.from(turnSummaries.values()).sort(
+        (left, right) => left.turn - right.turn,
+      ),
       rejectedCount,
       returnedPairCount: edges.size,
     };
@@ -1091,6 +1202,8 @@
     tableReadWarning = '';
     tableReadStatus = '';
     tableReadEdges = [];
+    tableReadTurnSummaries = [];
+    tableReadSummarizedChatCount = 0;
     lastSuccessfulTableReadKey = '';
     tableReadController?.abort();
     if (profileId && chatMessages.length) {
@@ -1119,6 +1232,8 @@
     }
     if (chatMessages.length === 0) {
       tableReadEdges = [];
+      tableReadTurnSummaries = [];
+      tableReadSummarizedChatCount = 0;
       lastSuccessfulTableReadKey = '';
       if (!opts.silent) {
         tableReadWarning = 'No public chat yet.';
@@ -1127,6 +1242,13 @@
       return;
     }
 
+    const chatSnapshot = [...chatMessages];
+    const summarizedChatCount = Math.min(
+      tableReadSummarizedChatCount,
+      chatSnapshot.length,
+    );
+    const newPublicChat = tableReadChatFrom(chatSnapshot, summarizedChatCount);
+    const expectedChatTurns = expectedTableReadTurns(newPublicChat);
     const snapshotKey = tableReadSnapshotKey(profile);
     if (snapshotKey === lastSuccessfulTableReadKey && tableReadEdges.length) {
       if (!opts.silent) {
@@ -1163,12 +1285,18 @@
             status: edge.status,
             summary: edge.summary,
           })),
-          publicChat: chatMessages
-            .slice(-40)
-            .map(({ id: _id, ...item }) => item),
+          savedTurnSummaries: tableReadTurnSummaries,
+          newPublicChat,
+          summarizedChatCount,
+          totalChatCount: chatSnapshot.length,
           expectedRelationships: expectedPairCount,
+          expectedChatTurns,
           instructions: [
             'Update the savedRoomState using only new public evidence from chat.',
+            'Update savedTurnSummaries using every message in newPublicChat. No message in newPublicChat may be ignored or dropped from the relevant turn summary.',
+            'Return one neutral summary for every turn number present in expectedChatTurns.',
+            'Turn summaries must group the public table chat by turn number and should preserve public claims, accusations, defenses, voting pressure, and unresolved questions.',
+            'Do not treat public claims as true. Summarize them as claims or pressure unless confirmed publicly.',
             'Return exactly one directed relationship entry for every ordered player pair where from and to are different.',
             'A from->to read means what the from player appears to feel or signal toward the to player; it does not imply the reverse direction.',
             'Use neutral when there is no new finding for a directed pair; neutral will not erase an existing non-neutral saved read.',
@@ -1183,6 +1311,13 @@
                 to: 1,
                 status: 'trust | neutral | suspicious | accused',
                 summary: 'short public reason',
+              },
+            ],
+            turnSummaries: [
+              {
+                turn: 1,
+                summary: 'neutral summary of public chat this turn',
+                claims: ['short public claim or pressure point'],
               },
             ],
           },
@@ -1202,12 +1337,15 @@
             'Use only public chat and public player names. Do not infer from hidden roles, private hands, or secret information.',
             'You are updating a saved room-state graph. Preserve prior non-neutral associations unless newer public chat supports changing them.',
             'Relationships are directional: A trusting B does not mean B trusts A. Analyze each ordered from->to direction independently.',
+            'Also maintain turnSummaries: exactly one entry for every turn number present in expectedChatTurns, grouped by turn number.',
+            'The newPublicChat array contains all public messages not yet summarized. Incorporate every newPublicChat item into its turn summary.',
+            'Each turn summary must be neutral and based only on public chat. Use claims for public accusations, defenses, trust pushes, promises, or unresolved questions.',
             'A neutral output means no new finding for that directed pair; it must not be used to erase prior trust, suspicion, or accusation.',
             `Return exactly ${expectedPairCount} relationship entries: one for every ordered player pair where from and to are different.`,
             'Use neutral for unclear, quiet, unsupported, or unchanged directed pairs. Do not omit pairs.',
             'Return pairs in stable ascending order by from, then to.',
             'Statuses are trust, neutral, suspicious, or accused. accused means a player is being treated as Fascist/Hitler, not merely discussing Fascist policies.',
-            'Return exactly one complete minified JSON object: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}]}.',
+            'Return exactly one complete minified JSON object: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no clear read"}],"turnSummaries":[{"turn":1,"summary":"public chat was quiet","claims":[]}]}.',
             'No markdown, no code fences, no prose, no trailing commas.',
           ].join(' '),
           messages,
@@ -1221,7 +1359,7 @@
         totalUsage = addUsage(totalUsage, result.usage);
 
         try {
-          const parsed = parseTableReadResponse(result.text);
+          const parsed = parseTableReadResponse(result.text, expectedChatTurns);
           if (parsed.returnedPairCount < expectedPairCount && attempt < 3) {
             lastError = `Only ${parsed.returnedPairCount}/${expectedPairCount} directed reads were returned.`;
             messages.push(
@@ -1238,6 +1376,10 @@
           }
 
           const mergedEdges = mergeTableReadEdges(tableReadEdges, parsed.edges);
+          const mergedSummaries = mergeTurnSummaries(
+            tableReadTurnSummaries,
+            parsed.turnSummaries,
+          );
           const preservedCount = mergedEdges.filter((edge) => {
             const incoming = parsed.edges.find(
               (item) =>
@@ -1250,12 +1392,14 @@
             );
           }).length;
           tableReadEdges = mergedEdges;
+          tableReadTurnSummaries = mergedSummaries;
+          tableReadSummarizedChatCount = chatSnapshot.length;
           lastSuccessfulTableReadKey = snapshotKey;
           tableReadWarning = '';
           tableReadStatus =
             parsed.returnedPairCount >= expectedPairCount
-              ? `Room read updated with all ${expectedPairCount} directed reads mapped; ${preservedCount} saved non-neutral read${preservedCount === 1 ? '' : 's'} preserved.`
-              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} directed reads; saved non-neutral reads were preserved.`;
+              ? `Room read updated with all ${expectedPairCount} directed reads and ${parsed.turnSummaries.length} turn summar${parsed.turnSummaries.length === 1 ? 'y' : 'ies'}; ${preservedCount} saved non-neutral read${preservedCount === 1 ? '' : 's'} preserved.`
+              : `Room read updated with ${parsed.returnedPairCount}/${expectedPairCount} directed reads and ${parsed.turnSummaries.length} turn summar${parsed.turnSummaries.length === 1 ? 'y' : 'ies'}; saved non-neutral reads were preserved.`;
           return;
         } catch (error) {
           lastError =
@@ -1264,7 +1408,7 @@
             { role: 'assistant' as const, content: result.text.slice(0, 4000) },
             {
               role: 'user' as const,
-              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries, one for every ordered directed player pair where from and to differ. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no new finding"}]}. Valid statuses: trust, neutral, suspicious, accused. Neutral means no new finding and will not erase saved non-neutral reads.`,
+              content: `Invalid JSON: ${lastError}. Return exactly one complete JSON object with ${expectedPairCount} relationship entries and one turnSummaries entry for every expectedChatTurns turn. Use this shape: {"relationships":[{"from":0,"to":1,"status":"neutral","summary":"no new finding"}],"turnSummaries":[{"turn":1,"summary":"public chat was quiet","claims":[]}]}. Valid statuses: trust, neutral, suspicious, accused. Neutral means no new finding and will not erase saved non-neutral reads.`,
             },
           );
         }
@@ -3139,6 +3283,45 @@
                 <div>No strong reads yet. Everyone starts neutral.</div>
               {/if}
             </div>
+          </div>
+        </div>
+
+        <div class="mt-4 border-t border-neutral-900 pt-3">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="text-xs font-semibold text-neutral-300">
+              Chat Summary by Turn
+            </h3>
+            <span class="text-[10px] text-neutral-500">
+              {tableReadTurnSummaries.length} turn{tableReadTurnSummaries.length ===
+              1
+                ? ''
+                : 's'}
+            </span>
+          </div>
+          <div
+            class="mt-2 max-h-48 space-y-3 overflow-y-auto pr-1 text-xs text-neutral-400"
+          >
+            {#if tableReadTurnSummaries.length}
+              {#each tableReadTurnSummaries as item (item.turn)}
+                <section>
+                  <div class="font-semibold text-neutral-200">
+                    Turn {item.turn}
+                  </div>
+                  <p class="mt-1 leading-relaxed">{item.summary}</p>
+                  {#if item.claims.length}
+                    <ul
+                      class="mt-1 list-disc space-y-1 pl-4 text-[11px] text-neutral-500"
+                    >
+                      {#each item.claims as claim}
+                        <li>{claim}</li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </section>
+              {/each}
+            {:else}
+              <div>No turn summaries yet.</div>
+            {/if}
           </div>
         </div>
       </section>
