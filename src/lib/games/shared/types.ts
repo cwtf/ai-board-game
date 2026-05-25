@@ -53,7 +53,8 @@ export interface MoveRecord<Move = unknown> {
   at: string;
 }
 
-export interface AIPlayerConfig {
+export interface ProviderAIPlayerConfig {
+  kind?: 'provider';
   provider: AIProvider;
   model: string;
   apiKey?: string;
@@ -61,6 +62,22 @@ export interface AIPlayerConfig {
   temperature?: number;
   maxTokens?: number;
 }
+
+export interface LocalAIPlayerConfig<State = unknown, Move = unknown> {
+  kind: 'local';
+  label: string;
+  model: string;
+  chooseMove(opts: {
+    state: State;
+    player: number;
+    legalMoves: Move[];
+    signal?: AbortSignal;
+  }): Move | Promise<Move>;
+}
+
+export type AIPlayerConfig<State = unknown, Move = unknown> =
+  | ProviderAIPlayerConfig
+  | LocalAIPlayerConfig<State, Move>;
 
 export interface AIMoveRequest {
   system: string;

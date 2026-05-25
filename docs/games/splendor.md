@@ -195,7 +195,88 @@ System prompt sketch (refine during implementation):
 
 State serialisation should be compact JSON. Helpful fields per opponent: prestige, bonuses by colour, tokens by colour, and reserve size. Reserved deck-card identities are shown to the reserving player and hidden from opponents.
 
-## 9. Known edge cases (write tests for these)
+## 9. Non-LLM bot draft
+
+Splendor is a strong candidate for a local bot that does not call an LLM. The game has a compact legal action space, mostly public information, deterministic scoring, and short tactical turns. Hidden information is limited to deck order and deck-reserved cards, so a rules-based or search-based bot can play credibly without language reasoning.
+
+### Feasibility
+
+- **Basic legal bot**: highly feasible. Choose a random legal move, with guardrails to prefer purchases over idle token takes.
+- **Decent heuristic bot**: highly feasible. Score every legal move from the current state and choose the best one.
+- **Strong bot**: feasible with bounded search. Use shallow lookahead, Monte Carlo rollouts, or MCTS with a time budget.
+- **LLM value-add**: optional. LLMs are more useful for explaining a move than for finding a good move.
+
+### Proposed implementation shape
+
+Keep the local bot separate from the LLM adapter:
+
+```ts
+interface SplendorBotOptions {
+  difficulty: 'easy' | 'medium' | 'hard' | 'expert';
+  seed?: string;
+  timeBudgetMs?: number;
+}
+
+interface SplendorBot {
+  chooseMove(
+    state: SplendorState,
+    player: number,
+    legalMoves: SplendorMove[],
+    options: SplendorBotOptions,
+  ): SplendorMove;
+}
+```
+
+The bot should consume the same `legalMoves()` output used by the UI and LLM adapter. It should never construct moves outside the rules engine.
+
+### Difficulty ladder
+
+| Difficulty | Policy | Expected quality |
+|---|---|---|
+| Easy | Weighted random legal move | Plays legally, occasionally silly |
+| Medium | One-ply heuristic evaluation | Decent casual opponent |
+| Hard | Heuristic plus opponent-denial scoring | Notices races and blocks obvious threats |
+| Expert | Heuristic-guided search or MCTS rollouts | Stronger, slower, tunable by time budget |
+
+### Heuristic features
+
+A one-ply evaluator should score each candidate move after applying it:
+
+- Prestige gained immediately.
+- Permanent bonus gained, weighted by scarcity and current market demand.
+- Progress toward visible nobles.
+- Distance to affordable high-value tier 2 and tier 3 cards.
+- Token efficiency: fewer wasted tokens, fewer forced discards, more tokens that map to near-term purchases.
+- Reserve quality: reserve high-prestige or strategically enabling cards; avoid filling reserve slots with low-value cards.
+- Opponent denial: reserve or buy cards an opponent can afford or is one token away from affording.
+- Endgame pressure: once any player is near 15 prestige, heavily weight immediate points and tie-breaker card count.
+
+The first implementation should keep weights explicit and testable rather than hiding them in a complex abstraction.
+
+### Search options
+
+The hard/expert bot can build on the heuristic evaluator:
+
+- **Shallow lookahead**: apply each own move, approximate opponents with a heuristic policy, then evaluate the resulting state after 1-3 plies.
+- **Monte Carlo rollouts**: sample legal continuations using weighted random/heuristic policies. Treat hidden deck draws as already represented by engine state in local play, but do not use opponent-hidden reserved card identities when evaluating from a player view.
+- **MCTS**: useful if a simple rollout policy is in place. Use a strict per-turn time budget so the UI remains responsive.
+
+For browser play, start with one-ply heuristic and add search only after benchmarks show the bot still makes obvious strategic mistakes.
+
+### Testing and benchmarks
+
+- Unit-test heuristic helpers with small crafted states: immediate purchase, noble race, reserve denial, token discard avoidance, and endgame point race.
+- Golden tests for deterministic choices under a fixed seed and fixed legal-move ordering.
+- Self-play smoke tests: bot-vs-bot games should terminate, preserve token/card invariants, and avoid illegal fallback paths.
+- Strength benchmark: run batches against random and easy bots. Medium should beat random reliably; hard should beat medium over a meaningful sample.
+
+### Product notes
+
+- Local Splendor bots can work without provider keys, so the game can remain playable even when no BYOK provider is configured.
+- A future UI can expose seat type per player: human, local bot, or LLM bot.
+- Token usage should show zero for local bot turns and should not require the `TokenUsageBadge` to special-case Splendor logic.
+
+## 10. Known edge cases (write tests for these)
 
 - Taking 3 gems when only 2 distinct colours have tokens: legal to take just those 2 (one of each).
 - Taking 2 of the same when exactly 4 are in supply: legal (supply check is "≥4 before take").
@@ -206,11 +287,11 @@ State serialisation should be compact JSON. Helpful fields per opponent: prestig
 - Token discard when over the limit after reserving (you took a gold): the discard must include enough to land at exactly 10.
 - Multiple nobles eligible: only one is claimed per turn (base rules).
 
-## 10. v1 simplifications
+## 11. v1 simplifications
 
 None planned. Splendor's rules are tractable and worth implementing in full.
 
-## 11. References
+## 12. References
 
 - Official rulebook (Space Cowboys) — primary source for any ambiguity.
 - BoardGameGeek wiki — useful for edge cases and FAQ.

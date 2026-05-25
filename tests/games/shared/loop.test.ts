@@ -148,6 +148,38 @@ describe('game loop', () => {
     });
   });
 
+  it('runs a local AI move without provider usage', async () => {
+    const loop = createGameLoop({
+      adapter,
+      initialState: { current: 1, scores: [0, 0], target: 3 },
+      aiPlayers: {
+        1: {
+          kind: 'local',
+          label: 'Local counter bot',
+          model: 'Local counter bot',
+          chooseMove({ legalMoves }) {
+            return legalMoves.find((move) => move.id === 'ADD_TWO')!;
+          },
+        },
+      },
+    });
+
+    const moved = await loop.step();
+    const snapshot = loop.getSnapshot();
+
+    expect(moved).toBe(true);
+    expect(snapshot.state.scores).toEqual([0, 2]);
+    expect(snapshot.totalUsage).toEqual({ input: 0, output: 0 });
+    expect(snapshot.log[0]).toMatchObject({
+      player: 1,
+      source: 'ai',
+      attempts: 1,
+      model: 'Local counter bot',
+      usage: { input: 0, output: 0 },
+    });
+    expect(snapshot.log[0].providerId).toBeUndefined();
+  });
+
   it('retries invalid AI moves before applying a valid move', async () => {
     const provider = providerWithReplies([
       '{"moveId":"NOPE"}',

@@ -15,6 +15,10 @@
   import type { AIPlayerConfig } from '@/lib/games/shared/types';
   import { splendorAdapter } from '@/lib/games/splendor/ai-adapter';
   import {
+    chooseSplendorBotMove,
+    type SplendorBotDifficulty,
+  } from '@/lib/games/splendor/bot';
+  import {
     boardKey,
     deckKey,
     GEMS,
@@ -56,6 +60,8 @@
   type PlayerProfileSelections = Record<number, string>;
 
   const HUMAN_PROFILE = '__human__';
+  const LOCAL_BOT_EASY_PROFILE = '__local_bot_easy__';
+  const LOCAL_BOT_MEDIUM_PROFILE = '__local_bot_medium__';
   const HUMAN_PLAYER_INDEX = 0;
   const MIN_TABLE_WIDTH = 2100;
   const TABLE_HEIGHT = 900;
@@ -132,7 +138,7 @@
     configuredProfiles.find((profile) => profile.id === selectedProfile?.id)
       ?.id ??
     configuredProfiles[0]?.id ??
-    '';
+    LOCAL_BOT_MEDIUM_PROFILE;
   $: normalizePlayerProfileSelections(playerCount, defaultProfileId);
   $: aiPlayerIndexes = playerIndexesControlledByAI(playerProfileSelections);
   $: humanDelegated =
@@ -183,7 +189,7 @@
   async function resizeTableAfterRender() {
     await tick();
     resizeTable();
-    requestAnimationFrame(resizeTable);
+    globalThis.requestAnimationFrame(resizeTable);
   }
 
   function createAbortController() {
@@ -476,13 +482,32 @@
     return `${profile.label} (${getProvider(profile.provider).label})`;
   }
 
+  function isLocalBotProfileId(profileId: string): boolean {
+    return (
+      profileId === LOCAL_BOT_EASY_PROFILE ||
+      profileId === LOCAL_BOT_MEDIUM_PROFILE
+    );
+  }
+
+  function localBotDifficulty(profileId: string): SplendorBotDifficulty {
+    return profileId === LOCAL_BOT_EASY_PROFILE ? 'easy' : 'medium';
+  }
+
+  function localBotLabel(profileId: string): string {
+    return profileId === LOCAL_BOT_EASY_PROFILE
+      ? 'Local bot - Easy'
+      : 'Local bot - Medium';
+  }
+
   function normalizePlayerProfileSelections(
     count: number,
     fallbackProfileId: string,
   ) {
-    const validProfileIds = new Set(
-      configuredProfiles.map((profile) => profile.id),
-    );
+    const validProfileIds = new Set([
+      ...configuredProfiles.map((profile) => profile.id),
+      LOCAL_BOT_EASY_PROFILE,
+      LOCAL_BOT_MEDIUM_PROFILE,
+    ]);
     const next: PlayerProfileSelections = {};
 
     for (let index = 0; index < count; index += 1) {
@@ -516,11 +541,14 @@
     return Array.from({ length: playerCount }, (_, index) => index).filter(
       (index) =>
         selections[index] !== HUMAN_PROFILE &&
-        Boolean(configuredProfileById(selections[index])),
+        (isLocalBotProfileId(selections[index]) ||
+          Boolean(configuredProfileById(selections[index]))),
     );
   }
 
-  function aiConfigForProfile(profile: ProviderModelProfile): AIPlayerConfig {
+  function aiConfigForProfile(
+    profile: ProviderModelProfile,
+  ): AIPlayerConfig<SplendorState, SplendorMove> {
     const providerId = profile.provider as ProviderId;
     return {
       provider: getProvider(providerId),
@@ -532,15 +560,41 @@
     };
   }
 
+  function aiConfigForLocalBot(
+    profileId: string,
+  ): AIPlayerConfig<SplendorState, SplendorMove> {
+    const difficulty = localBotDifficulty(profileId);
+    return {
+      kind: 'local',
+      label: localBotLabel(profileId),
+      model: localBotLabel(profileId),
+      chooseMove({ state: currentState, player, legalMoves: moves, signal }) {
+        if (signal?.aborted) {
+          const error = new Error('AI move aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
+
+        return chooseSplendorBotMove(currentState, player, moves, {
+          difficulty,
+        });
+      },
+    };
+  }
+
   function aiConfigs(
     selections: PlayerProfileSelections = playerProfileSelections,
-  ): Record<number, AIPlayerConfig> {
+  ): Record<number, AIPlayerConfig<SplendorState, SplendorMove>> {
     return Object.fromEntries(
       Array.from({ length: playerCount }, (_, index) => index).flatMap(
         (player) => {
           const profileId = selections[player];
           if (profileId === HUMAN_PROFILE) {
             return [];
+          }
+
+          if (isLocalBotProfileId(profileId)) {
+            return [[player, aiConfigForLocalBot(profileId)]];
           }
 
           const profile = configuredProfileById(profileId);
@@ -1051,7 +1105,16 @@
   }
 
   function playerLabel(index: number): string {
-    return index === 0 ? 'Player 1 (You)' : `Player ${index + 1}`;
+    const profileId = playerProfileSelections[index] ?? HUMAN_PROFILE;
+    if (index === 0) {
+      return profileId === HUMAN_PROFILE
+        ? 'Player 1 (You)'
+        : `Player 1 (${isLocalBotProfileId(profileId) ? localBotLabel(profileId) : 'AI'})`;
+    }
+
+    return isLocalBotProfileId(profileId)
+      ? `Player ${index + 1} (${localBotLabel(profileId)})`
+      : `Player ${index + 1}`;
   }
 
   function formatMove(move: SplendorMove): string {
@@ -1293,7 +1356,8 @@
               <div
                 class="mt-2 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs text-amber-100"
               >
-                Save a model profile for AI turns.
+                Local bots are available. Save a model profile to use provider
+                turns.
               </div>
             {/if}
 
@@ -1301,8 +1365,8 @@
               <div
                 class="mt-2 rounded-md border border-emerald-400/40 bg-emerald-400/10 px-2 py-1.5 text-xs text-emerald-100"
               >
-                <span class="font-semibold">Game Paused.</span> Resume Player 1,
-                or switch Player 1 back to brain control.
+                <span class="font-semibold">Game Paused.</span> Resume Player 1, or
+                switch Player 1 back to brain control.
               </div>
             {/if}
 
@@ -1434,14 +1498,18 @@
                         on:change={(event) =>
                           selectPlayerProfile(index, event.currentTarget.value)}
                       >
+                        <option value={LOCAL_BOT_MEDIUM_PROFILE}>
+                          Local bot - Medium
+                        </option>
+                        <option value={LOCAL_BOT_EASY_PROFILE}>
+                          Local bot - Easy
+                        </option>
                         {#if configuredProfiles.length}
                           {#each configuredProfiles as profile (profile.id)}
                             <option value={profile.id}>
                               {profileLabel(profile)}
                             </option>
                           {/each}
-                        {:else}
-                          <option value="">No model profiles</option>
                         {/if}
                       </select>
                     </div>
@@ -1523,7 +1591,7 @@
         </aside>
 
         <aside class="min-h-0 w-full">
-          {#each [state.players[0]] as player}
+          {#each [state.players[0]] as player (player)}
             <article
               class="flex h-full min-h-0 w-full flex-col rounded-md border {currentPlayer ===
               HUMAN_PLAYER_INDEX
@@ -1553,7 +1621,13 @@
                     on:change={(event) =>
                       selectPlayerProfile(0, event.currentTarget.value)}
                   >
-                    <option value={HUMAN_PROFILE}>🧠 Human</option>
+                    <option value={HUMAN_PROFILE}>Human</option>
+                    <option value={LOCAL_BOT_MEDIUM_PROFILE}>
+                      Local bot - Medium
+                    </option>
+                    <option value={LOCAL_BOT_EASY_PROFILE}>
+                      Local bot - Easy
+                    </option>
                     {#each configuredProfiles as profile (profile.id)}
                       <option value={profile.id}>
                         {profileLabel(profile)}
@@ -1624,7 +1698,7 @@
                   {#if player.cards.length}
                     <div class="mt-2 space-y-2">
                       {#each GEMS as gem (gem)}
-                        {#each [cardsForBonus(player.cards, gem)] as stack}
+                        {#each [cardsForBonus(player.cards, gem)] as stack (stack)}
                           {#if stack.length}
                             <div>
                               <div class="mb-1 flex items-center gap-1.5">

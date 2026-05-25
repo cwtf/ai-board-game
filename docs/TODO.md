@@ -78,7 +78,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 35. [x] [engine] `src/lib/games/splendor/data/nobles.ts`: 10 nobles.
 36. [x] [engine] `src/lib/games/splendor/state.ts`: types per docs/games/splendor.md §5 and §7, `init()` factory with independent tier/noble shuffles, seeded replay, face-up deal order, and player-count token pools.
 37. [x] [engine] `src/lib/games/splendor/rules.ts`: `legalMoves`, `applyMove`, `currentPlayer`, `isTerminal`, `winner`. Pure functions matching docs/games/splendor.md §7 contracts for legal move coverage, action resolution, payment validation, noble claiming, and final-round state.
-38. [x] [test] Per docs/games/splendor.md §9 edge cases:
+38. [x] [test] Per docs/games/splendor.md §10 edge cases:
     - Token conservation.
     - Can't buy what you can't afford (including with gold).
     - 2-of-a-kind requires ≥4 in supply.
@@ -152,6 +152,11 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 - [ ] Move log replay UI.
 - [ ] Mobile-optimised layouts.
 - [ ] Difficulty presets (model + temperature + retry count).
+- [ ] Local non-LLM Splendor bot: start with weighted random/easy and one-ply heuristic/medium, then benchmark before adding search. See [docs/games/splendor.md](docs/games/splendor.md) §9.
+  - [x] Core easy/medium bot policy in `src/lib/games/splendor/bot.ts`.
+  - [x] Unit tests for immediate buys, discards, noble choices, deterministic easy choices, and opponent denial.
+  - [x] UI seat option for local bot without provider keys.
+  - [ ] Self-play benchmark against random/easy bots.
 - [ ] Per-seat AI configuration: let each AI player use a different configured provider/model in Splendor, then extract the assignment UI/config shape for future games.
 - [ ] Extract the Secret Hitler AI decision pipeline before considering LangGraph.
 - [ ] Smarter Favor response from AI targets (currently random in v1).

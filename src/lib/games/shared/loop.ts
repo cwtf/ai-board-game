@@ -23,7 +23,9 @@ export interface LoopSnapshot<State, Move> {
 export interface GameLoopOptions<State, Move> {
   adapter: GameAdapter<State, Move>;
   initialState: State;
-  aiPlayers: Map<number, AIPlayerConfig> | Record<number, AIPlayerConfig>;
+  aiPlayers:
+    | Map<number, AIPlayerConfig<State, Move>>
+    | Record<number, AIPlayerConfig<State, Move>>;
   maxRetries?: number;
   rng?: Rng;
 }
@@ -40,11 +42,27 @@ export interface GameLoop<State, Move> {
   runUntilBlocked(signal?: AbortSignal): Promise<void>;
 }
 
-function aiConfigFor(
-  configs: GameLoopOptions<unknown, unknown>['aiPlayers'],
+function aiConfigFor<State, Move>(
+  configs: GameLoopOptions<State, Move>['aiPlayers'],
   player: number,
 ) {
   return configs instanceof Map ? configs.get(player) : configs[player];
+}
+
+function isLocalAIConfig<State, Move>(
+  ai: AIPlayerConfig<State, Move>,
+): ai is Extract<AIPlayerConfig<State, Move>, { kind: 'local' }> {
+  return ai.kind === 'local';
+}
+
+function abortError(): Error {
+  const error = new Error('AI move aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function providerIdFor<State, Move>(ai?: AIPlayerConfig<State, Move>) {
+  return ai && !isLocalAIConfig(ai) ? ai.provider.id : undefined;
 }
 
 function isProviderError(error: unknown): error is AIProviderError {
@@ -66,7 +84,9 @@ function isLegalHumanMove<Move>(move: Move, legalMoves: Move[]): boolean {
   }
 
   const id = moveId(move);
-  return Boolean(id && legalMoves.some((candidate) => moveId(candidate) === id));
+  return Boolean(
+    id && legalMoves.some((candidate) => moveId(candidate) === id),
+  );
 }
 
 export function createGameLoop<State, Move>({
@@ -108,7 +128,7 @@ export function createGameLoop<State, Move>({
     source: 'human' | 'ai' | 'fallback';
     player: number;
     attempts?: number;
-    ai?: AIPlayerConfig;
+    ai?: AIPlayerConfig<State, Move>;
     usage?: { input: number; output: number };
     error?: string;
   }) {
@@ -119,7 +139,7 @@ export function createGameLoop<State, Move>({
         player: opts.player,
         move: opts.move,
         source: opts.source,
-        providerId: opts.ai?.provider.id,
+        providerId: providerIdFor(opts.ai),
         model: opts.ai?.model,
         usage: opts.usage,
         attempts: opts.attempts,
@@ -130,9 +150,10 @@ export function createGameLoop<State, Move>({
     emit();
   }
 
-  function prepareAndValidateAIMove(player: number, move: Move):
-    | { ok: true; move: Move }
-    | { ok: false; error: string } {
+  function prepareAndValidateAIMove(
+    player: number,
+    move: Move,
+  ): { ok: true; move: Move } | { ok: false; error: string } {
     const prepared = adapter.prepareAIMove?.(state, player, move) ?? move;
     try {
       adapter.applyMove(state, prepared);
@@ -141,9 +162,7 @@ export function createGameLoop<State, Move>({
       return {
         ok: false,
         error:
-          error instanceof Error
-            ? error.message
-            : 'Move could not be applied.',
+          error instanceof Error ? error.message : 'Move could not be applied.',
       };
     }
   }
@@ -151,7 +170,7 @@ export function createGameLoop<State, Move>({
   async function requestAIMove(
     player: number,
     legalMoves: Move[],
-    ai: AIPlayerConfig,
+    ai: AIPlayerConfig<State, Move>,
     signal?: AbortSignal,
   ): Promise<{
     move: Move;
@@ -163,6 +182,46 @@ export function createGameLoop<State, Move>({
     const messages: ChatMessage[] = [{ role: 'user', content: basePayload }];
     let lastError: string | undefined;
     let requestUsage = { input: 0, output: 0 };
+
+    if (isLocalAIConfig(ai)) {
+      if (signal?.aborted) {
+        throw abortError();
+      }
+
+      const localMove = await ai.chooseMove({
+        state,
+        player,
+        legalMoves,
+        signal,
+      });
+      if (signal?.aborted) {
+        throw abortError();
+      }
+
+      const prepared = prepareAndValidateAIMove(player, localMove);
+      if (prepared.ok) {
+        return {
+          move: prepared.move,
+          attempts: 1,
+          usage: requestUsage,
+        };
+      }
+
+      lastError = prepared.error;
+      const fallbackOptions = legalMoves
+        .map((move) => prepareAndValidateAIMove(player, move))
+        .filter((result): result is { ok: true; move: Move } => result.ok);
+      if (fallbackOptions.length === 0) {
+        throw new Error(`No applicable fallback move. ${lastError}`);
+      }
+
+      return {
+        move: fallbackOptions[rng.int(fallbackOptions.length)].move,
+        attempts: 1,
+        usage: requestUsage,
+        error: lastError,
+      };
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
       const result = await ai.provider.complete({
@@ -213,9 +272,7 @@ export function createGameLoop<State, Move>({
 
     const fallbackOptions = legalMoves
       .map((move) => prepareAndValidateAIMove(player, move))
-      .filter(
-        (result): result is { ok: true; move: Move } => result.ok,
-      );
+      .filter((result): result is { ok: true; move: Move } => result.ok);
     if (fallbackOptions.length === 0) {
       throw new Error(
         lastError
