@@ -834,7 +834,7 @@
     message = '';
 
     const goldRange = move.kind === 'buy' ? goldRangesFor(state, move) : [];
-    if (goldRange.some((range) => range.max > 0)) {
+    if (goldRange.some((range) => range.min > 0)) {
       goldDraft = Object.fromEntries(
         goldRange.map((range) => [range.gem, range.min]),
       );
