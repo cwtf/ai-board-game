@@ -6,10 +6,10 @@
 
 ## Overview
 
-Secret Hitler currently uses a plain TypeScript AI decision pipeline rather than
-LangChain or LangGraph. Each AI turn builds a player-specific JSON payload,
-sends it through the provider-agnostic `src/lib/ai` abstraction, parses the JSON
-response, validates it, and either retries or applies a legal fallback.
+Secret Hitler uses a plain TypeScript AI decision pipeline rather than LangChain
+or LangGraph. Each AI turn builds a player-specific JSON payload, sends it
+through a provider callback supplied by the UI, parses the JSON response,
+validates it, and either retries or applies a legal fallback.
 
 This is still the right default because most recent fixes have been about state
 quality, prompt contracts, and deterministic validation rather than complex
@@ -99,10 +99,14 @@ condition.
 - Models revealing private policy decisions in public speech: speech validation
   retries or suppresses unsafe `tableTalk`.
 
-## Future Pipeline Refactor
+## Pipeline Module
 
-Before adding LangGraph, extract the current Secret Hitler AI flow into a plain
-TypeScript decision pipeline with named stages. Suggested stage names:
+The first extracted pipeline lives in
+`src/lib/games/secret-hitler/ai-pipeline.ts`. It keeps the orchestration outside
+the Svelte component while still allowing the UI to own provider credentials,
+abort signals, state application, and token usage display.
+
+Current stages:
 
 - `buildPlayerContext`
 - `requestMoveCandidate`
@@ -111,10 +115,10 @@ TypeScript decision pipeline with named stages. Suggested stage names:
 - `assessPublicSpeech`
 - `requestRevision`
 - `chooseFallback`
-- `applyMemoryPatch`
+- `returnMemoryPatch`
 
-This keeps the code provider-agnostic and easy to test while making the
-orchestration explicit enough to migrate later if needed.
+This keeps the code provider-agnostic and testable while making the orchestration
+explicit enough to migrate later if needed.
 
 ## LangGraph Readiness Criteria
 

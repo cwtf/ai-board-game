@@ -4,12 +4,8 @@
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
     applySecretHitlerMemoryPatch,
-    assessSecretHitlerPublicSpeech,
-    assessSecretHitlerStrategicMove,
-    chooseSecretHitlerStrategicFallback,
     createSecretHitlerAIMemory,
     createSecretHitlerPublicInfluencePatch,
-    parseSecretHitlerAIResponse,
     parseSecretHitlerTableTalkResponse,
     secretHitlerAdapter,
     serializeSecretHitlerForAI,
@@ -20,6 +16,7 @@
     type SecretHitlerMove,
     type SecretHitlerState,
   } from '@/lib/games/secret-hitler/ai-adapter';
+  import { requestSecretHitlerAIMove } from '@/lib/games/secret-hitler/ai-pipeline';
   import { createRng } from '@/lib/games/shared/rng';
   import {
     getStoredKeys,
@@ -843,133 +840,31 @@
   }> {
     const providerId = profile.provider as ProviderId;
     const provider = getProvider(providerId);
-    const messages = [
-      {
-        role: 'user' as const,
-        content: serializeSecretHitlerForAI(
-          state,
-          player,
-          legalMoves,
-          memoryForPlayer(player),
-          tableReadTurnSummaries,
-        ),
+    const action = await requestSecretHitlerAIMove({
+      state,
+      player,
+      legalMoves,
+      memory: memoryForPlayer(player),
+      tableReadTurnSummaries,
+      signal,
+      complete({ system, messages, signal: requestSignal }) {
+        return provider.complete({
+          apiKey: keys[providerId],
+          endpointUrl: providerEndpointFor(providerId, keys),
+          model: profile.model,
+          system,
+          messages,
+          responseFormat: 'json',
+          temperature: 0.7,
+          maxTokens: 700,
+          signal: requestSignal,
+        });
       },
-    ];
-    let lastError = '';
-    let strategicFallback: SecretHitlerMove | undefined;
-    let strategicFallbackReason = '';
-    let quietSpeechFallback:
-      | {
-          move: SecretHitlerMove;
-          memoryPatch?: SecretHitlerMemoryPatch;
-        }
-      | undefined;
-    let quietSpeechFallbackReason = '';
+    });
 
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      const result = await provider.complete({
-        apiKey: keys[providerId],
-        endpointUrl: providerEndpointFor(providerId, keys),
-        model: profile.model,
-        system: secretHitlerAdapter.systemPrompt(),
-        messages,
-        responseFormat: 'json',
-        temperature: 0.7,
-        maxTokens: 700,
-        signal,
-      });
-
-      lastUsage = result.usage;
-      totalUsage = addUsage(totalUsage, result.usage);
-      const parsed = parseSecretHitlerAIResponse(result.text, legalMoves, {
-        playerIds: state.players.map((item) => item.id),
-        currentTurn: state.turn,
-      });
-      if (parsed.ok) {
-        const assessment = assessSecretHitlerStrategicMove(
-          state,
-          player,
-          parsed.value.move,
-        );
-        if (!assessment.ok) {
-          lastError = assessment.reason ?? 'Strategic contradiction.';
-          strategicFallback ??= chooseSecretHitlerStrategicFallback(
-            state,
-            player,
-            legalMoves,
-          );
-          strategicFallbackReason = lastError;
-          if (attempt < 3) {
-            messages.push(
-              { role: 'assistant' as const, content: result.text },
-              {
-                role: 'user' as const,
-                content: `Strategic contradiction: ${lastError} Reconsider your move using private.role, private.party, private.objective, and private.actionGuidance. Return exactly one JSON object with a legal moveId and optional tableTalk.`,
-              },
-            );
-            continue;
-          }
-          break;
-        }
-        const speechAssessment = assessSecretHitlerPublicSpeech(
-          state,
-          player,
-          parsed.value.move,
-        );
-        if (!speechAssessment.ok) {
-          lastError = speechAssessment.reason ?? 'Unsafe public tableTalk.';
-          quietSpeechFallback = {
-            move: {
-              ...parsed.value.move,
-              tableTalk: undefined,
-            } as SecretHitlerMove,
-            memoryPatch: parsed.value.memoryPatch,
-          };
-          quietSpeechFallbackReason = lastError;
-          if (attempt < 3) {
-            messages.push(
-              { role: 'assistant' as const, content: result.text },
-              {
-                role: 'user' as const,
-                content: `Unsafe public tableTalk: ${lastError} Keep the same strategic objective, but do not reveal private hand contents, policy colors received, discard/enact choices, hidden role, or hidden-team intent. Return exactly one JSON object with a legal moveId and safe optional tableTalk.`,
-              },
-            );
-            continue;
-          }
-          break;
-        }
-        return parsed.value;
-      }
-
-      lastError = parsed.error;
-      messages.push(
-        { role: 'assistant' as const, content: result.text },
-        {
-          role: 'user' as const,
-          content: `Invalid response: ${parsed.error}. Return exactly one JSON object with a legal moveId from the legalMoves list and optional tableTalk.`,
-        },
-      );
-    }
-
-    if (strategicFallback) {
-      return {
-        move: strategicFallback,
-        warning: `${
-          state.players[player]?.name ?? 'AI player'
-        } repeatedly chose a move that conflicted with their hidden objective, so a safer legal move was used. ${strategicFallbackReason}`,
-      };
-    }
-
-    if (quietSpeechFallback) {
-      return {
-        ...quietSpeechFallback,
-        warning: `${
-          state.players[player]?.name ?? 'AI player'
-        } repeatedly wrote unsafe public table talk, so the move was kept but the public message was suppressed. ${quietSpeechFallbackReason}`,
-      };
-    }
-
-    throw new Error(lastError || 'AI did not return a valid move.');
+    lastUsage = action.lastUsage;
+    totalUsage = addUsage(totalUsage, action.usage);
+    return action;
   }
 
   function fallbackAIExecutiveMove(
@@ -1716,9 +1611,7 @@
     );
     const candidateResponders = addressedPlayers.length
       ? addressedPlayers
-      : players.filter(
-          (player) => player.alive && player.id !== item.playerId,
-        );
+      : players.filter((player) => player.alive && player.id !== item.playerId);
     const responders = candidateResponders.filter((player) =>
       Boolean(modelProfileForPlayer(player.id)),
     );
@@ -1776,8 +1669,7 @@
               content: JSON.stringify({
                 game: 'secret-hitler',
                 player: responder.id,
-                questionFrom:
-                  players[item.playerId]?.name ?? 'another player',
+                questionFrom: players[item.playerId]?.name ?? 'another player',
                 question: item.body,
                 directlyAddressedPlayers:
                   addressedPlayers.map(publicPlayerName),

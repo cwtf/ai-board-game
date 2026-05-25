@@ -154,12 +154,12 @@ interface AIMovePayload {
   memoryPatch?: unknown;
 }
 
-interface SecretHitlerAIResponse {
+export interface SecretHitlerAIResponse {
   move: SecretHitlerMove;
   memoryPatch?: SecretHitlerMemoryPatch;
 }
 
-interface MemoryPatchOptions {
+export interface MemoryPatchOptions {
   playerIds?: Iterable<number>;
   currentTurn?: number;
 }
