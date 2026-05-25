@@ -20,12 +20,16 @@
   } from '@/lib/games/shared/loop';
   import { createRng } from '@/lib/games/shared/rng';
   import { hashWithSeed, seedFromHash } from '@/lib/games/shared/seed-url';
-  import type { AIPlayerConfig } from '@/lib/games/shared/types';
+  import type { AIPlayerConfig, MoveRecord } from '@/lib/games/shared/types';
   import { splendorAdapter } from '@/lib/games/splendor/ai-adapter';
   import {
     chooseSplendorBotMove,
     type SplendorBotDifficulty,
   } from '@/lib/games/splendor/bot';
+  import {
+    formatSplendorMove,
+    splendorGemLabels,
+  } from '@/lib/games/splendor/move-format';
   import {
     boardKey,
     deckKey,
@@ -76,14 +80,7 @@
   const MIN_TABLE_WIDTH = 2100;
   const TABLE_HEIGHT = 900;
   const TABLE_RIGHT_GUTTER = 24;
-  const gemLabels: Record<GemOrGold, string> = {
-    emerald: 'Emerald',
-    sapphire: 'Sapphire',
-    ruby: 'Ruby',
-    diamond: 'Diamond',
-    onyx: 'Onyx',
-    gold: 'Gold',
-  };
+  const gemLabels = splendorGemLabels;
   const gemClasses: Record<GemOrGold, string> = {
     emerald: 'border-emerald-400/70 bg-emerald-400/15 text-emerald-100',
     sapphire: 'border-sky-400/70 bg-sky-400/15 text-sky-100',
@@ -114,6 +111,7 @@
   let tableOffsetY = 0;
   let handledPointerSelection = false;
   let gameOverDismissed = false;
+  let moveLogOpen = false;
   let flyingAssets: FlyingAsset[] = [];
   let playerProfileSelections: SeatSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_SEAT_ID,
@@ -155,6 +153,7 @@
     playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
   $: gamePaused = humanDelegated && aiPaused;
   $: lastUsage = snapshot?.log.at(-1)?.usage;
+  $: moveLogEntries = snapshot?.log.slice().reverse() ?? [];
   $: takeMove = findTakeMove(selectedGems);
   $: discardTotal = tokenTotal(discardDraft);
   $: pendingProjectedTokens =
@@ -660,6 +659,7 @@
     activeModal = null;
     message = '';
     gameOverDismissed = false;
+    moveLogOpen = false;
     flyingAssets = [];
     normalizePlayerProfileSelections(playerCount, defaultProfileId);
     aiPaused = playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
@@ -1120,15 +1120,25 @@
   }
 
   function formatMove(move: SplendorMove): string {
-    if (move.kind === 'take') {
-      return `Take ${move.gems.map((gem) => gemLabels[gem]).join(', ')}`;
+    return formatSplendorMove(move);
+  }
+
+  function moveSourceLabel(record: MoveRecord<SplendorMove>): string {
+    if (record.source === 'human') {
+      return 'Human';
     }
-    if (move.kind === 'reserve') {
-      return move.source === 'deck'
-        ? `Reserve blind tier ${move.tier}`
-        : `Reserve ${move.cardId}`;
+
+    if (record.source === 'fallback') {
+      return 'Fallback';
     }
-    return `Buy ${move.cardId}`;
+
+    return record.providerId
+      ? `${record.providerId}${record.model ? `:${record.model}` : ''}`
+      : (record.model ?? 'Local bot');
+  }
+
+  function moveLogMeta(record: MoveRecord<SplendorMove>): string {
+    return `#${record.turn + 1} - ${playerLabel(record.player)} - ${moveSourceLabel(record)}`;
   }
 
   onMount(() => {
@@ -1187,6 +1197,15 @@
                   totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
                 />
               </div>
+              <button
+                class="mt-2 w-full rounded-md border border-neutral-700 px-2 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
+                type="button"
+                on:click={() => {
+                  moveLogOpen = true;
+                }}
+              >
+                Move log ({snapshot?.log.length ?? 0})
+              </button>
             </div>
 
             <section
@@ -1821,6 +1840,69 @@
     {/if}
   </div>
 {/each}
+
+{#if moveLogOpen && snapshot}
+  <div
+    class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/80 px-4"
+  >
+    <div
+      class="flex max-h-[82vh] w-full max-w-2xl flex-col rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-semibold tracking-normal">Move Log</h2>
+          <p class="mt-1 text-sm text-neutral-400">
+            {snapshot.log.length} recorded moves
+          </p>
+        </div>
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            moveLogOpen = false;
+          }}
+        >
+          Close
+        </button>
+      </div>
+
+      {#if moveLogEntries.length}
+        <ol class="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 text-sm">
+          {#each moveLogEntries as record (record.turn)}
+            <li
+              class="rounded-md border border-neutral-800 bg-neutral-900/70 p-3"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="text-xs font-medium text-neutral-400">
+                  {moveLogMeta(record)}
+                </span>
+                {#if record.usage}
+                  <span class="text-[10px] text-neutral-500">
+                    {record.usage.input} in / {record.usage.output} out
+                  </span>
+                {/if}
+              </div>
+              <div class="mt-1 leading-snug text-neutral-100">
+                {formatMove(record.move)}
+              </div>
+              {#if record.error}
+                <div class="mt-1 text-xs text-amber-200">
+                  {record.error}
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ol>
+      {:else}
+        <p
+          class="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400"
+        >
+          No moves recorded yet.
+        </p>
+      {/if}
+    </div>
+  </div>
+{/if}
 
 {#if activeModal === 'gold' && pendingMove?.kind === 'buy' && state}
   <div

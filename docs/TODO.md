@@ -150,6 +150,8 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 - [ ] Passphrase-encrypted key storage (Web Crypto AES-GCM).
 - [x] Seed sharing via URL hash for reproducible games.
 - [ ] Move log replay UI.
+  - [x] Splendor readable move history panel backed by `snapshot.log`.
+  - [ ] Replay/time-travel controls from the move log.
 - [ ] Mobile-optimised layouts.
 - [ ] Difficulty presets (model + temperature + retry count).
 - [x] Local non-LLM Splendor bot: start with weighted random/easy and one-ply heuristic/medium, then benchmark before adding search. See [docs/games/splendor.md](docs/games/splendor.md) §9.
