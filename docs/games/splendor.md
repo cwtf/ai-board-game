@@ -235,7 +235,7 @@ The bot should consume the same `legalMoves()` output used by the UI and LLM ada
 |---|---|---|
 | Easy | Weighted random legal move | Plays legally, occasionally silly |
 | Medium | One-ply heuristic evaluation | Decent casual opponent |
-| Hard | Heuristic plus opponent-denial scoring | Notices races and blocks obvious threats |
+| Hard | Staged buying heuristic | Buys quickly, balances gem bonuses early, chases nobles after a broad engine, and switches back to points near the end |
 | Expert | Heuristic-guided search or MCTS rollouts | Stronger, slower, tunable by time budget |
 
 ### Heuristic features

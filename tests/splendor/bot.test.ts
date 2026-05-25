@@ -8,6 +8,7 @@ import {
   init,
   type Card,
   type GemOrGold,
+  type Noble,
   type SplendorState,
 } from '@/lib/games/splendor/state';
 
@@ -49,6 +50,36 @@ const lowImpactRubyCard: Card = {
   cost: { ruby: 1 },
   bonus: 'ruby',
   prestige: 0,
+};
+
+const nobleEmeraldCard: Card = {
+  id: 'bot_noble_emerald',
+  tier: 1,
+  cost: {},
+  bonus: 'emerald',
+  prestige: 0,
+};
+
+const balancingSapphireCard: Card = {
+  id: 'bot_balance_sapphire',
+  tier: 1,
+  cost: {},
+  bonus: 'sapphire',
+  prestige: 0,
+};
+
+const contestedEmeraldCard: Card = {
+  id: 'bot_contested_emerald',
+  tier: 1,
+  cost: { ruby: 3 },
+  bonus: 'emerald',
+  prestige: 0,
+};
+
+const emeraldNoble: Noble = {
+  id: 'bot_emerald_noble',
+  cost: { emerald: 4 },
+  prestige: 3,
 };
 
 function tokenTotal(tokens: Partial<Record<GemOrGold, number>>): number {
@@ -234,5 +265,183 @@ describe('Splendor local bot', () => {
     });
 
     expect(move.kind).toBe('take');
+  });
+
+  it('hard difficulty balances gem bonuses before chasing nobles', () => {
+    const current = state();
+    current.board = {
+      tier1: [freePrestigeCard, balancingSapphireCard, null, null],
+      tier2: [null, null, null, null],
+      tier3: [null, null, null, null],
+    };
+    current.players[0].bonuses.diamond = 3;
+
+    const mediumMove = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'medium',
+      seed: 'balance',
+    });
+    const hardMove = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'balance',
+    });
+
+    expect(mediumMove).toMatchObject({
+      kind: 'buy',
+      source: 'board',
+      cardId: freePrestigeCard.id,
+    });
+    expect(hardMove).toMatchObject({
+      kind: 'buy',
+      source: 'board',
+      cardId: balancingSapphireCard.id,
+    });
+  });
+
+  it('hard difficulty chases nobles after building three strong gem colors', () => {
+    const current = state();
+    current.board = {
+      tier1: [freePrestigeCard, nobleEmeraldCard, null, null],
+      tier2: [null, null, null, null],
+      tier3: [null, null, null, null],
+    };
+    current.noblesInPlay = [{ ...emeraldNoble, cost: { emerald: 5 } }];
+    current.players[0].bonuses = {
+      emerald: 3,
+      sapphire: 3,
+      ruby: 3,
+      diamond: 0,
+      onyx: 0,
+    };
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'mature-noble-race',
+    });
+
+    expect(move).toMatchObject({
+      kind: 'buy',
+      source: 'board',
+      cardId: nobleEmeraldCard.id,
+    });
+  });
+
+  it('hard difficulty prefers points over future noble progress near the end', () => {
+    const current = state();
+    current.board = {
+      tier1: [freePrestigeCard, nobleEmeraldCard, null, null],
+      tier2: [null, null, null, null],
+      tier3: [null, null, null, null],
+    };
+    current.noblesInPlay = [{ ...emeraldNoble, cost: { emerald: 5 } }];
+    current.players[0].prestige = 10;
+    current.players[0].bonuses = {
+      emerald: 3,
+      sapphire: 3,
+      ruby: 3,
+      diamond: 0,
+      onyx: 0,
+    };
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'endgame-points',
+    });
+
+    expect(move).toMatchObject({
+      kind: 'buy',
+      source: 'board',
+      cardId: freePrestigeCard.id,
+    });
+  });
+
+  it('hard difficulty does not reserve just to deny a non-noble card at low tokens', () => {
+    const current = state();
+    current.board = {
+      tier1: [freePrestigeCard, null, null, null],
+      tier2: [null, null, null, null],
+      tier3: [cheapPrestigeCard, null, null, null],
+    };
+    current.players[1].tokens.ruby = 1;
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'no-casual-reserve',
+    });
+
+    expect(move).not.toMatchObject({
+      kind: 'reserve',
+      source: 'board',
+      cardId: cheapPrestigeCard.id,
+    });
+  });
+
+  it('hard difficulty buys before denying an opponent noble', () => {
+    const current = state();
+    current.board = {
+      tier1: [contestedEmeraldCard, freePrestigeCard, null, null],
+      tier2: [null, null, null, null],
+      tier3: [null, null, null, null],
+    };
+    current.noblesInPlay = [emeraldNoble];
+    current.players[1].bonuses.emerald = 1;
+    current.players[1].tokens.ruby = 3;
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'deny-noble',
+    });
+
+    expect(move).toMatchObject({
+      kind: 'buy',
+      source: 'board',
+      cardId: freePrestigeCard.id,
+    });
+  });
+
+  it('hard difficulty may reserve to deny a noble when no buy is available', () => {
+    const current = state();
+    current.board = {
+      tier1: [contestedEmeraldCard, null, null, null],
+      tier2: [null, null, null, null],
+      tier3: [null, null, null, null],
+    };
+    current.noblesInPlay = [emeraldNoble];
+    current.players[1].bonuses.emerald = 3;
+    current.players[1].tokens.ruby = 3;
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'deny-noble-no-buy',
+    });
+
+    expect(move).toMatchObject({
+      kind: 'reserve',
+      source: 'board',
+      cardId: contestedEmeraldCard.id,
+    });
+  });
+
+  it('hard difficulty may reserve when the bot is nearly token capped', () => {
+    const current = state();
+    current.board = {
+      tier1: [contestedEmeraldCard, null, null, null],
+      tier2: [null, null, null, null],
+      tier3: [null, null, null, null],
+    };
+    current.players[0].tokens = {
+      emerald: 2,
+      sapphire: 2,
+      ruby: 2,
+      diamond: 2,
+      onyx: 1,
+      gold: 0,
+    };
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'hard',
+      seed: 'token-capped-reserve',
+    });
+
+    expect(move.kind).toBe('reserve');
   });
 });

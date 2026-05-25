@@ -33,6 +33,8 @@ interface ScoredMove {
 }
 
 const STANDARD_GEMS: GemOrGold[] = [...GEMS, 'gold'];
+const RESERVE_TOKEN_THRESHOLD = 9;
+const NOBLE_PORTFOLIO_THRESHOLD = 3;
 
 function tokenTotal(tokens: Partial<Record<GemOrGold, number>>): number {
   return Object.values(tokens).reduce((sum, value) => sum + (value ?? 0), 0);
@@ -107,6 +109,28 @@ function nobleScore(player: PlayerState, nobles: Noble[]): number {
   }, 0);
 }
 
+function bestNobleProgress(player: PlayerState, nobles: Noble[]): number {
+  if (nobles.length === 0) {
+    return 0;
+  }
+
+  return Math.max(...nobles.map((noble) => nobleProgress(player, noble)));
+}
+
+function isEndgame(state: SplendorState, player: PlayerState): boolean {
+  return (
+    player.prestige >= 10 ||
+    Math.max(...state.players.map((current) => current.prestige)) >= 12
+  );
+}
+
+function isNoblePortfolioReady(player: PlayerState): boolean {
+  return (
+    GEMS.filter((gem) => player.bonuses[gem] >= NOBLE_PORTFOLIO_THRESHOLD)
+      .length >= 3
+  );
+}
+
 function bestTargetScore(state: SplendorState, player: PlayerState): number {
   const targets = [...visibleCards(state), ...player.reserved];
   if (targets.length === 0) {
@@ -148,6 +172,52 @@ function opponentDenialScore(
     }
 
     return score;
+  }, 0);
+}
+
+function opponentNobleDenialScore(
+  state: SplendorState,
+  playerIndex: number,
+  card: Card | undefined,
+): number {
+  if (!card) {
+    return 0;
+  }
+
+  return state.players.reduce((score, opponent, index) => {
+    if (index === playerIndex) {
+      return score;
+    }
+
+    return (
+      score +
+      state.noblesInPlay.reduce((nobleScore, noble) => {
+        const required = nobleCost(noble, card.bonus);
+        if (required <= opponent.bonuses[card.bonus]) {
+          return nobleScore;
+        }
+
+        const progress = nobleProgress(opponent, noble);
+        if (progress < 0.45) {
+          return nobleScore;
+        }
+
+        const missing = GEMS.reduce((sum, gem) => {
+          return (
+            sum + Math.max(0, nobleCost(noble, gem) - opponent.bonuses[gem])
+          );
+        }, 0);
+        const cardWouldCompleteNoble = missing === 1;
+        const cardIsAccessible = cardDistance(opponent, card) <= 2;
+
+        return (
+          nobleScore +
+          progress * 45 +
+          (cardWouldCompleteNoble ? 80 : 0) +
+          (cardIsAccessible ? 25 : 0)
+        );
+      }, 0)
+    );
   }, 0);
 }
 
@@ -423,6 +493,173 @@ function evaluateMove(
   return score;
 }
 
+function nobleFocusScore(
+  state: SplendorState,
+  playerIndex: number,
+  move: SplendorMove,
+): number {
+  if (state.noblesInPlay.length === 0) {
+    return 0;
+  }
+
+  const before = state.players[playerIndex];
+  const card = moveCard(state, before, move);
+  const after = applyMove(state, move);
+  const afterPlayer = after.players[playerIndex];
+  const claimedNobles = afterPlayer.nobles.length - before.nobles.length;
+  const bestProgressGain = Math.max(
+    0,
+    bestNobleProgress(afterPlayer, state.noblesInPlay) -
+      bestNobleProgress(before, state.noblesInPlay),
+  );
+  const totalProgressGain = Math.max(
+    0,
+    nobleScore(afterPlayer, state.noblesInPlay) -
+      nobleScore(before, state.noblesInPlay),
+  );
+
+  let score =
+    claimedNobles * 220 + bestProgressGain * 260 + totalProgressGain * 3;
+
+  if (card) {
+    const neededBonus = state.noblesInPlay.reduce((sum, noble) => {
+      if (nobleProgress(before, noble) < 0.25) {
+        return sum;
+      }
+
+      return (
+        sum +
+        Math.max(0, nobleCost(noble, card.bonus) - before.bonuses[card.bonus])
+      );
+    }, 0);
+
+    score += neededBonus * (move.kind === 'buy' ? 18 : 7);
+  }
+
+  if (move.kind === 'take') {
+    const usefulTokenCount = move.gems.reduce((sum, gem) => {
+      const helpsNobleCard = visibleCards(state).some((visibleCard) => {
+        if (cardDistance(before, visibleCard) > 3) {
+          return false;
+        }
+
+        const bonusNeeded = state.noblesInPlay.some(
+          (noble) =>
+            nobleProgress(before, noble) >= 0.25 &&
+            nobleCost(noble, visibleCard.bonus) >
+              before.bonuses[visibleCard.bonus],
+        );
+
+        return bonusNeeded && gemCost(visibleCard, gem) > before.bonuses[gem];
+      });
+
+      return sum + (helpsNobleCard ? 1 : 0);
+    }, 0);
+
+    score += usefulTokenCount * 8;
+  }
+
+  return score;
+}
+
+function earlyPortfolioBalanceScore(
+  player: PlayerState,
+  card: Card | undefined,
+): number {
+  if (!card || isNoblePortfolioReady(player)) {
+    return 0;
+  }
+
+  const minBonus = Math.min(...GEMS.map((gem) => player.bonuses[gem]));
+  const maxBonus = Math.max(...GEMS.map((gem) => player.bonuses[gem]));
+  const cardBonusCount = player.bonuses[card.bonus];
+
+  return (
+    (maxBonus - cardBonusCount) * 24 + (cardBonusCount === minBonus ? 36 : 0)
+  );
+}
+
+function buyTempoScore(move: SplendorMove, card: Card | undefined): number {
+  if (move.kind !== 'buy') {
+    return 0;
+  }
+
+  return 140 + (card?.prestige ?? 0) * 8;
+}
+
+function endgamePointScore(
+  state: SplendorState,
+  player: PlayerState,
+  move: SplendorMove,
+  card: Card | undefined,
+): number {
+  if (!isEndgame(state, player)) {
+    return 0;
+  }
+
+  if (move.kind === 'buy') {
+    return (card?.prestige ?? 0) * 150;
+  }
+
+  return move.kind === 'reserve' && (card?.prestige ?? 0) > 0
+    ? (card?.prestige ?? 0) * 12
+    : 0;
+}
+
+function stagedNobleScore(
+  state: SplendorState,
+  playerIndex: number,
+  move: SplendorMove,
+): number {
+  const player = state.players[playerIndex];
+  if (!isNoblePortfolioReady(player) || isEndgame(state, player)) {
+    return 0;
+  }
+
+  return nobleFocusScore(state, playerIndex, move);
+}
+
+function hardReservePolicyScore(
+  state: SplendorState,
+  playerIndex: number,
+  move: SplendorMove,
+): number {
+  if (move.kind !== 'reserve') {
+    return 0;
+  }
+
+  const player = state.players[playerIndex];
+  const card = moveCard(state, player, move);
+  const tokenCount = tokenTotal(player.tokens);
+  const denial = opponentNobleDenialScore(state, playerIndex, card);
+
+  return (
+    -120 +
+    (tokenCount >= RESERVE_TOKEN_THRESHOLD
+      ? 110 + Math.max(0, tokenCount - RESERVE_TOKEN_THRESHOLD) * 16
+      : 0) +
+    denial
+  );
+}
+
+function evaluateHardMove(
+  state: SplendorState,
+  playerIndex: number,
+  move: SplendorMove,
+): number {
+  const player = state.players[playerIndex];
+  const card = moveCard(state, player, move);
+
+  return (
+    evaluateMove(state, playerIndex, move) +
+    buyTempoScore(move, card) +
+    earlyPortfolioBalanceScore(player, card) +
+    stagedNobleScore(state, playerIndex, move) +
+    endgamePointScore(state, player, move, card) +
+    hardReservePolicyScore(state, playerIndex, move)
+  );
+}
+
 function chooseEasyMove(
   state: SplendorState,
   playerIndex: number,
@@ -461,6 +698,30 @@ function chooseMediumMove(
   return randomChoice(tied, rng).move;
 }
 
+function chooseHardMove(
+  state: SplendorState,
+  playerIndex: number,
+  moves: SplendorMove[],
+  rng: Rng,
+): SplendorMove {
+  const scored = validPreparedMoves(state, playerIndex, moves)
+    .map<ScoredMove>((move) => ({
+      move,
+      score: evaluateHardMove(state, playerIndex, move),
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  if (scored.length === 0) {
+    throw new Error('Splendor bot has no valid legal moves.');
+  }
+
+  const bestScore = scored[0].score;
+  const tied = scored.filter(
+    (entry) => Math.abs(entry.score - bestScore) < 0.001,
+  );
+  return randomChoice(tied, rng).move;
+}
+
 export function chooseSplendorBotMove(
   state: SplendorState,
   playerIndex = state.current,
@@ -482,6 +743,10 @@ export function chooseSplendorBotMove(
 
   if (difficulty === 'easy') {
     return chooseEasyMove(state, playerIndex, legalMoves, rng);
+  }
+
+  if (difficulty === 'hard') {
+    return chooseHardMove(state, playerIndex, legalMoves, rng);
   }
 
   return chooseMediumMove(state, playerIndex, legalMoves, rng);

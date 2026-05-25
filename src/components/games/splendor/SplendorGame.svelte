@@ -72,7 +72,9 @@
 
   const LOCAL_BOT_EASY_PROFILE = '__local_bot_easy__';
   const LOCAL_BOT_MEDIUM_PROFILE = '__local_bot_medium__';
+  const LOCAL_BOT_HARD_PROFILE = '__local_bot_hard__';
   const localBotSeatOptions = [
+    { id: LOCAL_BOT_HARD_PROFILE, label: 'Local bot - Hard' },
     { id: LOCAL_BOT_MEDIUM_PROFILE, label: 'Local bot - Medium' },
     { id: LOCAL_BOT_EASY_PROFILE, label: 'Local bot - Easy' },
   ] satisfies LocalAISeatOption[];
@@ -496,7 +498,11 @@
   }
 
   function localBotDifficulty(profileId: string): SplendorBotDifficulty {
-    return profileId === LOCAL_BOT_EASY_PROFILE ? 'easy' : 'medium';
+    if (profileId === LOCAL_BOT_EASY_PROFILE) {
+      return 'easy';
+    }
+
+    return profileId === LOCAL_BOT_HARD_PROFILE ? 'hard' : 'medium';
   }
 
   function localBotLabel(profileId: string): string {
@@ -1526,6 +1532,9 @@
                         on:change={(event) =>
                           selectPlayerProfile(index, event.currentTarget.value)}
                       >
+                        <option value={LOCAL_BOT_HARD_PROFILE}>
+                          🤖 Local bot - Hard
+                        </option>
                         <option value={LOCAL_BOT_MEDIUM_PROFILE}>
                           🤖 Local bot - Medium
                         </option>
@@ -1650,6 +1659,9 @@
                       selectPlayerProfile(0, event.currentTarget.value)}
                   >
                     <option value={HUMAN_SEAT_ID}>🧠 Human</option>
+                    <option value={LOCAL_BOT_HARD_PROFILE}>
+                      🤖 Local bot - Hard
+                    </option>
                     <option value={LOCAL_BOT_MEDIUM_PROFILE}>
                       🤖 Local bot - Medium
                     </option>
