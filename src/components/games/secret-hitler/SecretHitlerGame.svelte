@@ -91,6 +91,14 @@
     returnedPairCount: number;
   }
 
+  interface CardPreview {
+    src: string;
+    title: string;
+    alt?: string;
+    actionLabel?: string;
+    action?: () => void;
+  }
+
   type PlayerProfileSelections = Record<number, string>;
 
   const HUMAN_PROFILE = '__human__';
@@ -277,6 +285,7 @@
   let lastUsage: TokenUsage | undefined;
   let totalUsage: TokenUsage = { input: 0, output: 0 };
   let aiMemories: Record<number, SecretHitlerAIMemory> = {};
+  let previewedCard: CardPreview | null = null;
   const answeredQuestionKeys = new Set<string>();
   let playerProfileSelections: PlayerProfileSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
@@ -2505,6 +2514,49 @@
     return 'Ineligible';
   }
 
+  function openCardPreview(card: CardPreview) {
+    previewedCard = card;
+  }
+
+  function closeCardPreview() {
+    previewedCard = null;
+  }
+
+  function handleCardPreviewKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      closeCardPreview();
+    }
+  }
+
+  function runCardPreviewAction() {
+    const action = previewedCard?.action;
+    closeCardPreview();
+    action?.();
+  }
+
+  function previewCard(node: HTMLElement, card: CardPreview) {
+    let current = card;
+    const previousCursor = node.style.cursor;
+
+    function show(event: MouseEvent) {
+      event.stopPropagation();
+      openCardPreview(current);
+    }
+
+    node.style.cursor = 'zoom-in';
+    node.addEventListener('click', show);
+
+    return {
+      update(next: CardPreview) {
+        current = next;
+      },
+      destroy() {
+        node.style.cursor = previousCursor;
+        node.removeEventListener('click', show);
+      },
+    };
+  }
+
   function sendChatMessage() {
     const body = chatDraft.trim();
     const author = players[HUMAN_PLAYER_INDEX];
@@ -2536,6 +2588,8 @@
     tableReadController?.abort();
   });
 </script>
+
+<svelte:window on:keydown={handleCardPreviewKeydown} />
 
 <section class="h-full overflow-auto bg-neutral-950 px-6 py-6 text-neutral-100">
   <div
@@ -2653,6 +2707,10 @@
                   {#if index < liberalPolicies}
                     <img
                       class="h-full w-full rounded-sm border border-blue-100/80 object-cover shadow-[0_8px_18px_rgba(0,0,0,0.45)]"
+                      use:previewCard={{
+                        src: policyAsset('liberal'),
+                        title: 'Enacted Liberal policy',
+                      }}
                       src={policyAsset('liberal')}
                       alt="Enacted Liberal policy"
                     />
@@ -2693,6 +2751,10 @@
                   {#if index < fascistPolicies}
                     <img
                       class="h-full w-full rounded-sm border border-red-100/80 object-cover shadow-[0_8px_18px_rgba(0,0,0,0.5)]"
+                      use:previewCard={{
+                        src: policyAsset('fascist'),
+                        title: 'Enacted Fascist policy',
+                      }}
                       src={policyAsset('fascist')}
                       alt="Enacted Fascist policy"
                     />
@@ -2750,6 +2812,10 @@
               <div class="flex items-center gap-3">
                 <img
                   class="h-16 w-11 rounded object-cover shadow"
+                  use:previewCard={{
+                    src: dossierBackAsset,
+                    title: 'Policy deck',
+                  }}
                   src={dossierBackAsset}
                   alt=""
                   aria-hidden="true"
@@ -2883,6 +2949,12 @@
                     >
                       <img
                         class="aspect-[2/3] h-24 w-full rounded object-cover"
+                        use:previewCard={{
+                          src: ballotAssets.ja,
+                          title: 'Ja ballot',
+                          actionLabel: 'Vote Ja',
+                          action: () => castHumanVote('ja'),
+                        }}
                         src={ballotAssets.ja}
                         alt=""
                         aria-hidden="true"
@@ -2900,6 +2972,12 @@
                     >
                       <img
                         class="aspect-[2/3] h-24 w-full rounded object-cover"
+                        use:previewCard={{
+                          src: ballotAssets.nein,
+                          title: 'Nein ballot',
+                          actionLabel: 'Vote Nein',
+                          action: () => castHumanVote('nein'),
+                        }}
                         src={ballotAssets.nein}
                         alt=""
                         aria-hidden="true"
@@ -2916,6 +2994,14 @@
                   >
                     <img
                       class="mx-auto aspect-[2/3] h-24 rounded object-cover shadow"
+                      use:previewCard={{
+                        src: voteAsset(
+                          ballotRevealPending ? votes[player.id] : null,
+                        ),
+                        title: ballotRevealPending
+                          ? voteCardLabel(votes[player.id])
+                          : 'Hidden ballot',
+                      }}
                       src={voteAsset(
                         ballotRevealPending ? votes[player.id] : null,
                       )}
@@ -2955,6 +3041,12 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
+                    use:previewCard={{
+                      src: policyAsset(policy),
+                      title: `${policyLabel(policy)} policy`,
+                      actionLabel: `Discard ${policyLabel(policy)}`,
+                      action: () => presidentDiscard(index),
+                    }}
                     src={policyAsset(policy)}
                     alt=""
                     aria-hidden="true"
@@ -2969,6 +3061,10 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
+                    use:previewCard={{
+                      src: dossierBackAsset,
+                      title: 'Hidden policy',
+                    }}
                     src={dossierBackAsset}
                     alt=""
                     aria-hidden="true"
@@ -3015,6 +3111,12 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
+                    use:previewCard={{
+                      src: policyAsset(policy),
+                      title: `${policyLabel(policy)} policy`,
+                      actionLabel: `Enact ${policyLabel(policy)}`,
+                      action: () => chancellorEnact(index),
+                    }}
                     src={policyAsset(policy)}
                     alt=""
                     aria-hidden="true"
@@ -3029,6 +3131,10 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
+                    use:previewCard={{
+                      src: dossierBackAsset,
+                      title: 'Hidden policy',
+                    }}
                     src={dossierBackAsset}
                     alt=""
                     aria-hidden="true"
@@ -3095,6 +3201,10 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
+                    use:previewCard={{
+                      src: policyAsset(policy),
+                      title: `${policyLabel(policy)} policy`,
+                    }}
                     src={policyAsset(policy)}
                     alt={`${policyLabel(policy)} policy`}
                   />
@@ -3106,6 +3216,10 @@
                 >
                   <img
                     class="aspect-[2/3] w-full rounded object-cover"
+                    use:previewCard={{
+                      src: dossierBackAsset,
+                      title: 'Hidden policy',
+                    }}
                     src={dossierBackAsset}
                     alt=""
                     aria-hidden="true"
@@ -3600,6 +3714,10 @@
                   {#key visibleRoleAsset}
                     <img
                       class="aspect-[2/3] w-full rounded object-cover"
+                      use:previewCard={{
+                        src: visibleRoleAsset,
+                        title: roleCardLabel(visibleRole),
+                      }}
                       src={visibleRoleAsset}
                       alt={roleCardLabel(visibleRole)}
                     />
@@ -3616,6 +3734,10 @@
                   {#key visiblePartyAsset}
                     <img
                       class="aspect-[2/3] w-full rounded-md border border-amber-100/20 object-cover"
+                      use:previewCard={{
+                        src: visiblePartyAsset,
+                        title: `${partyLabel(visibleRole)} membership`,
+                      }}
                       src={visiblePartyAsset}
                       alt={`${partyLabel(visibleRole)} membership`}
                     />
@@ -3630,6 +3752,10 @@
                   >
                     <img
                       class="aspect-[2/3] w-full rounded object-cover"
+                      use:previewCard={{
+                        src: dossierBackAsset,
+                        title: 'Hidden party membership',
+                      }}
                       src={dossierBackAsset}
                       alt="Hidden party membership"
                     />
@@ -3734,6 +3860,56 @@
   </div>
 </section>
 
+{#if previewedCard}
+  <div
+    class="fixed inset-0 z-30 flex items-center justify-center bg-neutral-950/85 px-4 py-6"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="secret-hitler-card-preview-title"
+    tabindex="-1"
+  >
+    <button
+      class="absolute inset-0 cursor-default"
+      type="button"
+      aria-label="Close card preview"
+      on:click={closeCardPreview}
+    ></button>
+    <div
+      class="relative z-10 max-h-full w-full max-w-sm rounded-md border border-neutral-700 bg-neutral-950 p-4 shadow-xl"
+    >
+      <div class="flex items-center justify-between gap-3">
+        <h2
+          id="secret-hitler-card-preview-title"
+          class="text-sm font-semibold text-neutral-100"
+        >
+          {previewedCard.title}
+        </h2>
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={closeCardPreview}
+        >
+          Close
+        </button>
+      </div>
+      <img
+        class="mt-4 max-h-[78vh] w-full rounded-md border border-neutral-800 object-contain shadow-2xl"
+        src={previewedCard.src}
+        alt={previewedCard.alt ?? previewedCard.title}
+      />
+      {#if previewedCard.actionLabel}
+        <button
+          class="mt-4 w-full rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+          type="button"
+          on:click={runCardPreviewAction}
+        >
+          {previewedCard.actionLabel}
+        </button>
+      {/if}
+    </div>
+  </div>
+{/if}
+
 {#if winner && !gameOverDismissed}
   <div
     class="fixed inset-0 z-20 flex items-center justify-center bg-neutral-950/85 px-4 py-6"
@@ -3798,11 +3974,19 @@
             <div class="flex items-center gap-3">
               <img
                 class="h-16 w-11 rounded border border-neutral-700 object-cover"
+                use:previewCard={{
+                  src: finalRoleAsset,
+                  title: `${player.name} role card`,
+                }}
                 src={finalRoleAsset}
                 alt={`${player.name} role card`}
               />
               <img
                 class="h-16 w-11 rounded border border-neutral-700 object-cover"
+                use:previewCard={{
+                  src: finalPartyAsset,
+                  title: `${partyLabel(player.role)} party card`,
+                }}
                 src={finalPartyAsset}
                 alt={`${partyLabel(player.role)} party card`}
               />
