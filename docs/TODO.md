@@ -148,7 +148,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 - [ ] Nope sub-phase for Exploding Kittens (synchronous polling window — see docs/games/exploding-kittens.md §9).
 - [ ] Passphrase-encrypted key storage (Web Crypto AES-GCM).
-- [ ] Seed sharing via URL hash for reproducible games.
+- [x] Seed sharing via URL hash for reproducible games.
 - [ ] Move log replay UI.
 - [ ] Mobile-optimised layouts.
 - [ ] Difficulty presets (model + temperature + retry count).

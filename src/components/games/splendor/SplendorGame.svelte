@@ -19,6 +19,7 @@
     type LoopSnapshot,
   } from '@/lib/games/shared/loop';
   import { createRng } from '@/lib/games/shared/rng';
+  import { hashWithSeed, seedFromHash } from '@/lib/games/shared/seed-url';
   import type { AIPlayerConfig } from '@/lib/games/shared/types';
   import { splendorAdapter } from '@/lib/games/splendor/ai-adapter';
   import {
@@ -596,6 +597,17 @@
     loop?.setAIPlayers(aiConfigs());
   }
 
+  function syncSeedHash(nextSeed: string) {
+    const nextHash = hashWithSeed(globalThis.location.hash, nextSeed);
+    if (nextHash !== globalThis.location.hash) {
+      globalThis.history.replaceState(
+        null,
+        '',
+        nextHash || globalThis.location.pathname,
+      );
+    }
+  }
+
   function selectPlayerProfile(playerIndex: number, profileId: string) {
     playerProfileSelections = {
       ...playerProfileSelections,
@@ -641,6 +653,8 @@
   function startGame() {
     unsubscribe?.();
     aiController?.abort();
+    seed = seed.trim() || 'splendor-table';
+    syncSeedHash(seed);
     selectedGems = [];
     pendingMove = undefined;
     activeModal = null;
@@ -651,7 +665,7 @@
     aiPaused = playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
 
     const initialState = splendorAdapter.init({
-      seed: seed.trim() || 'splendor-table',
+      seed,
       playerCount,
       aiPlayerIndices: playerIndexesControlledByAI(playerProfileSelections),
     });
@@ -1122,7 +1136,13 @@
     window.addEventListener('storage', refreshKeys);
     window.addEventListener('byok-keys-changed', refreshKeys);
     window.addEventListener('resize', resizeTable);
-    startShuffledGame();
+    const sharedSeed = seedFromHash(globalThis.location.hash);
+    if (sharedSeed) {
+      seed = sharedSeed;
+      startGame();
+    } else {
+      startShuffledGame();
+    }
     void resizeTableAfterRender();
   });
 
@@ -1328,6 +1348,7 @@
                   class="ml-2 w-28 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-100"
                   bind:value={seed}
                   disabled={snapshot?.status === 'thinking'}
+                  on:change={startGame}
                 />
               </label>
               <button
