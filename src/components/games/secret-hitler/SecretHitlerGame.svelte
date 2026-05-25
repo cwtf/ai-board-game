@@ -96,6 +96,26 @@
     action?: () => void;
   }
 
+  interface VoteHistoryBallot {
+    playerId: number;
+    playerName: string;
+    vote: Exclude<Vote, null>;
+  }
+
+  interface VoteHistoryEntry {
+    id: string;
+    turn: number;
+    presidentId: number;
+    presidentName: string;
+    chancellorId: number;
+    chancellorName: string;
+    ballots: VoteHistoryBallot[];
+    jaCount: number;
+    neinCount: number;
+    neededJaCount: number;
+    passed: boolean;
+  }
+
   type PlayerProfileSelections = Record<number, string>;
 
   const HUMAN_PROFILE = '__human__';
@@ -260,6 +280,8 @@
   let gameOverDismissed = false;
   let turn = 1;
   let legislativeHistory: SecretHitlerLegislativeHistoryEntry[] = [];
+  let voteHistory: VoteHistoryEntry[] = [];
+  let voteHistoryOpen = false;
   let chatDraft = '';
   let chatMessages: ChatMessage[] = [];
   let tableReadProfileId = '';
@@ -330,6 +352,7 @@
   );
   $: tableReadChartViewBox = createTableReadChartViewBox(tableReadZoom);
   $: tableReadChartScale = `${tableReadZoom}%`;
+  $: recentVoteHistory = [...voteHistory].reverse();
 
   function refreshKeys() {
     keys = getStoredKeys();
@@ -632,6 +655,8 @@
     gameOverDismissed = false;
     turn = 1;
     legislativeHistory = [];
+    voteHistory = [];
+    voteHistoryOpen = false;
     chatDraft = '';
     chatMessages = [];
     tableReadEdges = [];
@@ -2023,6 +2048,36 @@
     return 'border-neutral-700 bg-neutral-950 text-neutral-500';
   }
 
+  function recordVoteHistory(passed: boolean) {
+    if (nominee === null) {
+      return;
+    }
+
+    const ballots = alivePlayers.flatMap((player) => {
+      const vote = votes[player.id];
+      return vote
+        ? [{ playerId: player.id, playerName: player.name, vote }]
+        : [];
+    });
+
+    voteHistory = [
+      ...voteHistory,
+      {
+        id: `vote-${turn}-${voteHistory.length}`,
+        turn,
+        presidentId: president,
+        presidentName,
+        chancellorId: nominee,
+        chancellorName: nomineeName,
+        ballots,
+        jaCount: ballots.filter((ballot) => ballot.vote === 'ja').length,
+        neinCount: ballots.filter((ballot) => ballot.vote === 'nein').length,
+        neededJaCount: Math.floor(alivePlayers.length / 2) + 1,
+        passed,
+      },
+    ];
+  }
+
   function reshuffleIfNeeded() {
     if (drawPile.length >= 3 || discardPile.length === 0) {
       return;
@@ -2057,6 +2112,7 @@
     }
 
     ballotRevealPending = false;
+    recordVoteHistory(passed);
 
     if (!passed) {
       failElection('Government rejected.');
@@ -2478,7 +2534,11 @@
 
   function handleCardPreviewKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      closeCardPreview();
+      if (previewedCard) {
+        closeCardPreview();
+        return;
+      }
+      voteHistoryOpen = false;
     }
   }
 
@@ -2805,7 +2865,19 @@
         <section
           class="rounded-md border border-neutral-800 bg-neutral-950 p-3"
         >
-          <h2 class="text-sm font-semibold">Government</h2>
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="text-sm font-semibold">Government</h2>
+            <button
+              class="rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-200 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              type="button"
+              disabled={!voteHistory.length}
+              on:click={() => {
+                voteHistoryOpen = true;
+              }}
+            >
+              Vote history
+            </button>
+          </div>
           <div class="mt-3 space-y-2 text-sm text-neutral-300">
             <div class="flex justify-between gap-2">
               <span class="text-neutral-500">Ja</span>
@@ -3813,6 +3885,134 @@
     </aside>
   </div>
 </section>
+
+{#if voteHistoryOpen}
+  <div
+    class="fixed inset-0 z-30 flex items-center justify-center bg-neutral-950/85 px-4 py-6"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="secret-hitler-vote-history-title"
+    tabindex="-1"
+  >
+    <button
+      class="absolute inset-0 cursor-default"
+      type="button"
+      aria-label="Close vote history"
+      on:click={() => {
+        voteHistoryOpen = false;
+      }}
+    ></button>
+    <div
+      class="relative z-10 max-h-full w-full max-w-3xl overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950 p-4 shadow-xl"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2
+            id="secret-hitler-vote-history-title"
+            class="text-lg font-semibold tracking-normal text-neutral-100"
+          >
+            Vote History
+          </h2>
+          <p class="mt-1 text-sm text-neutral-400">
+            {voteHistory.length}
+            {voteHistory.length === 1 ? 'government vote' : 'government votes'}
+          </p>
+        </div>
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            voteHistoryOpen = false;
+          }}
+        >
+          Close
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        {#each recentVoteHistory as entry (entry.id)}
+          <article
+            class="rounded-md border border-neutral-800 bg-neutral-900 p-3"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase text-neutral-500">
+                  Turn {entry.turn}
+                </div>
+                <div class="mt-1 text-sm font-semibold text-neutral-100">
+                  <span class={playerNameClasses(entry.presidentId)}>
+                    {entry.presidentName}
+                  </span>
+                  and
+                  <span class={playerNameClasses(entry.chancellorId)}>
+                    {entry.chancellorName}
+                  </span>
+                </div>
+              </div>
+              <span
+                class={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase ${
+                  entry.passed
+                    ? 'border-emerald-300/60 bg-emerald-400/10 text-emerald-100'
+                    : 'border-red-300/60 bg-red-400/10 text-red-100'
+                }`}
+              >
+                {entry.passed ? 'Passed' : 'Rejected'}
+              </span>
+            </div>
+
+            <div
+              class="mt-3 grid gap-2 text-xs text-neutral-300 sm:grid-cols-3"
+            >
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="text-neutral-500">Ja</div>
+                <div class="mt-1 text-sm font-semibold text-emerald-100">
+                  {entry.jaCount}
+                </div>
+              </div>
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="text-neutral-500">Nein</div>
+                <div class="mt-1 text-sm font-semibold text-red-100">
+                  {entry.neinCount}
+                </div>
+              </div>
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="text-neutral-500">Needed</div>
+                <div class="mt-1 text-sm font-semibold text-neutral-100">
+                  {entry.neededJaCount} Ja
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {#each entry.ballots as ballot}
+                <div
+                  class={`flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${voteRevealClasses(
+                    ballot.vote,
+                  )}`}
+                >
+                  <span
+                    class={`truncate ${playerNameClasses(ballot.playerId)}`}
+                  >
+                    {ballot.playerName}
+                  </span>
+                  <span class="shrink-0 font-semibold">
+                    {voteLabel(ballot.vote)}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          </article>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if previewedCard}
   <div
