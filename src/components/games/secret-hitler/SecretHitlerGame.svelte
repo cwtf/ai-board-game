@@ -286,6 +286,7 @@
   let totalUsage: TokenUsage = { input: 0, output: 0 };
   let aiMemories: Record<number, SecretHitlerAIMemory> = {};
   let previewedCard: CardPreview | null = null;
+  let activeQuestionReplyKey = '';
   const answeredQuestionKeys = new Set<string>();
   let playerProfileSelections: PlayerProfileSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
@@ -1658,6 +1659,37 @@
     return `${item.playerId}:${item.turn}:${item.phase}:${item.body}`;
   }
 
+  function publicPlayerName(player: Pick<Player, 'name'>): string {
+    return player.name.replace(/\s*\(You\)\s*$/, '').trim();
+  }
+
+  function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function questionMentionsPlayer(question: string, player: Player): boolean {
+    const name = publicPlayerName(player);
+    if (!name) {
+      return false;
+    }
+
+    return new RegExp(
+      `(^|[^a-z0-9])${escapeRegExp(name.toLowerCase())}([^a-z0-9]|$)`,
+    ).test(question.toLowerCase());
+  }
+
+  function addressedPlayersForQuestion(
+    question: string,
+    askerId: number,
+  ): Player[] {
+    return players.filter(
+      (player) =>
+        player.alive &&
+        player.id !== askerId &&
+        questionMentionsPlayer(question, player),
+    );
+  }
+
   function appendChatMessage(author: Player, body: string): ChatMessage {
     const item = {
       id: `chat-${Date.now()}-${chatMessages.length}`,
@@ -1671,28 +1703,44 @@
     return item;
   }
 
-  async function requestQuestionReplies(question: string, askerId: number) {
-    const responders = players.filter(
-      (player) =>
-        player.alive &&
-        player.id !== askerId &&
-        Boolean(modelProfileForPlayer(player.id)),
-    );
-    if (responders.length === 0) {
-      return;
-    }
-
+  async function requestQuestionReplies(item: ChatMessage) {
+    const key = questionKey(item);
     chatReplyController?.abort();
     chatReplyController = createAbortController();
     const signal = chatReplyController.signal;
+    activeQuestionReplyKey = key;
 
-    for (const responder of responders) {
-      const profile = modelProfileForPlayer(responder.id);
-      if (!profile || signal.aborted) {
-        continue;
+    const addressedPlayers = addressedPlayersForQuestion(
+      item.body,
+      item.playerId,
+    );
+    const candidateResponders = addressedPlayers.length
+      ? addressedPlayers
+      : players.filter(
+          (player) => player.alive && player.id !== item.playerId,
+        );
+    const responders = candidateResponders.filter((player) =>
+      Boolean(modelProfileForPlayer(player.id)),
+    );
+    if (responders.length === 0) {
+      if (addressedPlayers.length) {
+        aiWarning = `${addressedPlayers
+          .map(publicPlayerName)
+          .join(' and ')} cannot reply because no model profile is assigned.`;
       }
+      if (activeQuestionReplyKey === key) {
+        activeQuestionReplyKey = '';
+      }
+      return;
+    }
 
-      try {
+    try {
+      for (const responder of responders) {
+        const profile = modelProfileForPlayer(responder.id);
+        if (!profile || signal.aborted || activeQuestionReplyKey !== key) {
+          return;
+        }
+
         const providerId = profile.provider as ProviderId;
         const responderContext = JSON.parse(
           serializeSecretHitlerForAI(
@@ -1716,6 +1764,9 @@
             secretHitlerAdapter.systemPrompt(),
             'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
             'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
+            addressedPlayers.length
+              ? 'Your assigned player was directly addressed by name, so tableTalk must be a non-empty public reply.'
+              : 'Reply only if a public response from your assigned player is natural in this conversation.',
             'You may include memoryPatch to preserve your public stance, private intent, or player reads for your own future turns.',
             'Return exactly one JSON object: {"tableTalk":"your public reply","memoryPatch":{"publicClaim":"optional","privateNote":"optional","playerReads":[]}}.',
           ].join(' '),
@@ -1725,8 +1776,11 @@
               content: JSON.stringify({
                 game: 'secret-hitler',
                 player: responder.id,
-                questionFrom: players[askerId]?.name ?? 'another player',
-                question,
+                questionFrom:
+                  players[item.playerId]?.name ?? 'another player',
+                question: item.body,
+                directlyAddressedPlayers:
+                  addressedPlayers.map(publicPlayerName),
                 rules: responderContext.rules,
                 state: responderContext.state,
                 privateMemory: responderContext.privateMemory,
@@ -1745,6 +1799,10 @@
           signal,
         });
 
+        if (signal.aborted || activeQuestionReplyKey !== key) {
+          return;
+        }
+
         lastUsage = result.usage;
         totalUsage = addUsage(totalUsage, result.usage);
         const reply = parseSecretHitlerTableTalkResponse(result.text, {
@@ -1757,11 +1815,15 @@
         if (reply?.tableTalk) {
           appendChatMessage(responder, reply.tableTalk);
         }
-      } catch (error) {
-        if (!signal.aborted) {
-          aiWarning =
-            error instanceof Error ? error.message : 'AI chat reply failed.';
-        }
+      }
+    } catch (error) {
+      if (!signal.aborted && activeQuestionReplyKey === key) {
+        aiWarning =
+          error instanceof Error ? error.message : 'AI chat reply failed.';
+      }
+    } finally {
+      if (activeQuestionReplyKey === key) {
+        activeQuestionReplyKey = '';
       }
     }
   }
@@ -1777,7 +1839,7 @@
     }
 
     answeredQuestionKeys.add(key);
-    void requestQuestionReplies(item.body, item.playerId);
+    void requestQuestionReplies(item);
   }
 
   async function runAI() {
