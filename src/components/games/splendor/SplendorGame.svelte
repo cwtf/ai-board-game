@@ -7,6 +7,13 @@
   import { getProvider } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
+    aiControlledSeatIndexes,
+    HUMAN_SEAT_ID,
+    normalizeSeatSelections,
+    type LocalAISeatOption,
+    type SeatSelections,
+  } from '@/lib/games/shared/ai-seats';
+  import {
     createGameLoop,
     type GameLoop,
     type LoopSnapshot,
@@ -57,11 +64,13 @@
     id: string;
     style: string;
   };
-  type PlayerProfileSelections = Record<number, string>;
 
-  const HUMAN_PROFILE = '__human__';
   const LOCAL_BOT_EASY_PROFILE = '__local_bot_easy__';
   const LOCAL_BOT_MEDIUM_PROFILE = '__local_bot_medium__';
+  const localBotSeatOptions = [
+    { id: LOCAL_BOT_MEDIUM_PROFILE, label: 'Local bot - Medium' },
+    { id: LOCAL_BOT_EASY_PROFILE, label: 'Local bot - Easy' },
+  ] satisfies LocalAISeatOption[];
   const HUMAN_PLAYER_INDEX = 0;
   const MIN_TABLE_WIDTH = 2100;
   const TABLE_HEIGHT = 900;
@@ -105,8 +114,8 @@
   let handledPointerSelection = false;
   let gameOverDismissed = false;
   let flyingAssets: FlyingAsset[] = [];
-  let playerProfileSelections: PlayerProfileSelections = {
-    [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
+  let playerProfileSelections: SeatSelections = {
+    [HUMAN_PLAYER_INDEX]: HUMAN_SEAT_ID,
   };
   let aiPaused = false;
   const supplyGemElements = new Map<GemOrGold, globalThis.HTMLElement>();
@@ -124,7 +133,7 @@
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
   $: humanCanAct =
     currentPlayer === HUMAN_PLAYER_INDEX &&
-    playerProfileSelections[HUMAN_PLAYER_INDEX] === HUMAN_PROFILE &&
+    playerProfileSelections[HUMAN_PLAYER_INDEX] === HUMAN_SEAT_ID &&
     snapshot?.status !== 'thinking';
   $: legalMoves =
     state && humanCanAct
@@ -142,7 +151,7 @@
   $: normalizePlayerProfileSelections(playerCount, defaultProfileId);
   $: aiPlayerIndexes = playerIndexesControlledByAI(playerProfileSelections);
   $: humanDelegated =
-    playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_PROFILE;
+    playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
   $: gamePaused = humanDelegated && aiPaused;
   $: lastUsage = snapshot?.log.at(-1)?.usage;
   $: takeMove = findTakeMove(selectedGems);
@@ -483,10 +492,7 @@
   }
 
   function isLocalBotProfileId(profileId: string): boolean {
-    return (
-      profileId === LOCAL_BOT_EASY_PROFILE ||
-      profileId === LOCAL_BOT_MEDIUM_PROFILE
-    );
+    return localBotSeatOptions.some((option) => option.id === profileId);
   }
 
   function localBotDifficulty(profileId: string): SplendorBotDifficulty {
@@ -494,56 +500,38 @@
   }
 
   function localBotLabel(profileId: string): string {
-    return profileId === LOCAL_BOT_EASY_PROFILE
-      ? 'Local bot - Easy'
-      : 'Local bot - Medium';
+    return (
+      localBotSeatOptions.find((option) => option.id === profileId)?.label ??
+      'Local bot'
+    );
   }
 
   function normalizePlayerProfileSelections(
     count: number,
     fallbackProfileId: string,
   ) {
-    const validProfileIds = new Set([
-      ...configuredProfiles.map((profile) => profile.id),
-      LOCAL_BOT_EASY_PROFILE,
-      LOCAL_BOT_MEDIUM_PROFILE,
-    ]);
-    const next: PlayerProfileSelections = {};
+    const result = normalizeSeatSelections({
+      playerCount: count,
+      selections: playerProfileSelections,
+      profileIds: configuredProfiles.map((profile) => profile.id),
+      localSeatIds: localBotSeatOptions.map((option) => option.id),
+      fallbackSeatId: fallbackProfileId,
+      humanSeatIndex: HUMAN_PLAYER_INDEX,
+    });
 
-    for (let index = 0; index < count; index += 1) {
-      const current = playerProfileSelections[index];
-      if (index === HUMAN_PLAYER_INDEX) {
-        next[index] =
-          current === HUMAN_PROFILE || validProfileIds.has(current)
-            ? current
-            : HUMAN_PROFILE;
-        continue;
-      }
-
-      next[index] = validProfileIds.has(current) ? current : fallbackProfileId;
-    }
-
-    const changed =
-      Object.keys(playerProfileSelections).length !== count ||
-      Array.from({ length: count }).some(
-        (_, index) => playerProfileSelections[index] !== next[index],
-      );
-
-    if (changed) {
-      playerProfileSelections = next;
+    if (result.changed) {
+      playerProfileSelections = result.selections;
       syncLoopAIPlayers();
     }
   }
 
-  function playerIndexesControlledByAI(
-    selections: PlayerProfileSelections,
-  ): number[] {
-    return Array.from({ length: playerCount }, (_, index) => index).filter(
-      (index) =>
-        selections[index] !== HUMAN_PROFILE &&
-        (isLocalBotProfileId(selections[index]) ||
-          Boolean(configuredProfileById(selections[index]))),
-    );
+  function playerIndexesControlledByAI(selections: SeatSelections): number[] {
+    return aiControlledSeatIndexes({
+      playerCount,
+      selections,
+      profileIds: configuredProfiles.map((profile) => profile.id),
+      localSeatIds: localBotSeatOptions.map((option) => option.id),
+    });
   }
 
   function aiConfigForProfile(
@@ -583,13 +571,13 @@
   }
 
   function aiConfigs(
-    selections: PlayerProfileSelections = playerProfileSelections,
+    selections: SeatSelections = playerProfileSelections,
   ): Record<number, AIPlayerConfig<SplendorState, SplendorMove>> {
     return Object.fromEntries(
       Array.from({ length: playerCount }, (_, index) => index).flatMap(
         (player) => {
           const profileId = selections[player];
-          if (profileId === HUMAN_PROFILE) {
+          if (profileId === HUMAN_SEAT_ID) {
             return [];
           }
 
@@ -619,21 +607,21 @@
     message = '';
     syncLoopAIPlayers();
 
-    if (playerIndex === HUMAN_PLAYER_INDEX && profileId === HUMAN_PROFILE) {
+    if (playerIndex === HUMAN_PLAYER_INDEX && profileId === HUMAN_SEAT_ID) {
       aiController?.abort();
       aiPaused = false;
       loop?.clearWarning();
       return;
     }
 
-    if (playerIndex === HUMAN_PLAYER_INDEX && profileId !== HUMAN_PROFILE) {
+    if (playerIndex === HUMAN_PLAYER_INDEX && profileId !== HUMAN_SEAT_ID) {
       aiController?.abort();
       aiPaused = true;
       loop?.clearWarning();
       return;
     }
 
-    if (profileId !== HUMAN_PROFILE && !aiPaused) {
+    if (profileId !== HUMAN_SEAT_ID && !aiPaused) {
       void runAI();
     }
   }
@@ -660,7 +648,7 @@
     gameOverDismissed = false;
     flyingAssets = [];
     normalizePlayerProfileSelections(playerCount, defaultProfileId);
-    aiPaused = playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_PROFILE;
+    aiPaused = playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
 
     const initialState = splendorAdapter.init({
       seed: seed.trim() || 'splendor-table',
@@ -1105,9 +1093,9 @@
   }
 
   function playerLabel(index: number): string {
-    const profileId = playerProfileSelections[index] ?? HUMAN_PROFILE;
+    const profileId = playerProfileSelections[index] ?? HUMAN_SEAT_ID;
     if (index === 0) {
-      return profileId === HUMAN_PROFILE
+      return profileId === HUMAN_SEAT_ID
         ? 'Player 1 (You)'
         : `Player 1 (${isLocalBotProfileId(profileId) ? localBotLabel(profileId) : 'AI'})`;
     }
@@ -1499,10 +1487,10 @@
                           selectPlayerProfile(index, event.currentTarget.value)}
                       >
                         <option value={LOCAL_BOT_MEDIUM_PROFILE}>
-                          Local bot - Medium
+                          🤖 Local bot - Medium
                         </option>
                         <option value={LOCAL_BOT_EASY_PROFILE}>
-                          Local bot - Easy
+                          🤖 Local bot - Easy
                         </option>
                         {#if configuredProfiles.length}
                           {#each configuredProfiles as profile (profile.id)}
@@ -1617,16 +1605,16 @@
                   </div>
                   <select
                     class="mt-1 max-w-56 rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100"
-                    value={playerProfileSelections[0] ?? HUMAN_PROFILE}
+                    value={playerProfileSelections[0] ?? HUMAN_SEAT_ID}
                     on:change={(event) =>
                       selectPlayerProfile(0, event.currentTarget.value)}
                   >
-                    <option value={HUMAN_PROFILE}>Human</option>
+                    <option value={HUMAN_SEAT_ID}>🧠 Human</option>
                     <option value={LOCAL_BOT_MEDIUM_PROFILE}>
-                      Local bot - Medium
+                      🤖 Local bot - Medium
                     </option>
                     <option value={LOCAL_BOT_EASY_PROFILE}>
-                      Local bot - Easy
+                      🤖 Local bot - Easy
                     </option>
                     {#each configuredProfiles as profile (profile.id)}
                       <option value={profile.id}>

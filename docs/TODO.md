@@ -157,7 +157,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
   - [x] Unit tests for immediate buys, discards, noble choices, deterministic easy choices, and opponent denial.
   - [x] UI seat option for local bot without provider keys.
   - [x] Self-play benchmark against easy bot over mirrored deterministic seeds.
-- [ ] Per-seat AI configuration: let each AI player use a different configured provider/model in Splendor, then extract the assignment UI/config shape for future games.
+- [x] Per-seat AI configuration: let each AI player use a different configured provider/model in Splendor, then extract the assignment UI/config shape for future games.
 - [ ] Extract the Secret Hitler AI decision pipeline before considering LangGraph.
 - [ ] Smarter Favor response from AI targets (currently random in v1).
 - [ ] Add a third game to validate the abstraction (Love Letter, Coup, Hanabi). Each = one new doc under `docs/games/` + one new adapter.
