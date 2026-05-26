@@ -1,15 +1,38 @@
 ---
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
+import { absoluteSiteUrl, siteUrl } from '@/lib/site';
 import '../styles/global.css';
+
+const baseUrl = siteUrl();
+const pageDescription =
+  'Preview the upcoming Exploding Kittens route for the local-first AI Board Game Platform.';
+const explodingKittensJsonLd = {
+  '@type': 'VideoGame',
+  '@id': `${absoluteSiteUrl('/exploding-kittens', baseUrl)}#game`,
+  name: 'Exploding Kittens AI Game',
+  url: absoluteSiteUrl('/exploding-kittens', baseUrl),
+  description: pageDescription,
+  gamePlatform: 'Web browser',
+  applicationCategory: 'Game',
+  operatingSystem: 'Web',
+  numberOfPlayers: {
+    '@type': 'QuantitativeValue',
+    minValue: 2,
+    maxValue: 5,
+  },
+};
 ---
 
 <html lang="en">
   <head>
     <SEO
       title="Exploding Kittens AI Game | AI Board Game Platform"
-      description="Preview the upcoming Exploding Kittens route for the local-first AI Board Game Platform."
+      description={pageDescription}
       path="/exploding-kittens"
+      image="/screenshots/secret-hitler.png"
+      imageAlt="AI Board Games browser table screenshot"
+      jsonLd={explodingKittensJsonLd}
     />
   </head>
   <body class="min-h-screen bg-neutral-950 text-neutral-100">

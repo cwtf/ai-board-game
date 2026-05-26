@@ -94,10 +94,11 @@
 
   let keys: StoredKeys = {};
   let loop: GameLoop<SplendorState, SplendorMove> | undefined;
-  let snapshot: LoopSnapshot<SplendorState, SplendorMove> | undefined;
   let unsubscribe: (() => void) | undefined;
   let playerCount = 2;
   let seed = 'splendor-table';
+  let snapshot: LoopSnapshot<SplendorState, SplendorMove> | undefined =
+    createInitialSnapshot();
   let selectedGems: Gem[] = [];
   let pendingMove: SplendorMove | undefined;
   let activeModal: Modal = null;
@@ -129,6 +130,23 @@
   const playerPanelElements = new Map<number, globalThis.HTMLElement>();
   const playerCardTargetElements = new Map<number, globalThis.HTMLElement>();
   const playerNobleTargetElements = new Map<number, globalThis.HTMLElement>();
+
+  function createInitialSnapshot(): LoopSnapshot<SplendorState, SplendorMove> {
+    const initialState = splendorAdapter.init({
+      seed,
+      playerCount,
+      aiPlayerIndices: [],
+    });
+
+    return {
+      state: initialState,
+      status: 'idle',
+      currentPlayer: splendorAdapter.currentPlayer(initialState),
+      winner: splendorAdapter.winner(initialState),
+      log: [],
+      totalUsage: { input: 0, output: 0 },
+    };
+  }
 
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;

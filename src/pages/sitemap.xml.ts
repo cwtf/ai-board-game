@@ -1,13 +1,11 @@
-const siteUrl = import.meta.env.PUBLIC_SITE_URL ?? 'http://localhost:4321';
+import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+
 const routes = [
   '/',
   '/about',
   '/splendor',
   '/secret-hitler',
   '/exploding-kittens',
-  '/docs/TODO.md',
-  '/docs/games/splendor.md',
-  '/docs/games/exploding-kittens.md',
 ];
 
 function escapeXml(value: string): string {
@@ -22,7 +20,7 @@ function escapeXml(value: string): string {
 export function GET() {
   const urls = routes
     .map((route) => {
-      const location = escapeXml(new URL(route, siteUrl).toString());
+      const location = escapeXml(absoluteSiteUrl(route, siteUrl()));
 
       return [
         '  <url>',

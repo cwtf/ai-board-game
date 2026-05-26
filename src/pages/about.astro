@@ -1,7 +1,23 @@
 ---
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
+import { absoluteSiteUrl, siteUrl } from '@/lib/site';
 import '../styles/global.css';
+
+const baseUrl = siteUrl();
+const aboutJsonLd = {
+  '@type': 'AboutPage',
+  '@id': `${absoluteSiteUrl('/about', baseUrl)}#about`,
+  name: 'About AI Board Games',
+  url: absoluteSiteUrl('/about', baseUrl),
+  mainEntity: {
+    '@type': 'SoftwareApplication',
+    '@id': `${baseUrl}/#app`,
+    name: 'AI Board Games',
+    applicationCategory: 'GameApplication',
+    operatingSystem: 'Web',
+  },
+};
 ---
 
 <html lang="en">
@@ -10,6 +26,9 @@ import '../styles/global.css';
       title="About | AI Board Game Platform"
       description="Learn how AI Board Games runs local-first tabletop game engines with configurable AI model profiles and browser-stored provider keys."
       path="/about"
+      image="/screenshots/secret-hitler.png"
+      imageAlt="AI Board Games browser table screenshot"
+      jsonLd={aboutJsonLd}
     />
   </head>
   <body class="min-h-screen bg-neutral-950 text-neutral-100">

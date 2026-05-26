@@ -2,15 +2,45 @@
 import Header from '@/components/shell/Header.svelte';
 import SplendorGame from '@/components/games/splendor/SplendorGame.svelte';
 import SEO from '@/components/shell/SEO.astro';
+import { absoluteSiteUrl, siteUrl } from '@/lib/site';
 import '../styles/global.css';
+
+const baseUrl = siteUrl();
+const pageDescription =
+  'Play Splendor against configurable AI opponents in a browser-based local-first board game table.';
+const pageImage = '/screenshots/splendor.png';
+const splendorJsonLd = {
+  '@type': 'VideoGame',
+  '@id': `${absoluteSiteUrl('/splendor', baseUrl)}#game`,
+  name: 'Splendor AI Game',
+  url: absoluteSiteUrl('/splendor', baseUrl),
+  description: pageDescription,
+  image: absoluteSiteUrl(pageImage, baseUrl),
+  gamePlatform: 'Web browser',
+  applicationCategory: 'Game',
+  operatingSystem: 'Web',
+  numberOfPlayers: {
+    '@type': 'QuantitativeValue',
+    minValue: 2,
+    maxValue: 4,
+  },
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+};
 ---
 
 <html lang="en">
   <head>
     <SEO
       title="Splendor AI Game | AI Board Game Platform"
-      description="Play Splendor against configurable AI opponents in a browser-based local-first board game table."
+      description={pageDescription}
       path="/splendor"
+      image={pageImage}
+      imageAlt="Splendor AI game table screenshot"
+      jsonLd={splendorJsonLd}
     />
   </head>
   <body class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100">

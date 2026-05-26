@@ -5,7 +5,12 @@ interface Props {
   path?: string;
   noindex?: boolean;
   type?: 'website' | 'article';
+  image?: string;
+  imageAlt?: string;
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[];
 }
+
+import { absoluteSiteUrl, siteUrl as getSiteUrl } from '@/lib/site';
 
 const {
   title,
@@ -13,10 +18,36 @@ const {
   path = '/',
   noindex = false,
   type = 'website',
+  image = '/screenshots/secret-hitler.png',
+  imageAlt = title,
+  jsonLd,
 } = Astro.props;
-const siteUrl = import.meta.env.PUBLIC_SITE_URL ?? 'http://localhost:4321';
-const canonicalUrl = new URL(path, siteUrl).toString();
-const imageUrl = new URL('/favicon.svg', siteUrl).toString();
+const siteUrl = getSiteUrl();
+const canonicalUrl = absoluteSiteUrl(path, siteUrl);
+const imageUrl = absoluteSiteUrl(image, siteUrl);
+const baseJsonLd = {
+  '@type': 'WebPage',
+  '@id': `${canonicalUrl}#webpage`,
+  url: canonicalUrl,
+  name: title,
+  description,
+  image: imageUrl,
+  isPartOf: {
+    '@type': 'WebSite',
+    '@id': `${siteUrl}/#website`,
+    name: 'AI Board Games',
+    url: siteUrl,
+  },
+};
+const extraJsonLd = jsonLd
+  ? Array.isArray(jsonLd)
+    ? jsonLd
+    : [jsonLd]
+  : [];
+const structuredData = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@graph': [baseJsonLd, ...extraJsonLd],
+});
 ---
 
 <meta charset="utf-8" />
@@ -28,12 +59,16 @@ const imageUrl = new URL('/favicon.svg', siteUrl).toString();
 <meta name="description" content={description} />
 <link rel="canonical" href={canonicalUrl} />
 <meta name="robots" content={noindex ? 'noindex, nofollow' : 'index, follow'} />
+<meta property="og:site_name" content="AI Board Games" />
 <meta property="og:type" content={type} />
 <meta property="og:title" content={title} />
 <meta property="og:description" content={description} />
 <meta property="og:url" content={canonicalUrl} />
 <meta property="og:image" content={imageUrl} />
-<meta name="twitter:card" content="summary" />
+<meta property="og:image:alt" content={imageAlt} />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content={title} />
 <meta name="twitter:description" content={description} />
 <meta name="twitter:image" content={imageUrl} />
+<meta name="twitter:image:alt" content={imageAlt} />
+<script is:inline type="application/ld+json" set:html={structuredData} />

@@ -1,7 +1,7 @@
-const siteUrl = import.meta.env.PUBLIC_SITE_URL ?? 'http://localhost:4321';
+import { absoluteSiteUrl, siteUrl } from '@/lib/site';
 
 export function GET() {
-  const sitemapUrl = new URL('/sitemap.xml', siteUrl).toString();
+  const sitemapUrl = absoluteSiteUrl('/sitemap.xml', siteUrl());
 
   return new Response(
     [
