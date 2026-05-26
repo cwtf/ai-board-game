@@ -116,6 +116,15 @@
     passed: boolean;
   }
 
+  interface TimelineEntry {
+    id: string;
+    turn: number;
+    type: 'vote' | 'policy' | 'chat-summary';
+    title: string;
+    detail: string;
+    tone: 'neutral' | 'passed' | 'rejected' | 'liberal' | 'fascist';
+  }
+
   type PlayerProfileSelections = Record<number, string>;
 
   const HUMAN_PROFILE = '__human__';
@@ -283,6 +292,7 @@
   let voteHistory: VoteHistoryEntry[] = [];
   let voteHistoryOpen = false;
   let policyHistoryOpen = false;
+  let timelineOpen = false;
   let chatDraft = '';
   let chatMessages: ChatMessage[] = [];
   let tableReadProfileId = '';
@@ -355,6 +365,11 @@
   $: tableReadChartScale = `${tableReadZoom}%`;
   $: recentVoteHistory = [...voteHistory].reverse();
   $: recentLegislativeHistory = [...legislativeHistory].reverse();
+  $: timelineEntries = buildTimelineEntries(
+    voteHistory,
+    legislativeHistory,
+    tableReadTurnSummaries,
+  );
 
   function refreshKeys() {
     keys = getStoredKeys();
@@ -660,6 +675,7 @@
     voteHistory = [];
     voteHistoryOpen = false;
     policyHistoryOpen = false;
+    timelineOpen = false;
     chatDraft = '';
     chatMessages = [];
     tableReadEdges = [];
@@ -732,6 +748,79 @@
         fascistPoliciesAfter: fascistPolicies,
       },
     ];
+  }
+
+  function buildTimelineEntries(
+    votes: VoteHistoryEntry[],
+    policies: SecretHitlerLegislativeHistoryEntry[],
+    summaries: TableTurnSummary[],
+  ): TimelineEntry[] {
+    const entries: TimelineEntry[] = [
+      ...votes.map((entry, index) => ({
+        id: `vote-${entry.turn}-${index}`,
+        turn: entry.turn,
+        type: 'vote' as const,
+        title: `${entry.presidentName} and ${entry.chancellorName}`,
+        detail: `${entry.passed ? 'Passed' : 'Rejected'} with ${
+          entry.jaCount
+        } Ja, ${entry.neinCount} Nein. Needed ${entry.neededJaCount} Ja.`,
+        tone: entry.passed ? ('passed' as const) : ('rejected' as const),
+      })),
+      ...policies.map((entry, index) => {
+        const source =
+          entry.source === 'government' && entry.president && entry.chancellor
+            ? `${entry.president.name} and ${entry.chancellor.name}`
+            : 'Election tracker';
+
+        return {
+          id: `policy-${entry.turn}-${index}`,
+          turn: entry.turn,
+          type: 'policy' as const,
+          title: `${policyLabel(entry.policy)} policy enacted`,
+          detail: `${source}. Board after enactment: ${entry.liberalPoliciesAfter}/5 Liberal, ${entry.fascistPoliciesAfter}/6 Fascist.`,
+          tone: entry.policy,
+        };
+      }),
+      ...summaries.map((entry, index) => ({
+        id: `summary-${entry.turn}-${index}`,
+        turn: entry.turn,
+        type: 'chat-summary' as const,
+        title: 'Table read',
+        detail:
+          [entry.summary, ...(Array.isArray(entry.claims) ? entry.claims : [])]
+            .filter(Boolean)
+            .join(' Claims: ') || 'No table-read summary text.',
+        tone: 'neutral' as const,
+      })),
+    ];
+
+    return entries.sort((left, right) => {
+      if (right.turn !== left.turn) {
+        return right.turn - left.turn;
+      }
+      const order = { policy: 3, vote: 2, 'chat-summary': 1 };
+      return order[right.type] - order[left.type];
+    });
+  }
+
+  function timelineEntryClasses(entry: TimelineEntry): string {
+    if (entry.tone === 'passed') {
+      return 'border-emerald-300/50 bg-emerald-400/10 text-emerald-100';
+    }
+
+    if (entry.tone === 'rejected') {
+      return 'border-red-300/50 bg-red-400/10 text-red-100';
+    }
+
+    if (entry.tone === 'liberal') {
+      return 'border-blue-200/50 bg-blue-950/40 text-blue-100';
+    }
+
+    if (entry.tone === 'fascist') {
+      return 'border-red-200/50 bg-red-950/40 text-red-100';
+    }
+
+    return 'border-neutral-800 bg-neutral-900 text-neutral-300';
   }
 
   function configuredProfileById(
@@ -2543,6 +2632,7 @@
       }
       voteHistoryOpen = false;
       policyHistoryOpen = false;
+      timelineOpen = false;
     }
   }
 
@@ -2873,10 +2963,22 @@
             <h2 class="text-sm font-semibold">Government</h2>
             <div class="flex flex-wrap justify-end gap-2">
               <button
+                class="rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
+                type="button"
+                on:click={() => {
+                  voteHistoryOpen = false;
+                  policyHistoryOpen = false;
+                  timelineOpen = true;
+                }}
+              >
+                Timeline
+              </button>
+              <button
                 class="rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-200 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 type="button"
                 disabled={!voteHistory.length}
                 on:click={() => {
+                  timelineOpen = false;
                   voteHistoryOpen = true;
                 }}
               >
@@ -2887,6 +2989,7 @@
                 type="button"
                 disabled={!legislativeHistory.length}
                 on:click={() => {
+                  timelineOpen = false;
                   policyHistoryOpen = true;
                 }}
               >
@@ -3901,6 +4004,81 @@
     </aside>
   </div>
 </section>
+
+{#if timelineOpen}
+  <div
+    class="fixed inset-0 z-40 flex items-center justify-center bg-neutral-950/85 px-4 py-6"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="secret-hitler-timeline-title"
+    tabindex="-1"
+  >
+    <button
+      class="absolute inset-0 cursor-default"
+      type="button"
+      aria-label="Close timeline"
+      on:click={() => {
+        timelineOpen = false;
+      }}
+    ></button>
+    <div
+      class="relative z-10 max-h-full w-full max-w-3xl overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950 p-4 shadow-xl"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2
+            id="secret-hitler-timeline-title"
+            class="text-lg font-semibold tracking-normal text-neutral-100"
+          >
+            Timeline
+          </h2>
+          <p class="mt-1 text-sm text-neutral-400">
+            {timelineEntries.length}
+            {timelineEntries.length === 1 ? 'public event' : 'public events'}
+          </p>
+        </div>
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            timelineOpen = false;
+          }}
+        >
+          Close
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-2">
+        {#if timelineEntries.length}
+          {#each timelineEntries as entry}
+            <article
+              class={`rounded-md border p-3 ${timelineEntryClasses(entry)}`}
+            >
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div class="text-xs uppercase opacity-70">
+                    Turn {entry.turn} / {entry.type.replace('-', ' ')}
+                  </div>
+                  <div class="mt-1 text-sm font-semibold">{entry.title}</div>
+                </div>
+              </div>
+              <p class="mt-2 text-sm leading-relaxed opacity-80">
+                {entry.detail}
+              </p>
+            </article>
+          {/each}
+        {:else}
+          <div
+            class="rounded-md border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400"
+          >
+            No public history has been recorded yet. Votes appear after ballot
+            reveal continues, and policies appear after enactment.
+          </div>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if voteHistoryOpen}
   <div
