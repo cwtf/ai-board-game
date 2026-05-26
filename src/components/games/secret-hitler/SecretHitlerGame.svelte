@@ -282,6 +282,7 @@
   let legislativeHistory: SecretHitlerLegislativeHistoryEntry[] = [];
   let voteHistory: VoteHistoryEntry[] = [];
   let voteHistoryOpen = false;
+  let policyHistoryOpen = false;
   let chatDraft = '';
   let chatMessages: ChatMessage[] = [];
   let tableReadProfileId = '';
@@ -353,6 +354,7 @@
   $: tableReadChartViewBox = createTableReadChartViewBox(tableReadZoom);
   $: tableReadChartScale = `${tableReadZoom}%`;
   $: recentVoteHistory = [...voteHistory].reverse();
+  $: recentLegislativeHistory = [...legislativeHistory].reverse();
 
   function refreshKeys() {
     keys = getStoredKeys();
@@ -657,6 +659,7 @@
     legislativeHistory = [];
     voteHistory = [];
     voteHistoryOpen = false;
+    policyHistoryOpen = false;
     chatDraft = '';
     chatMessages = [];
     tableReadEdges = [];
@@ -2539,6 +2542,7 @@
         return;
       }
       voteHistoryOpen = false;
+      policyHistoryOpen = false;
     }
   }
 
@@ -2867,16 +2871,28 @@
         >
           <div class="flex items-center justify-between gap-3">
             <h2 class="text-sm font-semibold">Government</h2>
-            <button
-              class="rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-200 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              type="button"
-              disabled={!voteHistory.length}
-              on:click={() => {
-                voteHistoryOpen = true;
-              }}
-            >
-              Vote history
-            </button>
+            <div class="flex flex-wrap justify-end gap-2">
+              <button
+                class="rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-200 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                disabled={!voteHistory.length}
+                on:click={() => {
+                  voteHistoryOpen = true;
+                }}
+              >
+                Vote history
+              </button>
+              <button
+                class="rounded-md border border-neutral-700 px-2 py-1 text-[10px] font-medium text-neutral-200 hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                disabled={!legislativeHistory.length}
+                on:click={() => {
+                  policyHistoryOpen = true;
+                }}
+              >
+                Policy history
+              </button>
+            </div>
           </div>
           <div class="mt-3 space-y-2 text-sm text-neutral-300">
             <div class="flex justify-between gap-2">
@@ -4006,6 +4022,136 @@
                   </span>
                 </div>
               {/each}
+            </div>
+          </article>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if policyHistoryOpen}
+  <div
+    class="fixed inset-0 z-30 flex items-center justify-center bg-neutral-950/85 px-4 py-6"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="secret-hitler-policy-history-title"
+    tabindex="-1"
+  >
+    <button
+      class="absolute inset-0 cursor-default"
+      type="button"
+      aria-label="Close policy history"
+      on:click={() => {
+        policyHistoryOpen = false;
+      }}
+    ></button>
+    <div
+      class="relative z-10 max-h-full w-full max-w-3xl overflow-y-auto rounded-md border border-neutral-700 bg-neutral-950 p-4 shadow-xl"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2
+            id="secret-hitler-policy-history-title"
+            class="text-lg font-semibold tracking-normal text-neutral-100"
+          >
+            Policy History
+          </h2>
+          <p class="mt-1 text-sm text-neutral-400">
+            {legislativeHistory.length}
+            {legislativeHistory.length === 1
+              ? 'policy enacted'
+              : 'policies enacted'}
+          </p>
+        </div>
+        <button
+          class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 hover:text-white"
+          type="button"
+          on:click={() => {
+            policyHistoryOpen = false;
+          }}
+        >
+          Close
+        </button>
+      </div>
+
+      <div class="mt-4 space-y-3">
+        {#each recentLegislativeHistory as entry, index (`policy-${entry.turn}-${index}`)}
+          <article
+            class="rounded-md border border-neutral-800 bg-neutral-900 p-3"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="text-xs uppercase text-neutral-500">
+                  Turn {entry.turn}
+                </div>
+                {#if entry.source === 'government' && entry.president && entry.chancellor}
+                  <div class="mt-1 text-sm font-semibold text-neutral-100">
+                    <span class={playerNameClasses(entry.president.id)}>
+                      {entry.president.name}
+                    </span>
+                    and
+                    <span class={playerNameClasses(entry.chancellor.id)}>
+                      {entry.chancellor.name}
+                    </span>
+                  </div>
+                {:else}
+                  <div class="mt-1 text-sm font-semibold text-neutral-100">
+                    Election tracker
+                  </div>
+                {/if}
+              </div>
+              <span
+                class={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase ${policyClasses(
+                  entry.policy,
+                )}`}
+              >
+                {policyLabel(entry.policy)}
+              </span>
+            </div>
+
+            <div
+              class="mt-3 grid gap-2 text-xs text-neutral-300 sm:grid-cols-3"
+            >
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="text-neutral-500">Source</div>
+                <div class="mt-1 text-sm font-semibold text-neutral-100">
+                  {entry.source === 'government'
+                    ? 'Government'
+                    : 'Election tracker'}
+                </div>
+              </div>
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="text-neutral-500">President</div>
+                <div class="mt-1 text-sm font-semibold text-neutral-100">
+                  {entry.president?.name ?? '-'}
+                </div>
+              </div>
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="text-neutral-500">Chancellor</div>
+                <div class="mt-1 text-sm font-semibold text-neutral-100">
+                  {entry.chancellor?.name ?? '-'}
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 flex flex-wrap gap-2 text-xs">
+              <span
+                class="rounded-full border border-blue-200/40 bg-blue-950/40 px-2 py-1 font-semibold text-blue-100"
+              >
+                {entry.liberalPoliciesAfter}/5 Liberal
+              </span>
+              <span
+                class="rounded-full border border-red-200/40 bg-red-950/40 px-2 py-1 font-semibold text-red-100"
+              >
+                {entry.fascistPoliciesAfter}/6 Fascist
+              </span>
             </div>
           </article>
         {/each}
