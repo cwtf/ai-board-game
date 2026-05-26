@@ -122,6 +122,7 @@
     type: 'vote' | 'policy' | 'chat-summary';
     title: string;
     detail: string;
+    claims?: string[];
     tone: 'neutral' | 'passed' | 'rejected' | 'liberal' | 'fascist';
   }
 
@@ -129,6 +130,7 @@
 
   const HUMAN_PROFILE = '__human__';
   const HUMAN_PLAYER_INDEX = 0;
+  const MAX_CHAT_BODY_LENGTH = 500;
   const roleCounts: Record<number, { liberals: number; fascists: number }> = {
     5: { liberals: 3, fascists: 1 },
     6: { liberals: 4, fascists: 1 },
@@ -518,7 +520,7 @@
         {
           playerId: speaker.id,
           playerName: speaker.name,
-          body: body.slice(0, 500),
+          body: body.slice(0, MAX_CHAT_BODY_LENGTH),
           turn: state.turn,
           phase: state.phase,
         },
@@ -786,10 +788,8 @@
         turn: entry.turn,
         type: 'chat-summary' as const,
         title: 'Table read',
-        detail:
-          [entry.summary, ...(Array.isArray(entry.claims) ? entry.claims : [])]
-            .filter(Boolean)
-            .join(' Claims: ') || 'No table-read summary text.',
+        detail: entry.summary || 'No table-read summary text.',
+        claims: Array.isArray(entry.claims) ? entry.claims.filter(Boolean) : [],
         tone: 'neutral' as const,
       })),
     ];
@@ -1294,7 +1294,7 @@
             .map((claim) => claim.trim())
             .filter(Boolean)
             .slice(0, 4)
-            .map((claim) => claim.slice(0, 140))
+            .map((claim) => claim.slice(0, MAX_CHAT_BODY_LENGTH))
         : [];
 
       turnSummaries.set(turn, {
@@ -4065,6 +4065,16 @@
               <p class="mt-2 text-sm leading-relaxed opacity-80">
                 {entry.detail}
               </p>
+              {#if entry.claims?.length}
+                <div class="mt-3 space-y-1 text-sm leading-relaxed opacity-80">
+                  <div class="text-xs font-semibold uppercase opacity-70">
+                    Claims
+                  </div>
+                  {#each entry.claims as claim}
+                    <p>{claim}</p>
+                  {/each}
+                </div>
+              {/if}
             </article>
           {/each}
         {:else}
