@@ -70,12 +70,33 @@ describe('Secret Hitler AI personalities', () => {
     );
   });
 
-  it('includes Jester and Sarcasm tones', () => {
+  it('includes the fun tone pool', () => {
     expect(secretHitlerAITones.map((tone) => tone.id)).toEqual(
-      expect.arrayContaining(['jester', 'sarcasm']),
+      expect.arrayContaining([
+        'jester',
+        'sarcasm',
+        'theatrical',
+        'deadpan',
+        'conspiratorial',
+        'overconfident',
+        'paranoid',
+        'cheerfully-accusatory',
+        'mock-formal',
+        'poetically-dramatic',
+        'game-show-host',
+        'noir-detective',
+        'class-clown',
+        'exasperated',
+      ]),
     );
     expect(getSecretHitlerAITone('jester')?.name).toBe('Jester');
     expect(getSecretHitlerAITone('sarcasm')?.name).toBe('Sarcasm');
+    expect(getSecretHitlerAITone('noir-detective')?.name).toBe(
+      'Noir Detective',
+    );
+    expect(getSecretHitlerAITone('game-show-host')?.name).toBe(
+      'Game Show Host',
+    );
   });
 
   it('assigns tones independently from hidden team roles', () => {
@@ -83,9 +104,11 @@ describe('Secret Hitler AI personalities', () => {
 
     expect(assignments[0]).toBeUndefined();
     expect(Object.keys(assignments)).toHaveLength(players.length - 1);
-    expect(Object.values(assignments).every((toneId) => getSecretHitlerAITone(toneId))).toBe(
-      true,
-    );
+    expect(
+      Object.values(assignments).every((toneId) =>
+        getSecretHitlerAITone(toneId),
+      ),
+    ).toBe(true);
   });
 
   it('assigns tones deterministically for a fixed seed', () => {

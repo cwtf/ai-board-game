@@ -3779,6 +3779,7 @@
           {@const visiblePartyAsset = visibleRole
             ? partyAssetForRole(visibleRole)
             : dossierBackAsset}
+          {@const visibleTone = aiToneForPlayer(player.id)}
           <div
             class={`flex h-[17.5rem] flex-col overflow-hidden rounded-md border p-3 ${
               !player.alive
@@ -3809,6 +3810,15 @@
                 <div class="text-xs text-neutral-500">
                   {playerStatus(player)}
                 </div>
+                {#if visibleTone && player.id !== HUMAN_PLAYER_INDEX}
+                  <div class="mt-1 flex">
+                    <span
+                      class="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase leading-none text-cyan-100"
+                    >
+                      Tone: {visibleTone.name}
+                    </span>
+                  </div>
+                {/if}
                 <select
                   class="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
                   value={playerProfileSelections[player.id] ??
@@ -4495,6 +4505,7 @@
           {@const finalRoleAsset = roleAssetForPlayer(player, player.role)}
           {@const finalPartyAsset = partyAssetForRole(player.role)}
           {@const finalPersonality = aiPersonalityForPlayer(player.id)}
+          {@const finalTone = aiToneForPlayer(player.id)}
           <div
             class="grid items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3 sm:grid-cols-[auto_1fr_auto]"
           >
@@ -4551,6 +4562,13 @@
                     class="rounded-full border border-neutral-600 bg-neutral-800 px-2 py-0.5 text-neutral-200"
                   >
                     {finalPersonality.name}
+                  </span>
+                {/if}
+                {#if finalTone && player.id !== HUMAN_PLAYER_INDEX}
+                  <span
+                    class="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-cyan-100"
+                  >
+                    Tone: {finalTone.name}
                   </span>
                 {/if}
               </div>
