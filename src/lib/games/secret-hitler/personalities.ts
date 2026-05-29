@@ -18,6 +18,17 @@ export interface SecretHitlerAIPersonality {
 
 export type SecretHitlerPersonalityAssignments = Record<number, string>;
 
+export interface SecretHitlerAITone {
+  id: string;
+  name: string;
+  summary: string;
+  speechStyle: string;
+  questionStyle: string;
+  boundary: string;
+}
+
+export type SecretHitlerToneAssignments = Record<number, string>;
+
 interface AssignablePlayer {
   id: number;
   role: SecretHitlerPersonalityRole;
@@ -320,17 +331,117 @@ export const secretHitlerAIPersonalities: SecretHitlerAIPersonality[] = [
   },
 ];
 
+export const secretHitlerAITones: SecretHitlerAITone[] = [
+  {
+    id: 'plainspoken',
+    name: 'Plainspoken',
+    summary: 'Direct and easy to read, with minimal flourish.',
+    speechStyle:
+      'Use short, clear sentences and avoid dramatic framing unless the board state is urgent.',
+    questionStyle:
+      'Ask direct questions that name the public event or vote being discussed.',
+    boundary:
+      'Do not become rude, dismissive, or so terse that reasoning disappears.',
+  },
+  {
+    id: 'warm',
+    name: 'Warm',
+    summary: 'Cooperative and socially soft, even when disagreeing.',
+    speechStyle:
+      'Soften accusations, acknowledge uncertainty, and make disagreement sound constructive.',
+    questionStyle:
+      'Ask inviting questions that give other players room to explain themselves.',
+    boundary:
+      'Do not let politeness prevent useful suspicion or necessary pressure.',
+  },
+  {
+    id: 'dry',
+    name: 'Dry',
+    summary: 'Concise, understated, and lightly sharp.',
+    speechStyle:
+      'Use restrained wording, mild deadpan, and compact observations.',
+    questionStyle:
+      'Ask clipped follow-ups that expose gaps in public logic.',
+    boundary:
+      'Keep the edge mild; do not insult players or derail the game.',
+  },
+  {
+    id: 'formal',
+    name: 'Formal',
+    summary: 'Structured, careful, and process-minded.',
+    speechStyle:
+      'Sound orderly and precise, with clear references to votes, roles, phases, and risks.',
+    questionStyle:
+      'Ask procedural questions that clarify reasons, eligibility, and public evidence.',
+    boundary:
+      'Do not over-explain private intent or turn every message into a lecture.',
+  },
+  {
+    id: 'confident',
+    name: 'Confident',
+    summary: 'Assertive and willing to push a read.',
+    speechStyle:
+      'State public reads clearly and use decisive language when evidence supports it.',
+    questionStyle:
+      'Ask pointed questions that press for commitment or explanation.',
+    boundary:
+      'Do not claim certainty from hidden information or bulldoze uncertain evidence.',
+  },
+  {
+    id: 'quiet',
+    name: 'Quiet',
+    summary: 'Low table presence and compact replies.',
+    speechStyle:
+      'Speak sparingly, with short messages that still include a public reason.',
+    questionStyle:
+      'Ask one focused question at a time instead of broad table speeches.',
+    boundary:
+      'Do not go silent when directly addressed or when your move needs public cover.',
+  },
+  {
+    id: 'jester',
+    name: 'Jester',
+    summary: 'Playful and mischievous without losing the thread of the game.',
+    speechStyle:
+      'Use light jokes, playful phrasing, and energetic reactions while still giving real public reasons.',
+    questionStyle:
+      'Ask questions with a wink, but make the actual concern understandable.',
+    boundary:
+      'Do not spam jokes, reveal hidden information, or make tableTalk incomprehensible.',
+  },
+  {
+    id: 'sarcasm',
+    name: 'Sarcasm',
+    summary: 'Sardonic and skeptical, with a sharper comic edge.',
+    speechStyle:
+      'Use brief sarcastic remarks to underline contradictions or suspicious convenience.',
+    questionStyle:
+      'Ask skeptical questions that make weak explanations feel exposed.',
+    boundary:
+      'Keep sarcasm game-focused and non-abusive; do not personally insult players.',
+  },
+];
+
 const personalityById = new Map(
   secretHitlerAIPersonalities.map((personality) => [
     personality.id,
     personality,
   ]),
 );
+const toneById = new Map(
+  secretHitlerAITones.map((tone) => [tone.id, tone]),
+);
 
 export function getSecretHitlerAIPersonality(
   personalityId: string | undefined,
 ): SecretHitlerAIPersonality | undefined {
   return personalityId ? personalityById.get(personalityId) : undefined;
+}
+
+export function getSecretHitlerAITone(
+  toneId: string | undefined,
+): SecretHitlerAITone | undefined {
+  return toneId ? toneById.get(toneId) : undefined;
 }
 
 function personalitiesForTeam(
@@ -388,6 +499,36 @@ export function assignSecretHitlerAIPersonalities(
     const offset = offsets[team];
     assignments[player.id] = pool[offset % pool.length];
     offsets[team] = offset + 1;
+  }
+
+  return assignments;
+}
+
+export function assignSecretHitlerAITones(
+  players: Pick<AssignablePlayer, 'id'>[],
+  seed: string,
+  humanPlayerIndex = 0,
+): SecretHitlerToneAssignments {
+  const rng = createRng(`${seed}:ai-tones`);
+  const toneIds = secretHitlerAITones.map((tone) => tone.id);
+  const shuffled = [...toneIds];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = rng.int(index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+
+  const assignments: SecretHitlerToneAssignments = {};
+  let offset = 0;
+  for (const player of players) {
+    if (player.id === humanPlayerIndex) {
+      continue;
+    }
+
+    assignments[player.id] = shuffled[offset % shuffled.length];
+    offset += 1;
   }
 
   return assignments;

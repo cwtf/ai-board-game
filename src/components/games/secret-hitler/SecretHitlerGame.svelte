@@ -19,8 +19,11 @@
   import { requestSecretHitlerAIMove } from '@/lib/games/secret-hitler/ai-pipeline';
   import {
     assignSecretHitlerAIPersonalities,
+    assignSecretHitlerAITones,
     getSecretHitlerAIPersonality,
+    getSecretHitlerAITone,
     type SecretHitlerPersonalityAssignments,
+    type SecretHitlerToneAssignments,
   } from '@/lib/games/secret-hitler/personalities';
   import { createRng } from '@/lib/games/shared/rng';
   import {
@@ -326,6 +329,7 @@
   let activeQuestionReplyKey = '';
   const answeredQuestionKeys = new Set<string>();
   let aiPersonalityAssignments: SecretHitlerPersonalityAssignments = {};
+  let aiToneAssignments: SecretHitlerToneAssignments = {};
   let playerProfileSelections: PlayerProfileSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
   };
@@ -659,6 +663,11 @@
       seed,
       HUMAN_PLAYER_INDEX,
     );
+    aiToneAssignments = assignSecretHitlerAITones(
+      players,
+      seed,
+      HUMAN_PLAYER_INDEX,
+    );
     aiMemories = Object.fromEntries(
       players.map((player) => [player.id, createSecretHitlerAIMemory()]),
     );
@@ -938,6 +947,10 @@
     return getSecretHitlerAIPersonality(aiPersonalityAssignments[playerIndex]);
   }
 
+  function aiToneForPlayer(playerIndex: number) {
+    return getSecretHitlerAITone(aiToneAssignments[playerIndex]);
+  }
+
   function aiCanAct(playerIndex: number): boolean {
     return Boolean(modelProfileForPlayer(playerIndex));
   }
@@ -978,6 +991,7 @@
       legalMoves,
       memory: memoryForPlayer(player),
       personality: aiPersonalityForPlayer(player),
+      tone: aiToneForPlayer(player),
       tableReadTurnSummaries,
       signal,
       complete({ system, messages, signal: requestSignal }) {
@@ -1776,9 +1790,11 @@
             memoryForPlayer(responder.id),
             tableReadTurnSummaries,
             aiPersonalityForPlayer(responder.id),
+            aiToneForPlayer(responder.id),
           ),
         ) as {
           personality: unknown;
+          tone: unknown;
           rules: unknown;
           state: unknown;
           privateMemory: unknown;
@@ -1793,6 +1809,7 @@
             'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
             'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
             'If personality is present, use it to shape tone and memory, but never reveal the hidden personality assignment or override your private objective.',
+            'If tone is present, use it to shape wording only; do not let it change strategy, suspicion logic, or hidden-team objectives.',
             addressedPlayers.length
               ? 'Your assigned player was directly addressed by name, so tableTalk must be a non-empty public reply.'
               : 'Reply only if a public response from your assigned player is natural in this conversation.',
@@ -1810,6 +1827,7 @@
                 directlyAddressedPlayers:
                   addressedPlayers.map(publicPlayerName),
                 personality: responderContext.personality,
+                tone: responderContext.tone,
                 rules: responderContext.rules,
                 state: responderContext.state,
                 privateMemory: responderContext.privateMemory,

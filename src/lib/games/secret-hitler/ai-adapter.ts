@@ -1,7 +1,10 @@
 import type { GameAdapter } from '@/lib/games/shared/types';
 import { games } from '@/lib/games/registry';
 import { createRng } from '@/lib/games/shared/rng';
-import type { SecretHitlerAIPersonality } from './personalities';
+import type {
+  SecretHitlerAIPersonality,
+  SecretHitlerAITone,
+} from './personalities';
 
 export type SecretHitlerParty = 'liberal' | 'fascist';
 export type SecretHitlerRole = 'liberal' | 'fascist' | 'hitler';
@@ -169,6 +172,15 @@ export interface SecretHitlerSerializedPersonality {
   memoryStyle: string;
   riskTolerance: SecretHitlerAIPersonality['riskTolerance'];
   roleDirective: string;
+}
+
+export interface SecretHitlerSerializedTone {
+  id: string;
+  name: string;
+  summary: string;
+  speechStyle: string;
+  questionStyle: string;
+  boundary: string;
 }
 
 export interface MemoryPatchOptions {
@@ -718,6 +730,23 @@ function personalityForPrivateRole(
     memoryStyle: personality.memoryStyle,
     riskTolerance: personality.riskTolerance,
     roleDirective: personality.roleDirectives[role],
+  };
+}
+
+function toneForAI(
+  tone: SecretHitlerAITone | undefined,
+): SecretHitlerSerializedTone | null {
+  if (!tone) {
+    return null;
+  }
+
+  return {
+    id: tone.id,
+    name: tone.name,
+    summary: tone.summary,
+    speechStyle: tone.speechStyle,
+    questionStyle: tone.questionStyle,
+    boundary: tone.boundary,
   };
 }
 
@@ -1340,6 +1369,7 @@ export function serializeSecretHitlerForAI(
   memory?: SecretHitlerAIMemory,
   neutralTurnSummaries: unknown[] = [],
   personality?: SecretHitlerAIPersonality,
+  tone?: SecretHitlerAITone,
 ): string {
   const assignedPlayer =
     state.players.find((candidate) => candidate.id === player) ??
@@ -1353,6 +1383,7 @@ export function serializeSecretHitlerForAI(
       ? { id: assignedPlayer.id, name: assignedPlayer.name }
       : null,
     personality: personalityForPrivateRole(personality, assignedRole),
+    tone: toneForAI(tone),
     rules: rulesSummary,
     state: publicStateFor(state, player),
     privateMemory: sanitizeSecretHitlerAIMemory(memory, {
@@ -1827,6 +1858,7 @@ export const secretHitlerAdapter: GameAdapter<
       'You may use tableTalk to persuade, question, accuse, defend, coordinate, misdirect, or bluff in character for your assigned role.',
       'The payload may include personality for your assigned player only. Use it to shape tone, public arguments, suspicion updates, memoryPatch, and social behavior, but never reveal that personality assignment as hidden setup information.',
       'Personality guidance never overrides private.role, private.party, private.objective, private.actionGuidance, legalMoves, or the hidden-team objective.',
+      'The payload may include tone for your assigned player only. Tone changes wording, rhythm, question style, and social flavor only; it never changes strategy, suspicion logic, memory truth, legal moves, or hidden-team objectives.',
       'Do not make your next move obvious in tableTalk. Never announce private policy choices, planned discards/enactments, intended executions, intended investigations, or hidden-team plans before making the move.',
       'During private policy phases, tableTalk must not mention your hand contents, policy colors received, exact discard/enact choice, remaining private cards, or hidden-team agenda.',
       'When discussing a move, phrase it as public reasoning, suspicion, uncertainty, or a plausible table-facing justification rather than revealing your exact tactical intent.',

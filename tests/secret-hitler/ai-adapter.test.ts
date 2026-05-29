@@ -11,7 +11,10 @@ import {
   serializeSecretHitlerForAI,
   type SecretHitlerState,
 } from '@/lib/games/secret-hitler/ai-adapter';
-import { getSecretHitlerAIPersonality } from '@/lib/games/secret-hitler/personalities';
+import {
+  getSecretHitlerAIPersonality,
+  getSecretHitlerAITone,
+} from '@/lib/games/secret-hitler/personalities';
 
 describe('Secret Hitler AI adapter', () => {
   it('gives the model a hidden-info JSON-only contract', () => {
@@ -41,6 +44,8 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('neutralTableSummary');
     expect(prompt).toContain('personality');
     expect(prompt).toContain('Personality guidance never overrides');
+    expect(prompt).toContain('tone');
+    expect(prompt).toContain('Tone changes wording');
     expect(prompt).toContain('memoryPatch');
     expect(prompt).toContain('Do not include prose');
     expect(prompt).toContain('Liberals should');
@@ -364,9 +369,53 @@ describe('Secret Hitler AI adapter', () => {
       serializeSecretHitlerForAI(state, 0, []),
     ) as {
       personality: unknown;
+      tone: unknown;
     };
 
     expect(payload.personality).toBeNull();
+    expect(payload.tone).toBeNull();
+  });
+
+  it('serializes acting player tone guidance separately from personality', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'tone',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+
+    const payload = JSON.parse(
+      serializeSecretHitlerForAI(
+        state,
+        1,
+        [],
+        undefined,
+        [],
+        getSecretHitlerAIPersonality('investigator'),
+        getSecretHitlerAITone('sarcasm'),
+      ),
+    ) as {
+      personality: { id: string };
+      tone: {
+        id: string;
+        name: string;
+        speechStyle: string;
+        boundary: string;
+      };
+      state: {
+        private: {
+          objective: string;
+        };
+      };
+    };
+
+    expect(payload.personality.id).toBe('investigator');
+    expect(payload.tone).toMatchObject({
+      id: 'sarcasm',
+      name: 'Sarcasm',
+    });
+    expect(payload.tone.speechStyle).toContain('sarcastic');
+    expect(payload.tone.boundary).toContain('non-abusive');
+    expect(payload.state.private.objective).toBeTruthy();
   });
 
   it('serializes neutral public chat summaries as advisory context', () => {
