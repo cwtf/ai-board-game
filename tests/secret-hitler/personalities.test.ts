@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assignSecretHitlerAIPersonalities,
   getSecretHitlerAIPersonality,
+  secretHitlerAIPersonalities,
 } from '@/lib/games/secret-hitler/personalities';
 
 describe('Secret Hitler AI personalities', () => {
@@ -30,6 +31,25 @@ describe('Secret Hitler AI personalities', () => {
     expect(getSecretHitlerAIPersonality(assignments[3])?.team).toBe('liberal');
     expect(getSecretHitlerAIPersonality(assignments[4])?.team).toBe('liberal');
     expect(getSecretHitlerAIPersonality(assignments[6])?.team).toBe('liberal');
+  });
+
+  it('includes an expanded Liberal personality pool', () => {
+    const liberalPersonalityIds = secretHitlerAIPersonalities
+      .filter((personality) => personality.team === 'liberal')
+      .map((personality) => personality.id);
+
+    expect(liberalPersonalityIds).toEqual(
+      expect.arrayContaining([
+        'investigator',
+        'diplomat',
+        'analyst',
+        'skeptic',
+        'coalition-builder',
+        'proceduralist',
+        'sentinel',
+        'mediator',
+      ]),
+    );
   });
 
   it('uses complementary personalities within the same team when possible', () => {

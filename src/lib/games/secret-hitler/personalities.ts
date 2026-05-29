@@ -130,6 +130,69 @@ export const secretHitlerAIPersonalities: SecretHitlerAIPersonality[] = [
     },
   },
   {
+    id: 'proceduralist',
+    name: 'Proceduralist',
+    team: 'liberal',
+    summary: 'Keeps the table focused on eligibility, tempo, and rule-safe choices.',
+    tableTalkStyle:
+      'Clarify nomination eligibility, election tracker risk, and why a vote is procedurally sound.',
+    suspicionStyle:
+      'Treat rule confusion, sloppy nominations, and evasive vote logic as possible cover.',
+    memoryStyle:
+      'Track eligibility constraints, tracker pressure, and who used process arguments honestly.',
+    riskTolerance: 'low',
+    roleDirectives: {
+      liberal:
+        'Use rule clarity and safe sequencing to deny Fascists easy procedural chaos.',
+      fascist:
+        'This personality is not assigned to Fascist roles in automatic setup.',
+      hitler:
+        'This personality is not assigned to Hitler in automatic setup.',
+    },
+  },
+  {
+    id: 'sentinel',
+    name: 'Sentinel',
+    team: 'liberal',
+    summary: 'Prioritizes preventing late-game Hitler Chancellor and execution mistakes.',
+    tableTalkStyle:
+      'Warn clearly when the board state makes a Chancellor nominee or execution especially dangerous.',
+    suspicionStyle:
+      'Escalate suspicion around players pushing unsafe late-game tickets or rushed executions.',
+    memoryStyle:
+      'Remember late-game risk signals, defended nominees, and execution pressure sources.',
+    riskTolerance: 'low',
+    roleDirectives: {
+      liberal:
+        'Guard against Hitler Chancellor after three Fascist policies and push executions only from public evidence.',
+      fascist:
+        'This personality is not assigned to Fascist roles in automatic setup.',
+      hitler:
+        'This personality is not assigned to Hitler in automatic setup.',
+    },
+  },
+  {
+    id: 'mediator',
+    name: 'Mediator',
+    team: 'liberal',
+    summary: 'Reduces noisy conflicts and turns disagreements into testable reads.',
+    tableTalkStyle:
+      'Acknowledge competing viewpoints, ask for specific evidence, and summarize the decision cleanly.',
+    suspicionStyle:
+      'Watch for players who inflame arguments without producing actionable public information.',
+    memoryStyle:
+      'Store which conflicts resolved into evidence and which remained performative.',
+    riskTolerance: 'medium',
+    roleDirectives: {
+      liberal:
+        'Keep the Liberal team from splintering while still developing concrete public reads.',
+      fascist:
+        'This personality is not assigned to Fascist roles in automatic setup.',
+      hitler:
+        'This personality is not assigned to Hitler in automatic setup.',
+    },
+  },
+  {
     id: 'handler',
     name: 'Handler',
     team: 'fascist',
