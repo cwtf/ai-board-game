@@ -17,6 +17,11 @@
     type SecretHitlerState,
   } from '@/lib/games/secret-hitler/ai-adapter';
   import { requestSecretHitlerAIMove } from '@/lib/games/secret-hitler/ai-pipeline';
+  import {
+    assignSecretHitlerAIPersonalities,
+    getSecretHitlerAIPersonality,
+    type SecretHitlerPersonalityAssignments,
+  } from '@/lib/games/secret-hitler/personalities';
   import { createRng } from '@/lib/games/shared/rng';
   import {
     getStoredKeys,
@@ -320,6 +325,7 @@
   let previewedCard: CardPreview | null = null;
   let activeQuestionReplyKey = '';
   const answeredQuestionKeys = new Set<string>();
+  let aiPersonalityAssignments: SecretHitlerPersonalityAssignments = {};
   let playerProfileSelections: PlayerProfileSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_PROFILE,
   };
@@ -648,6 +654,11 @@
       ),
       alive: true,
     }));
+    aiPersonalityAssignments = assignSecretHitlerAIPersonalities(
+      players,
+      seed,
+      HUMAN_PLAYER_INDEX,
+    );
     aiMemories = Object.fromEntries(
       players.map((player) => [player.id, createSecretHitlerAIMemory()]),
     );
@@ -923,6 +934,10 @@
     return configuredProfileById(profileId);
   }
 
+  function aiPersonalityForPlayer(playerIndex: number) {
+    return getSecretHitlerAIPersonality(aiPersonalityAssignments[playerIndex]);
+  }
+
   function aiCanAct(playerIndex: number): boolean {
     return Boolean(modelProfileForPlayer(playerIndex));
   }
@@ -962,6 +977,7 @@
       player,
       legalMoves,
       memory: memoryForPlayer(player),
+      personality: aiPersonalityForPlayer(player),
       tableReadTurnSummaries,
       signal,
       complete({ system, messages, signal: requestSignal }) {
@@ -1759,8 +1775,10 @@
             [],
             memoryForPlayer(responder.id),
             tableReadTurnSummaries,
+            aiPersonalityForPlayer(responder.id),
           ),
         ) as {
+          personality: unknown;
           rules: unknown;
           state: unknown;
           privateMemory: unknown;
@@ -1774,6 +1792,7 @@
             secretHitlerAdapter.systemPrompt(),
             'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
             'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
+            'If personality is present, use it to shape tone and memory, but never reveal the hidden personality assignment or override your private objective.',
             addressedPlayers.length
               ? 'Your assigned player was directly addressed by name, so tableTalk must be a non-empty public reply.'
               : 'Reply only if a public response from your assigned player is natural in this conversation.',
@@ -1790,6 +1809,7 @@
                 question: item.body,
                 directlyAddressedPlayers:
                   addressedPlayers.map(publicPlayerName),
+                personality: responderContext.personality,
                 rules: responderContext.rules,
                 state: responderContext.state,
                 privateMemory: responderContext.privateMemory,
@@ -4456,6 +4476,7 @@
         {#each players as player (player.id)}
           {@const finalRoleAsset = roleAssetForPlayer(player, player.role)}
           {@const finalPartyAsset = partyAssetForRole(player.role)}
+          {@const finalPersonality = aiPersonalityForPlayer(player.id)}
           <div
             class="grid items-center gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-3 sm:grid-cols-[auto_1fr_auto]"
           >
@@ -4507,6 +4528,13 @@
                 >
                   {partyLabel(player.role)} team
                 </span>
+                {#if finalPersonality && player.id !== HUMAN_PLAYER_INDEX}
+                  <span
+                    class="rounded-full border border-neutral-600 bg-neutral-800 px-2 py-0.5 text-neutral-200"
+                  >
+                    {finalPersonality.name}
+                  </span>
+                {/if}
               </div>
             </div>
             <div class="text-sm text-neutral-400 sm:text-right">

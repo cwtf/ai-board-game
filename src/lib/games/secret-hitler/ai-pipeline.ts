@@ -13,6 +13,7 @@ import {
   type SecretHitlerNeutralTurnSummary,
   type SecretHitlerState,
 } from './ai-adapter';
+import type { SecretHitlerAIPersonality } from './personalities';
 
 export interface SecretHitlerAIPipelineResult {
   move: SecretHitlerMove;
@@ -27,6 +28,7 @@ export interface SecretHitlerAIPipelineOptions {
   player: number;
   legalMoves: SecretHitlerMove[];
   memory?: SecretHitlerAIMemory;
+  personality?: SecretHitlerAIPersonality;
   tableReadTurnSummaries?: SecretHitlerNeutralTurnSummary[];
   maxAttempts?: number;
   signal?: AbortSignal;
@@ -42,6 +44,7 @@ export async function requestSecretHitlerAIMove({
   player,
   legalMoves,
   memory,
+  personality,
   tableReadTurnSummaries = [],
   maxAttempts = 3,
   signal,
@@ -56,6 +59,7 @@ export async function requestSecretHitlerAIMove({
         legalMoves,
         memory,
         tableReadTurnSummaries,
+        personality,
       ),
     },
   ];

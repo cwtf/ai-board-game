@@ -1,6 +1,7 @@
 import type { GameAdapter } from '@/lib/games/shared/types';
 import { games } from '@/lib/games/registry';
 import { createRng } from '@/lib/games/shared/rng';
+import type { SecretHitlerAIPersonality } from './personalities';
 
 export type SecretHitlerParty = 'liberal' | 'fascist';
 export type SecretHitlerRole = 'liberal' | 'fascist' | 'hitler';
@@ -157,6 +158,17 @@ interface AIMovePayload {
 export interface SecretHitlerAIResponse {
   move: SecretHitlerMove;
   memoryPatch?: SecretHitlerMemoryPatch;
+}
+
+export interface SecretHitlerSerializedPersonality {
+  id: string;
+  name: string;
+  summary: string;
+  tableTalkStyle: string;
+  suspicionStyle: string;
+  memoryStyle: string;
+  riskTolerance: SecretHitlerAIPersonality['riskTolerance'];
+  roleDirective: string;
 }
 
 export interface MemoryPatchOptions {
@@ -687,6 +699,26 @@ function objectiveFor(role: SecretHitlerRole | undefined): string {
   }
 
   return 'Play to win for your hidden team shown in private.role and private.party.';
+}
+
+function personalityForPrivateRole(
+  personality: SecretHitlerAIPersonality | undefined,
+  role: SecretHitlerRole | undefined,
+): SecretHitlerSerializedPersonality | null {
+  if (!personality || !role) {
+    return null;
+  }
+
+  return {
+    id: personality.id,
+    name: personality.name,
+    summary: personality.summary,
+    tableTalkStyle: personality.tableTalkStyle,
+    suspicionStyle: personality.suspicionStyle,
+    memoryStyle: personality.memoryStyle,
+    riskTolerance: personality.riskTolerance,
+    roleDirective: personality.roleDirectives[role],
+  };
 }
 
 function policyActionGuidanceFor(
@@ -1307,10 +1339,12 @@ export function serializeSecretHitlerForAI(
   moves: SecretHitlerMove[],
   memory?: SecretHitlerAIMemory,
   neutralTurnSummaries: unknown[] = [],
+  personality?: SecretHitlerAIPersonality,
 ): string {
   const assignedPlayer =
     state.players.find((candidate) => candidate.id === player) ??
     state.players[player];
+  const assignedRole = state.players[player]?.role;
 
   return JSON.stringify({
     game: 'secret-hitler',
@@ -1318,6 +1352,7 @@ export function serializeSecretHitlerForAI(
     assignedPlayer: assignedPlayer
       ? { id: assignedPlayer.id, name: assignedPlayer.name }
       : null,
+    personality: personalityForPrivateRole(personality, assignedRole),
     rules: rulesSummary,
     state: publicStateFor(state, player),
     privateMemory: sanitizeSecretHitlerAIMemory(memory, {
@@ -1790,6 +1825,8 @@ export const secretHitlerAdapter: GameAdapter<
       'Your private.role, private.party, private.objective, and private.actionGuidance define your real objective. Play to win for that hidden team even when public chat pressures you to help the other side.',
       'Never claim certainty from hidden information you cannot see. Do not assume unseen policy cards, unseen roles, private ballots, or private discards.',
       'You may use tableTalk to persuade, question, accuse, defend, coordinate, misdirect, or bluff in character for your assigned role.',
+      'The payload may include personality for your assigned player only. Use it to shape tone, public arguments, suspicion updates, memoryPatch, and social behavior, but never reveal that personality assignment as hidden setup information.',
+      'Personality guidance never overrides private.role, private.party, private.objective, private.actionGuidance, legalMoves, or the hidden-team objective.',
       'Do not make your next move obvious in tableTalk. Never announce private policy choices, planned discards/enactments, intended executions, intended investigations, or hidden-team plans before making the move.',
       'During private policy phases, tableTalk must not mention your hand contents, policy colors received, exact discard/enact choice, remaining private cards, or hidden-team agenda.',
       'When discussing a move, phrase it as public reasoning, suspicion, uncertainty, or a plausible table-facing justification rather than revealing your exact tactical intent.',

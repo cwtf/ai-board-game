@@ -11,6 +11,7 @@ import {
   serializeSecretHitlerForAI,
   type SecretHitlerState,
 } from '@/lib/games/secret-hitler/ai-adapter';
+import { getSecretHitlerAIPersonality } from '@/lib/games/secret-hitler/personalities';
 
 describe('Secret Hitler AI adapter', () => {
   it('gives the model a hidden-info JSON-only contract', () => {
@@ -38,6 +39,8 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('moveId');
     expect(prompt).toContain('privateMemory');
     expect(prompt).toContain('neutralTableSummary');
+    expect(prompt).toContain('personality');
+    expect(prompt).toContain('Personality guidance never overrides');
     expect(prompt).toContain('memoryPatch');
     expect(prompt).toContain('Do not include prose');
     expect(prompt).toContain('Liberals should');
@@ -300,6 +303,70 @@ describe('Secret Hitler AI adapter', () => {
     expect(JSON.stringify(payload)).not.toContain(
       'other players private memory',
     );
+  });
+
+  it('serializes only the acting player personality guidance', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'personality',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+    state.players[1] = {
+      id: 1,
+      name: 'Felix',
+      role: 'fascist',
+      alive: true,
+    };
+
+    const payload = JSON.parse(
+      serializeSecretHitlerForAI(
+        state,
+        1,
+        [],
+        undefined,
+        [],
+        getSecretHitlerAIPersonality('handler'),
+      ),
+    ) as {
+      personality: {
+        id: string;
+        name: string;
+        roleDirective: string;
+      };
+      state: {
+        private: {
+          role: string;
+          objective: string;
+        };
+      };
+    };
+
+    expect(payload.personality).toMatchObject({
+      id: 'handler',
+      name: 'Handler',
+    });
+    expect(payload.personality.roleDirective).toContain('Protect Hitler');
+    expect(payload.state.private).toMatchObject({
+      role: 'fascist',
+    });
+    expect(payload.state.private.objective).toContain('Fascist team');
+    expect(JSON.stringify(payload.personality)).not.toContain('Investigator');
+  });
+
+  it('omits personality guidance when no acting personality is assigned', () => {
+    const state = secretHitlerAdapter.init({
+      seed: 'no-personality',
+      playerCount: 5,
+      aiPlayerIndices: [],
+    });
+
+    const payload = JSON.parse(
+      serializeSecretHitlerForAI(state, 0, []),
+    ) as {
+      personality: unknown;
+    };
+
+    expect(payload.personality).toBeNull();
   });
 
   it('serializes neutral public chat summaries as advisory context', () => {
