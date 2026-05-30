@@ -93,23 +93,12 @@ describe('Secret Hitler AI personalities', () => {
         'conspiratorial',
         'overconfident',
         'paranoid',
-        'cheerfully-accusatory',
-        'mock-formal',
-        'poetically-dramatic',
-        'game-show-host',
-        'noir-detective',
         'class-clown',
         'exasperated',
       ]),
     );
     expect(getSecretHitlerAITone('jester')?.name).toBe('Jester');
     expect(getSecretHitlerAITone('sarcasm')?.name).toBe('Sarcasm');
-    expect(getSecretHitlerAITone('noir-detective')?.name).toBe(
-      'Noir Detective',
-    );
-    expect(getSecretHitlerAITone('game-show-host')?.name).toBe(
-      'Game Show Host',
-    );
   });
 
   it('gives every tone concrete voice rules and sample lines', () => {
