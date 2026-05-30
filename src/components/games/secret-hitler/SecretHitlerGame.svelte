@@ -2134,8 +2134,29 @@
     return true;
   }
 
+  function noBallotsSubmitted(): boolean {
+    return alivePlayers.every((player) => !votes[player.id]);
+  }
+
+  function canStillChangeNominee(): boolean {
+    return (
+      phase === 'voting' &&
+      humanIsPresident &&
+      !ballotRevealPending &&
+      noBallotsSubmitted()
+    );
+  }
+
   function canNominate(player: Player): boolean {
-    return phase === 'nomination' && !winner && isEligibleChancellor(player);
+    if (winner || !humanIsPresident || !isEligibleChancellor(player)) {
+      return false;
+    }
+
+    if (phase === 'nomination') {
+      return true;
+    }
+
+    return canStillChangeNominee() && player.id !== nominee;
   }
 
   function nominate(playerId: number) {
@@ -2144,11 +2165,16 @@
       return;
     }
 
+    const previousNomineeName = nominee === null ? '' : nomineeName;
+    const changingNominee = phase === 'voting' && nominee !== null;
+
     nominee = playerId;
     votes = Object.fromEntries(alivePlayers.map((item) => [item.id, null]));
     ballotRevealPending = false;
     phase = 'voting';
-    message = `${presidentName} nominated ${player.name}. Cast votes.`;
+    message = changingNominee
+      ? `${presidentName} changed the nomination from ${previousNomineeName} to ${player.name}. Cast votes.`
+      : `${presidentName} nominated ${player.name}. Cast votes.`;
     void runAI();
   }
 
@@ -3100,6 +3126,11 @@
                 <p class="mt-1 text-xs text-amber-200">
                   Ballots are revealed. Continue when you are ready.
                 </p>
+              {:else if canStillChangeNominee()}
+                <p class="mt-1 text-xs text-cyan-200">
+                  You can still nominate a different eligible Chancellor until
+                  the first ballot is submitted.
+                </p>
               {/if}
             </div>
             <button
@@ -3874,7 +3905,7 @@
             </div>
 
             <div class="mt-3 grid gap-2">
-              {#if phase === 'nomination'}
+              {#if phase === 'nomination' || canStillChangeNominee()}
                 <button
                   class="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40"
                   type="button"
