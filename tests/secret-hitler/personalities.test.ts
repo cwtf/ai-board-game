@@ -4,6 +4,7 @@ import {
   assignSecretHitlerAITones,
   getSecretHitlerAIPersonality,
   getSecretHitlerAITone,
+  playStyleForSecretHitlerAIPersonality,
   secretHitlerAIPersonalities,
   secretHitlerAITones,
 } from '@/lib/games/secret-hitler/personalities';
@@ -64,6 +65,18 @@ describe('Secret Hitler AI personalities', () => {
     );
   });
 
+  it('gives every personality concrete play-style guidance', () => {
+    for (const personality of secretHitlerAIPersonalities) {
+      const playStyle = playStyleForSecretHitlerAIPersonality(personality.id);
+
+      expect(playStyle?.nomination).toBeTruthy();
+      expect(playStyle?.voting).toBeTruthy();
+      expect(playStyle?.legislative).toBeTruthy();
+      expect(playStyle?.executive).toBeTruthy();
+      expect(playStyle?.tieBreakers.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it('is deterministic for a fixed seed', () => {
     expect(assignSecretHitlerAIPersonalities(players, 'fixed', 0)).toEqual(
       assignSecretHitlerAIPersonalities(players, 'fixed', 0),
@@ -97,6 +110,15 @@ describe('Secret Hitler AI personalities', () => {
     expect(getSecretHitlerAITone('game-show-host')?.name).toBe(
       'Game Show Host',
     );
+  });
+
+  it('gives every tone concrete voice rules and sample lines', () => {
+    for (const tone of secretHitlerAITones) {
+      expect(tone.voiceRules.length).toBeGreaterThanOrEqual(2);
+      expect(tone.sampleLines.length).toBeGreaterThanOrEqual(2);
+      expect(tone.voiceRules.every((rule) => rule.trim())).toBe(true);
+      expect(tone.sampleLines.every((line) => line.trim())).toBe(true);
+    }
   });
 
   it('assigns tones independently from hidden team roles', () => {

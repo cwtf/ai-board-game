@@ -43,9 +43,13 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('privateMemory');
     expect(prompt).toContain('neutralTableSummary');
     expect(prompt).toContain('personality');
+    expect(prompt).toContain('personality.playStyle');
+    expect(prompt).toContain('nominations, votes, policy handling');
     expect(prompt).toContain('Personality guidance never overrides');
     expect(prompt).toContain('tone');
     expect(prompt).toContain('Tone changes wording');
+    expect(prompt).toContain('audibly visible');
+    expect(prompt).toContain('sampleLines');
     expect(prompt).toContain('memoryPatch');
     expect(prompt).toContain('Do not include prose');
     expect(prompt).toContain('Liberals should');
@@ -337,6 +341,11 @@ describe('Secret Hitler AI adapter', () => {
         id: string;
         name: string;
         roleDirective: string;
+        playStyle: {
+          nomination: string;
+          voting: string;
+          tieBreakers: string[];
+        };
       };
       state: {
         private: {
@@ -351,6 +360,15 @@ describe('Secret Hitler AI adapter', () => {
       name: 'Handler',
     });
     expect(payload.personality.roleDirective).toContain('Protect Hitler');
+    expect(payload.personality.playStyle.nomination).toContain(
+      'protect Hitler',
+    );
+    expect(payload.personality.playStyle.voting).toContain(
+      'Fascist-beneficial',
+    );
+    expect(payload.personality.playStyle.tieBreakers.join(' ')).toContain(
+      'Protect Hitler',
+    );
     expect(payload.state.private).toMatchObject({
       role: 'fascist',
     });
@@ -399,6 +417,8 @@ describe('Secret Hitler AI adapter', () => {
         id: string;
         name: string;
         speechStyle: string;
+        voiceRules: string[];
+        sampleLines: string[];
         boundary: string;
       };
       state: {
@@ -414,6 +434,8 @@ describe('Secret Hitler AI adapter', () => {
       name: 'Sarcasm',
     });
     expect(payload.tone.speechStyle).toContain('sarcastic');
+    expect(payload.tone.voiceRules.join(' ')).toContain('sharp aside');
+    expect(payload.tone.sampleLines.join(' ')).toContain('Perfectly normal');
     expect(payload.tone.boundary).toContain('non-abusive');
     expect(payload.state.private.objective).toBeTruthy();
   });

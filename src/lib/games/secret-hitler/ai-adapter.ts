@@ -2,9 +2,11 @@ import type { GameAdapter } from '@/lib/games/shared/types';
 import { games } from '@/lib/games/registry';
 import { createRng } from '@/lib/games/shared/rng';
 import type {
+  SecretHitlerAIPlayStyle,
   SecretHitlerAIPersonality,
   SecretHitlerAITone,
 } from './personalities';
+import { playStyleForSecretHitlerAIPersonality } from './personalities';
 
 export type SecretHitlerParty = 'liberal' | 'fascist';
 export type SecretHitlerRole = 'liberal' | 'fascist' | 'hitler';
@@ -172,6 +174,7 @@ export interface SecretHitlerSerializedPersonality {
   memoryStyle: string;
   riskTolerance: SecretHitlerAIPersonality['riskTolerance'];
   roleDirective: string;
+  playStyle?: SecretHitlerAIPlayStyle;
 }
 
 export interface SecretHitlerSerializedTone {
@@ -180,6 +183,8 @@ export interface SecretHitlerSerializedTone {
   summary: string;
   speechStyle: string;
   questionStyle: string;
+  voiceRules: string[];
+  sampleLines: string[];
   boundary: string;
 }
 
@@ -730,6 +735,7 @@ function personalityForPrivateRole(
     memoryStyle: personality.memoryStyle,
     riskTolerance: personality.riskTolerance,
     roleDirective: personality.roleDirectives[role],
+    playStyle: playStyleForSecretHitlerAIPersonality(personality.id),
   };
 }
 
@@ -746,6 +752,8 @@ function toneForAI(
     summary: tone.summary,
     speechStyle: tone.speechStyle,
     questionStyle: tone.questionStyle,
+    voiceRules: tone.voiceRules,
+    sampleLines: tone.sampleLines,
     boundary: tone.boundary,
   };
 }
@@ -1857,8 +1865,9 @@ export const secretHitlerAdapter: GameAdapter<
       'Never claim certainty from hidden information you cannot see. Do not assume unseen policy cards, unseen roles, private ballots, or private discards.',
       'You may use tableTalk to persuade, question, accuse, defend, coordinate, misdirect, or bluff in character for your assigned role.',
       'The payload may include personality for your assigned player only. Use it to shape tone, public arguments, suspicion updates, memoryPatch, and social behavior, but never reveal that personality assignment as hidden setup information.',
-      'Personality guidance never overrides private.role, private.party, private.objective, private.actionGuidance, legalMoves, or the hidden-team objective.',
+      'When personality.playStyle is present, use it to choose between strategically legal moves that are otherwise comparable: nominations, votes, policy handling, executive powers, and tie-breakers should feel like that personality. Personality guidance never overrides private.role, private.party, private.objective, private.actionGuidance, legalMoves, or the hidden-team objective.',
       'The payload may include tone for your assigned player only. Tone changes wording, rhythm, question style, and social flavor only; it never changes strategy, suspicion logic, memory truth, legal moves, or hidden-team objectives.',
+      'When tone is present and tableTalk is included, make the tone audibly visible by following its voiceRules and echoing the style of its sampleLines without copying them exactly. Avoid bland neutral tableTalk unless the tone itself asks for it.',
       'Do not make your next move obvious in tableTalk. Never announce private policy choices, planned discards/enactments, intended executions, intended investigations, or hidden-team plans before making the move.',
       'During private policy phases, tableTalk must not mention your hand contents, policy colors received, exact discard/enact choice, remaining private cards, or hidden-team agenda.',
       'When discussing a move, phrase it as public reasoning, suspicion, uncertainty, or a plausible table-facing justification rather than revealing your exact tactical intent.',

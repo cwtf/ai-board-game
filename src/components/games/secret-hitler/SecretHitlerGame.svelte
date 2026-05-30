@@ -22,6 +22,7 @@
     assignSecretHitlerAITones,
     getSecretHitlerAIPersonality,
     getSecretHitlerAITone,
+    secretHitlerAITones,
     type SecretHitlerPersonalityAssignments,
     type SecretHitlerToneAssignments,
   } from '@/lib/games/secret-hitler/personalities';
@@ -951,6 +952,10 @@
     return getSecretHitlerAITone(aiToneAssignments[playerIndex]);
   }
 
+  function selectedToneIdForPlayer(playerIndex: number) {
+    return aiToneAssignments[playerIndex] ?? secretHitlerAITones[0]?.id ?? '';
+  }
+
   function aiCanAct(playerIndex: number): boolean {
     return Boolean(modelProfileForPlayer(playerIndex));
   }
@@ -1808,8 +1813,8 @@
             secretHitlerAdapter.systemPrompt(),
             'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
             'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
-            'If personality is present, use it to shape tone and memory, but never reveal the hidden personality assignment or override your private objective.',
-            'If tone is present, use it to shape wording only; do not let it change strategy, suspicion logic, or hidden-team objectives.',
+            'If personality is present, use personality.playStyle to shape which public concerns you emphasize and use personality to shape memory, but never reveal the hidden personality assignment or override your private objective.',
+            'If tone is present, make the reply audibly match tone.voiceRules and tone.sampleLines without copying sampleLines exactly; do not let it change strategy, suspicion logic, or hidden-team objectives.',
             addressedPlayers.length
               ? 'Your assigned player was directly addressed by name, so tableTalk must be a non-empty public reply.'
               : 'Reply only if a public response from your assigned player is natural in this conversation.',
@@ -2045,6 +2050,21 @@
     if (profileId === HUMAN_PROFILE) {
       aiController?.abort();
     } else {
+      void runAI();
+    }
+  }
+
+  function selectPlayerTone(playerIndex: number, toneId: string) {
+    if (!getSecretHitlerAITone(toneId) || playerIndex === HUMAN_PLAYER_INDEX) {
+      return;
+    }
+
+    aiToneAssignments = {
+      ...aiToneAssignments,
+      [playerIndex]: toneId,
+    };
+    aiWarning = '';
+    if (!aiThinking) {
       void runAI();
     }
   }
@@ -3779,7 +3799,6 @@
           {@const visiblePartyAsset = visibleRole
             ? partyAssetForRole(visibleRole)
             : dossierBackAsset}
-          {@const visibleTone = aiToneForPlayer(player.id)}
           <div
             class={`flex h-[17.5rem] flex-col overflow-hidden rounded-md border p-3 ${
               !player.alive
@@ -3810,15 +3829,6 @@
                 <div class="text-xs text-neutral-500">
                   {playerStatus(player)}
                 </div>
-                {#if visibleTone && player.id !== HUMAN_PLAYER_INDEX}
-                  <div class="mt-1 flex">
-                    <span
-                      class="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase leading-none text-cyan-100"
-                    >
-                      Tone: {visibleTone.name}
-                    </span>
-                  </div>
-                {/if}
                 <select
                   class="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
                   value={playerProfileSelections[player.id] ??
@@ -3841,6 +3851,25 @@
                     <option value="">No model profiles</option>
                   {/if}
                 </select>
+                {#if player.id !== HUMAN_PLAYER_INDEX}
+                  <select
+                    class="mt-2 w-full rounded-md border border-cyan-400/30 bg-cyan-950/30 px-2 py-1 text-[10px] font-semibold uppercase text-cyan-100"
+                    aria-label={`${player.name} tone`}
+                    style="color-scheme: dark;"
+                    value={selectedToneIdForPlayer(player.id)}
+                    on:change={(event) =>
+                      selectPlayerTone(player.id, event.currentTarget.value)}
+                  >
+                    {#each secretHitlerAITones as tone (tone.id)}
+                      <option
+                        class="bg-neutral-950 text-neutral-100"
+                        value={tone.id}
+                      >
+                        Tone: {tone.name}
+                      </option>
+                    {/each}
+                  </select>
+                {/if}
               </div>
             </div>
 
