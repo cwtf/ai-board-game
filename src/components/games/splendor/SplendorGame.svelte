@@ -34,6 +34,7 @@
     formatSplendorMove,
     splendorGemLabels,
   } from '@/lib/games/splendor/move-format';
+  import { ALL_CARDS } from '@/lib/games/splendor/data/cards';
   import {
     applyMove as applySplendorMove,
     developmentCardsExhausted,
@@ -77,6 +78,12 @@
     id: string;
     style: string;
   };
+  type LoggedMoveView = {
+    record: MoveRecord<SplendorMove>;
+    card?: Card;
+    action: string;
+    details: string[];
+  };
 
   const LOCAL_BOT_EASY_PROFILE = '__local_bot_easy__';
   const LOCAL_BOT_MEDIUM_PROFILE = '__local_bot_medium__';
@@ -90,6 +97,8 @@
   const MIN_TABLE_WIDTH = 2100;
   const TABLE_HEIGHT = 900;
   const TABLE_RIGHT_GUTTER = 24;
+  const MOVE_LOG_PAGE_SIZE = 40;
+  const allCardsById = new Map(ALL_CARDS.map((card) => [card.id, card]));
   const gemLabels = splendorGemLabels;
   const gemClasses: Record<GemOrGold, string> = {
     emerald: 'border-emerald-400/70 bg-emerald-400/15 text-emerald-100',
@@ -124,6 +133,7 @@
   let gameOverDismissed = false;
   let playUntilCardsExhausted = false;
   let moveLogOpen = false;
+  let moveLogLimit = MOVE_LOG_PAGE_SIZE;
   let flyingAssets: FlyingAsset[] = [];
   let playerProfileSelections: SeatSelections = {
     [HUMAN_PLAYER_INDEX]: HUMAN_SEAT_ID,
@@ -223,7 +233,10 @@
     playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
   $: gamePaused = humanDelegated && aiPaused;
   $: lastUsage = snapshot?.log.at(-1)?.usage;
-  $: moveLogEntries = snapshot?.log.slice().reverse() ?? [];
+  $: moveLogEntries = (snapshot?.log.slice().reverse() ?? []).map(
+    moveLogView,
+  );
+  $: visibleMoveLogEntries = moveLogEntries.slice(0, moveLogLimit);
   $: terminalWinner = state ? winnerForActiveMode(state) : null;
   $: canContinueToCardExhaustion = Boolean(
     state &&
@@ -782,6 +795,11 @@
     startGame();
   }
 
+  function openMoveLog() {
+    moveLogLimit = MOVE_LOG_PAGE_SIZE;
+    moveLogOpen = true;
+  }
+
   function continueToCardExhaustion() {
     playUntilCardsExhausted = true;
     gameOverDismissed = true;
@@ -1227,6 +1245,69 @@
     return formatSplendorMove(move);
   }
 
+  function cardForLoggedMove(move: SplendorMove): Card | undefined {
+    return 'cardId' in move ? allCardsById.get(move.cardId) : undefined;
+  }
+
+  function loggedCardImageSrc(card: Card): string {
+    return `/assets/splendor/cards/${card.id}.png`;
+  }
+
+  function loggedCardAlt(card: Card): string {
+    return `Splendor ${card.id}, ${card.prestige} prestige, ${gemLabels[card.bonus]} bonus`;
+  }
+
+  function loggedMoveAction(move: SplendorMove): string {
+    if (move.kind === 'buy') {
+      return move.source === 'reserved' ? 'Buy reserved card' : 'Buy card';
+    }
+
+    if (move.kind === 'reserve') {
+      return move.source === 'deck'
+        ? `Reserve face-down tier ${move.tier}`
+        : 'Reserve card';
+    }
+
+    return formatMove(move);
+  }
+
+  function formatLoggedTokenMap(
+    tokens: Partial<Record<GemOrGold, number>> | undefined,
+  ): string {
+    if (!tokens) {
+      return '';
+    }
+
+    return Object.entries(tokens)
+      .filter(([, amount]) => (amount ?? 0) > 0)
+      .map(
+        ([gem, amount]) =>
+          `${amount} ${gemLabels[gem as GemOrGold] ?? gem}`,
+      )
+      .join(', ');
+  }
+
+  function loggedMoveDetails(move: SplendorMove): string[] {
+    const details: string[] = [];
+    const discard = formatLoggedTokenMap(move.discard);
+    if (discard) {
+      details.push(`Discard ${discard}`);
+    }
+    if (move.noble) {
+      details.push(`Claim ${move.noble}`);
+    }
+    return details;
+  }
+
+  function moveLogView(record: MoveRecord<SplendorMove>): LoggedMoveView {
+    return {
+      record,
+      card: cardForLoggedMove(record.move),
+      action: loggedMoveAction(record.move),
+      details: loggedMoveDetails(record.move),
+    };
+  }
+
   function moveSourceLabel(record: MoveRecord<SplendorMove>): string {
     if (record.source === 'human') {
       return 'Human';
@@ -1304,9 +1385,7 @@
               <button
                 class="mt-2 w-full rounded-md border border-neutral-700 px-2 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
                 type="button"
-                on:click={() => {
-                  moveLogOpen = true;
-                }}
+                on:click={openMoveLog}
               >
                 Move log ({snapshot?.log.length ?? 0})
               </button>
@@ -1978,30 +2057,115 @@
 
       {#if moveLogEntries.length}
         <ol class="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 text-sm">
-          {#each moveLogEntries as record (record.turn)}
+          {#each visibleMoveLogEntries as entry (entry.record.turn)}
             <li
               class="rounded-md border border-neutral-800 bg-neutral-900/70 p-3"
+              style="content-visibility: auto;"
             >
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <span class="text-xs font-medium text-neutral-400">
-                  {moveLogMeta(record)}
+                  {moveLogMeta(entry.record)}
                 </span>
-                {#if record.usage}
+                {#if entry.record.usage}
                   <span class="text-[10px] text-neutral-500">
-                    {record.usage.input} in / {record.usage.output} out
+                    {entry.record.usage.input} in / {entry.record.usage.output} out
                   </span>
                 {/if}
               </div>
-              <div class="mt-1 leading-snug text-neutral-100">
-                {formatMove(record.move)}
+              <div class="mt-2 leading-snug text-neutral-100">
+                {#if entry.card}
+                  <div class="flex items-start gap-3">
+                    <div
+                      class="relative aspect-[5/7] w-24 shrink-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950"
+                    >
+                      <img
+                        class="h-full w-full object-cover"
+                        src={loggedCardImageSrc(entry.card)}
+                        alt={loggedCardAlt(entry.card)}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <div
+                        class="pointer-events-none absolute inset-0 bg-gradient-to-b from-neutral-950/40 via-transparent to-neutral-950/50"
+                      ></div>
+                      <div
+                        class="pointer-events-none absolute inset-0 flex flex-col justify-between p-1.5"
+                      >
+                        <div class="flex items-start justify-between gap-1">
+                          <span
+                            class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-neutral-950/85"
+                            title={gemLabels[entry.card.bonus]}
+                            aria-label={gemLabels[entry.card.bonus]}
+                          >
+                            <img
+                              class="h-5 w-5"
+                              src={`/assets/splendor/gems/${entry.card.bonus}.svg`}
+                              alt=""
+                              aria-hidden="true"
+                            />
+                          </span>
+                          <span
+                            class="rounded-md bg-neutral-950/85 px-2 py-1 text-xs font-semibold text-neutral-100 ring-1 ring-white/10"
+                            title={`${entry.card.prestige} prestige`}
+                          >
+                            {entry.card.prestige}
+                          </span>
+                        </div>
+                        <div class="flex flex-col items-start gap-1">
+                          {#each GEMS as gem (gem)}
+                            {#if entry.card.cost[gem]}
+                              <span
+                                class="inline-flex items-center gap-1 rounded-full border border-white/15 bg-neutral-950/85 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-100"
+                                title={`${entry.card.cost[gem]} ${gemLabels[gem]}`}
+                              >
+                                <img
+                                  class="h-3.5 w-3.5"
+                                  src={`/assets/splendor/gems/${gem}.svg`}
+                                  alt=""
+                                  aria-hidden="true"
+                                />
+                                {entry.card.cost[gem]}
+                              </span>
+                            {/if}
+                          {/each}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="min-w-0 pt-1">
+                      <div class="font-medium">
+                        {entry.action}
+                      </div>
+                      {#if entry.details.length}
+                        <div class="mt-1 text-xs text-neutral-400">
+                          {entry.details.join('; ')}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                {:else}
+                  {entry.action}
+                {/if}
               </div>
-              {#if record.error}
+              {#if entry.record.error}
                 <div class="mt-1 text-xs text-amber-200">
-                  {record.error}
+                  {entry.record.error}
                 </div>
               {/if}
             </li>
           {/each}
+          {#if visibleMoveLogEntries.length < moveLogEntries.length}
+            <li class="pt-1">
+              <button
+                class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm font-medium text-neutral-200 hover:border-neutral-600 hover:text-white"
+                type="button"
+                on:click={() => {
+                  moveLogLimit += MOVE_LOG_PAGE_SIZE;
+                }}
+              >
+                Show older moves
+              </button>
+            </li>
+          {/if}
         </ol>
       {:else}
         <p
