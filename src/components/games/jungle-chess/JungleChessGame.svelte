@@ -24,6 +24,7 @@
   import {
     coordinateLabel,
     formatJungleMove,
+    pieceEmoji,
   } from '@/lib/games/jungle-chess/move-format';
   import {
     activePieces,
@@ -454,7 +455,7 @@
 
   function capturedText(pieces: JunglePiece[]): string {
     return pieces.length
-      ? pieces.map((piece) => pieceLabels[piece.type].zh).join(' ')
+      ? pieces.map((piece) => pieceEmoji(piece)).join(' ')
       : '-';
   }
 

@@ -1,4 +1,20 @@
-import { pieceLabels, type JungleMove, type JungleState } from './state';
+import {
+  type JungleMove,
+  type JunglePiece,
+  type JungleState,
+  type PieceType,
+} from './state';
+
+export const junglePieceEmoji: Record<PieceType, string> = {
+  rat: '🐀',
+  cat: '🐈',
+  dog: '🐕',
+  wolf: '🐺',
+  leopard: '🐆',
+  tiger: '🐅',
+  lion: '🦁',
+  elephant: '🐘',
+};
 
 function squareName(x: number, y: number): string {
   return `${String.fromCharCode(65 + x)}${y + 1}`;
@@ -10,7 +26,11 @@ export function pieceName(pieceId: string, state: JungleState): string {
     return pieceId;
   }
 
-  return `${piece.owner === 0 ? 'Red' : 'Blue'} ${pieceLabels[piece.type].en}`;
+  return `${piece.owner === 0 ? 'Red' : 'Blue'} ${junglePieceEmoji[piece.type]}`;
+}
+
+export function pieceEmoji(piece: Pick<JunglePiece, 'type'>): string {
+  return junglePieceEmoji[piece.type];
 }
 
 export function formatJungleMove(
