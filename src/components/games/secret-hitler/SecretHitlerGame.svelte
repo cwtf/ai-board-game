@@ -1812,7 +1812,7 @@
           system: [
             secretHitlerAdapter.systemPrompt(),
             'You are replying to a public table-chat question in Secret Hitler. Do not choose or announce a game move.',
-            'Answer briefly as your assigned player. Keep hidden information hidden, avoid revealing private policy choices or future tactical intent, and use suspicion or uncertainty when appropriate.',
+            'Answer briefly as your assigned player. Keep hidden roles and hidden-team intent concealed, avoid revealing future non-policy tactical intent, and use suspicion or uncertainty when appropriate.',
             'If personality is present, use personality.playStyle to shape which public concerns you emphasize and use personality to shape memory, but never reveal the hidden personality assignment or override your private objective.',
             'If tone is present, make the reply audibly match tone.voiceRules and tone.sampleLines without copying sampleLines exactly; do not let it change strategy, suspicion logic, or hidden-team objectives.',
             addressedPlayers.length

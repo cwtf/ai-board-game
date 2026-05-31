@@ -142,7 +142,7 @@ export async function requestSecretHitlerAIMove({
             { role: 'assistant', content: result.text },
             {
               role: 'user',
-              content: `Unsafe public tableTalk: ${lastError} Keep the same strategic objective, but do not reveal private hand contents, policy colors received, discard/enact choices, hidden role, or hidden-team intent. Return exactly one JSON object with a legal moveId and safe optional tableTalk.`,
+              content: `Unsafe public tableTalk: ${lastError} Keep the same strategic objective, but do not reveal hidden roles or hidden-team intent. Return exactly one JSON object with a legal moveId and safe optional tableTalk.`,
             },
           );
           continue;

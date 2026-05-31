@@ -29,9 +29,10 @@ describe('Secret Hitler AI adapter', () => {
     expect(prompt).toContain('private.objective');
     expect(prompt).toContain('Play to win for that hidden team');
     expect(prompt).toContain('Never claim certainty from hidden information');
-    expect(prompt).toContain('Do not make your next move obvious');
-    expect(prompt).toContain('Never announce private policy choices');
-    expect(prompt).toContain('private policy phases');
+    expect(prompt).toContain(
+      'You may use tableTalk to discuss or bluff about policy handling',
+    );
+    expect(prompt).toContain('Do not make non-policy executive moves obvious');
     expect(prompt).toContain('Liberals win at 5 Liberal policies');
     expect(prompt).toContain('Fascists win at 6 Fascist policies');
     expect(prompt).toContain(
@@ -201,7 +202,7 @@ describe('Secret Hitler AI adapter', () => {
     });
   });
 
-  it('flags public table talk that leaks private policy handling', () => {
+  it('allows public policy-handling table talk but still blocks hidden-team leaks', () => {
     const state = secretHitlerAdapter.init({
       seed: 'private-policy-speech',
       playerCount: 5,
@@ -217,6 +218,16 @@ describe('Secret Hitler AI adapter', () => {
     state.president = 2;
     state.nominee = 3;
     state.presidentHand = ['liberal', 'fascist', 'fascist'];
+
+    expect(
+      assessSecretHitlerPublicSpeech(state, 2, {
+        id: 'president-discard:0',
+        kind: 'president-discard',
+        index: 0,
+        tableTalk:
+          "I received a mixed bag. I'll discard a liberal and send the rest forward.",
+      }),
+    ).toEqual({ ok: true });
 
     expect(
       assessSecretHitlerPublicSpeech(state, 2, {
