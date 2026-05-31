@@ -3,6 +3,7 @@ import { ALL_CARDS } from '@/lib/games/splendor/data/cards';
 import { NOBLES } from '@/lib/games/splendor/data/nobles';
 import {
   applyMove,
+  developmentCardsExhausted,
   isTerminal,
   legalMoves,
   winner,
@@ -12,6 +13,7 @@ import {
   emptyTokens,
   init,
   type Card,
+  type SplendorMove,
   type SplendorState,
 } from '@/lib/games/splendor/state';
 
@@ -426,6 +428,41 @@ describe('Splendor rules', () => {
 
     expect(isTerminal(afterLastTurn)).toBe(true);
     expect(winner(afterLastTurn)).toBe(0);
+  });
+
+  it('can explicitly continue after the standard final round', () => {
+    const current = state();
+    current.finalRoundTriggered = true;
+    current.finalRoundStartedAt = 0;
+    current.turn = 2;
+    current.current = 0;
+
+    const move: SplendorMove = {
+      id: 'TAKE3:emerald,sapphire,ruby',
+      kind: 'take',
+      gems: ['emerald', 'sapphire', 'ruby'],
+    };
+
+    expect(() => applyMove(current, move)).toThrow('finished game');
+
+    const after = applyMove(current, move, { allowAfterTerminal: true });
+
+    expect(after.turn).toBe(3);
+    expect(after.current).toBe(1);
+  });
+
+  it('does not exhaust development cards while face-up market cards remain', () => {
+    const current = state();
+
+    expect(developmentCardsExhausted(current)).toBe(false);
+
+    current.board.tier1 = [null, null, null, null];
+
+    expect(developmentCardsExhausted(current)).toBe(true);
+
+    current.decks.tier2 = [deckCardA];
+
+    expect(developmentCardsExhausted(current)).toBe(false);
   });
 
   it('uses fewest purchased cards as winner tie-break', () => {

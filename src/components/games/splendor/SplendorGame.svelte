@@ -20,7 +20,11 @@
   } from '@/lib/games/shared/loop';
   import { createRng } from '@/lib/games/shared/rng';
   import { hashWithSeed, seedFromHash } from '@/lib/games/shared/seed-url';
-  import type { AIPlayerConfig, MoveRecord } from '@/lib/games/shared/types';
+  import type {
+    AIPlayerConfig,
+    GameAdapter,
+    MoveRecord,
+  } from '@/lib/games/shared/types';
   import { splendorAdapter } from '@/lib/games/splendor/ai-adapter';
   import {
     chooseSplendorBotMove,
@@ -30,6 +34,10 @@
     formatSplendorMove,
     splendorGemLabels,
   } from '@/lib/games/splendor/move-format';
+  import {
+    applyMove as applySplendorMove,
+    developmentCardsExhausted,
+  } from '@/lib/games/splendor/rules';
   import {
     boardKey,
     deckKey,
@@ -114,6 +122,7 @@
   let tableOffsetY = 0;
   let handledPointerSelection = false;
   let gameOverDismissed = false;
+  let playUntilCardsExhausted = false;
   let moveLogOpen = false;
   let flyingAssets: FlyingAsset[] = [];
   let playerProfileSelections: SeatSelections = {
@@ -131,6 +140,17 @@
   const playerCardTargetElements = new Map<number, globalThis.HTMLElement>();
   const playerNobleTargetElements = new Map<number, globalThis.HTMLElement>();
 
+  const gameAdapter: GameAdapter<SplendorState, SplendorMove> = {
+    ...splendorAdapter,
+    applyMove(current, move) {
+      return applySplendorMove(current, move, {
+        allowAfterTerminal: playUntilCardsExhausted,
+      });
+    },
+    isTerminal: isTerminalForActiveMode,
+    winner: winnerForActiveMode,
+  };
+
   function createInitialSnapshot(): LoopSnapshot<SplendorState, SplendorMove> {
     const initialState = splendorAdapter.init({
       seed,
@@ -146,6 +166,36 @@
       log: [],
       totalUsage: { input: 0, output: 0 },
     };
+  }
+
+  function scoreWinner(current: SplendorState): number | null {
+    const bestPrestige = Math.max(
+      ...current.players.map((player) => player.prestige),
+    );
+    const contenders = current.players
+      .map((player, index) => ({ player, index }))
+      .filter(({ player }) => player.prestige === bestPrestige);
+    const fewestCards = Math.min(
+      ...contenders.map(({ player }) => player.cards.length),
+    );
+    const winners = contenders.filter(
+      ({ player }) => player.cards.length === fewestCards,
+    );
+    return winners.length === 1 ? winners[0].index : null;
+  }
+
+  function isTerminalForActiveMode(current: SplendorState): boolean {
+    return playUntilCardsExhausted
+      ? developmentCardsExhausted(current)
+      : splendorAdapter.isTerminal(current);
+  }
+
+  function winnerForActiveMode(current: SplendorState): number | null {
+    if (playUntilCardsExhausted && developmentCardsExhausted(current)) {
+      return splendorAdapter.winner(current) ?? scoreWinner(current);
+    }
+
+    return splendorAdapter.winner(current);
   }
 
   $: state = snapshot?.state;
@@ -174,6 +224,14 @@
   $: gamePaused = humanDelegated && aiPaused;
   $: lastUsage = snapshot?.log.at(-1)?.usage;
   $: moveLogEntries = snapshot?.log.slice().reverse() ?? [];
+  $: terminalWinner = state ? winnerForActiveMode(state) : null;
+  $: canContinueToCardExhaustion = Boolean(
+    state &&
+      snapshot?.status === 'terminal' &&
+      splendorAdapter.isTerminal(state) &&
+      !playUntilCardsExhausted &&
+      !developmentCardsExhausted(state),
+  );
   $: takeMove = findTakeMove(selectedGems);
   $: discardTotal = tokenTotal(discardDraft);
   $: pendingProjectedTokens =
@@ -683,6 +741,7 @@
     activeModal = null;
     message = '';
     gameOverDismissed = false;
+    playUntilCardsExhausted = false;
     moveLogOpen = false;
     flyingAssets = [];
     normalizePlayerProfileSelections(playerCount, defaultProfileId);
@@ -694,14 +753,24 @@
       aiPlayerIndices: playerIndexesControlledByAI(playerProfileSelections),
     });
     loop = createGameLoop({
-      adapter: splendorAdapter,
+      adapter: gameAdapter,
       initialState,
       aiPlayers: aiConfigs(),
       rng: createRng(`${seed}:splendor-ui`),
     });
     unsubscribe = loop.subscribe((next) => {
+      const wereCardsExhausted = snapshot?.state
+        ? developmentCardsExhausted(snapshot.state)
+        : false;
       const moveAnimations = collectMoveAnimationIntents(snapshot, next);
       snapshot = next;
+      if (
+        playUntilCardsExhausted &&
+        !wereCardsExhausted &&
+        developmentCardsExhausted(next.state)
+      ) {
+        gameOverDismissed = false;
+      }
       void queueMoveAnimations(moveAnimations);
     });
     void runAI();
@@ -711,6 +780,14 @@
   function startShuffledGame() {
     seed = globalThis.crypto?.randomUUID?.() ?? `splendor-${Date.now()}`;
     startGame();
+  }
+
+  function continueToCardExhaustion() {
+    playUntilCardsExhausted = true;
+    gameOverDismissed = true;
+    message = 'Continuing until every development card is exhausted.';
+    loop?.clearWarning();
+    void runAI();
   }
 
   async function runAI() {
@@ -724,7 +801,10 @@
     }
 
     const player = current.currentPlayer;
-    if (!aiPlayerIndexes.includes(player) || current.status === 'terminal') {
+    if (
+      !aiPlayerIndexes.includes(player) ||
+      isTerminalForActiveMode(current.state)
+    ) {
       return;
     }
 
@@ -2087,11 +2167,20 @@
     <div
       class="w-full max-w-xl rounded-md border border-neutral-700 bg-neutral-950 p-5 shadow-xl"
     >
-      <h2 class="text-xl font-semibold tracking-normal">Game Over</h2>
+      <h2 class="text-xl font-semibold tracking-normal">
+        {playUntilCardsExhausted && developmentCardsExhausted(state)
+          ? 'Cards Exhausted'
+          : 'Game Over'}
+      </h2>
       <p class="mt-1 text-sm text-neutral-400">
-        {snapshot.winner === null
+        {playUntilCardsExhausted && developmentCardsExhausted(state)
+          ? 'All development cards have left the market.'
+          : 'The standard end game condition has been met.'}
+      </p>
+      <p class="mt-1 text-sm text-neutral-300">
+        {terminalWinner === null
           ? 'Shared victory'
-          : `Player ${snapshot.winner + 1} wins`}
+          : `Player ${terminalWinner + 1} wins`}
       </p>
       <div class="mt-4 space-y-2">
         {#each state.players as player, index (index)}
@@ -2104,7 +2193,7 @@
           </div>
         {/each}
       </div>
-      <div class="mt-5 flex justify-end gap-2">
+      <div class="mt-5 flex flex-wrap justify-end gap-2">
         <button
           class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
           type="button"
@@ -2114,6 +2203,15 @@
         >
           View board
         </button>
+        {#if canContinueToCardExhaustion}
+          <button
+            class="rounded-md border border-emerald-400/60 px-3 py-2 text-sm font-medium text-emerald-100 hover:border-emerald-300 hover:text-white"
+            type="button"
+            on:click={continueToCardExhaustion}
+          >
+            Continue to card exhaustion
+          </button>
+        {/if}
         <button
           class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950"
           type="button"

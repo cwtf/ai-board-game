@@ -412,9 +412,10 @@ function advanceTurn(state: SplendorState) {
 export function applyMove(
   state: SplendorState,
   move: SplendorMove,
+  opts: { allowAfterTerminal?: boolean } = {},
 ): SplendorState {
   const next = cloneState(state);
-  if (isTerminal(next)) {
+  if (!opts.allowAfterTerminal && isTerminal(next)) {
     throw new Error('Cannot apply a move to a finished game.');
   }
 
@@ -440,6 +441,14 @@ export function isTerminal(state: SplendorState): boolean {
   const triggerPlayer = state.finalRoundStartedAt % state.players.length;
   return (
     state.turn > state.finalRoundStartedAt && state.current === triggerPlayer
+  );
+}
+
+export function developmentCardsExhausted(state: SplendorState): boolean {
+  return ([1, 2, 3] as const).every(
+    (tier) =>
+      state.decks[deckKey(tier)].length === 0 &&
+      state.board[boardKey(tier)].every((card) => card === null),
   );
 }
 
