@@ -78,11 +78,13 @@
     id: string;
     style: string;
   };
+  type LoggedTokenAmount = { gem: GemOrGold; amount: number };
   type LoggedMoveView = {
     record: MoveRecord<SplendorMove>;
     card?: Card;
     action: string;
-    details: string[];
+    discard: LoggedTokenAmount[];
+    noble?: string;
   };
 
   const LOCAL_BOT_EASY_PROFILE = '__local_bot_easy__';
@@ -1258,6 +1260,10 @@
   }
 
   function loggedMoveAction(move: SplendorMove): string {
+    if (move.kind === 'take') {
+      return 'Take';
+    }
+
     if (move.kind === 'buy') {
       return move.source === 'reserved' ? 'Buy reserved card' : 'Buy card';
     }
@@ -1267,36 +1273,19 @@
         ? `Reserve face-down tier ${move.tier}`
         : 'Reserve card';
     }
-
     return formatMove(move);
   }
 
-  function formatLoggedTokenMap(
+  function loggedTokenEntries(
     tokens: Partial<Record<GemOrGold, number>> | undefined,
-  ): string {
+  ): LoggedTokenAmount[] {
     if (!tokens) {
-      return '';
+      return [];
     }
 
-    return Object.entries(tokens)
-      .filter(([, amount]) => (amount ?? 0) > 0)
-      .map(
-        ([gem, amount]) =>
-          `${amount} ${gemLabels[gem as GemOrGold] ?? gem}`,
-      )
-      .join(', ');
-  }
-
-  function loggedMoveDetails(move: SplendorMove): string[] {
-    const details: string[] = [];
-    const discard = formatLoggedTokenMap(move.discard);
-    if (discard) {
-      details.push(`Discard ${discard}`);
-    }
-    if (move.noble) {
-      details.push(`Claim ${move.noble}`);
-    }
-    return details;
+    return ([...GEMS, 'gold'] as const)
+      .map((gem) => ({ gem, amount: tokens[gem] ?? 0 }))
+      .filter(({ amount }) => amount > 0);
   }
 
   function moveLogView(record: MoveRecord<SplendorMove>): LoggedMoveView {
@@ -1304,7 +1293,8 @@
       record,
       card: cardForLoggedMove(record.move),
       action: loggedMoveAction(record.move),
-      details: loggedMoveDetails(record.move),
+      discard: loggedTokenEntries(record.move.discard),
+      noble: record.move.noble,
     };
   }
 
@@ -2135,15 +2125,74 @@
                       <div class="font-medium">
                         {entry.action}
                       </div>
-                      {#if entry.details.length}
-                        <div class="mt-1 text-xs text-neutral-400">
-                          {entry.details.join('; ')}
+                      {#if entry.discard.length || entry.noble}
+                        <div
+                          class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-400"
+                        >
+                          {#if entry.discard.length}
+                            <span>Discard</span>
+                            {#each entry.discard as token (`${token.gem}:${token.amount}`)}
+                              <SplendorGemBadge
+                                gem={token.gem}
+                                amount={token.amount}
+                                compact
+                              />
+                            {/each}
+                          {/if}
+                          {#if entry.noble}
+                            <span>Claim {entry.noble}</span>
+                          {/if}
                         </div>
                       {/if}
                     </div>
                   </div>
+                {:else if entry.record.move.kind === 'take'}
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-medium">{entry.action}</span>
+                    {#each entry.record.move.gems as gem, index (`${gem}:${index}`)}
+                      <SplendorGemBadge {gem} compact />
+                    {/each}
+                  </div>
+                  {#if entry.discard.length || entry.noble}
+                    <div
+                      class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-400"
+                    >
+                      {#if entry.discard.length}
+                        <span>Discard</span>
+                        {#each entry.discard as token (`${token.gem}:${token.amount}`)}
+                          <SplendorGemBadge
+                            gem={token.gem}
+                            amount={token.amount}
+                            compact
+                          />
+                        {/each}
+                      {/if}
+                      {#if entry.noble}
+                        <span>Claim {entry.noble}</span>
+                      {/if}
+                    </div>
+                  {/if}
                 {:else}
-                  {entry.action}
+                  <div>{entry.action}</div>
+                  {#if entry.discard.length || entry.noble}
+                    <div
+                      class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-neutral-400"
+                    >
+                      {#if entry.discard.length}
+                        <span>Discard</span>
+                        {#each entry.discard as token (`${token.gem}:${token.amount}`)}
+                          <SplendorGemBadge
+                            gem={token.gem}
+                            amount={token.amount}
+                            compact
+                          />
+                        {/each}
+                      {/if}
+                      {#if entry.noble}
+                        <span>Claim {entry.noble}</span>
+                      {/if}
+                    </div>
+                  {/if}
                 {/if}
               </div>
               {#if entry.record.error}
