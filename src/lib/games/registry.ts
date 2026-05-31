@@ -29,6 +29,17 @@ export const games: GameMeta[] = [
     videoPath: 'https://www.youtube.com/watch?v=mbGXIDYdtas',
   },
   {
+    id: 'jungle-chess',
+    name: '斗兽棋',
+    description:
+      'Cross rivers, spring traps, and race ranked animal pieces into the opposing den.',
+    minPlayers: 2,
+    maxPlayers: 2,
+    hiddenInformation: false,
+    estimatedAITurnTokens: 350,
+    docPath: 'https://en.wikipedia.org/wiki/Jungle_(board_game)',
+  },
+  {
     id: 'exploding-kittens',
     name: 'Exploding Kittens',
     description:

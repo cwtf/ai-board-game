@@ -6,14 +6,18 @@ describe('game registry', () => {
     expect(games.map((game) => game.id)).toEqual([
       'splendor',
       'secret-hitler',
+      'jungle-chess',
       'exploding-kittens',
     ]);
   });
 
-  it('points every game at a markdown rules doc', () => {
-    expect(games.every((game) => game.docPath.startsWith('docs/games/'))).toBe(
+  it('points every game at a local or external rules reference', () => {
+    expect(
+      games.every((game) =>
+        /^(docs\/games\/.+\.md|https?:\/\/.+)/.test(game.docPath),
+      ),
+    ).toBe(
       true,
     );
-    expect(games.every((game) => game.docPath.endsWith('.md'))).toBe(true);
   });
 });

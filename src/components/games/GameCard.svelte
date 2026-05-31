@@ -15,7 +15,10 @@
       ? game.videoPath
       : `/${game.videoPath}`
     : '';
-  $: implemented = game.id === 'splendor' || game.id === 'secret-hitler';
+  $: implemented =
+    game.id === 'splendor' ||
+    game.id === 'secret-hitler' ||
+    game.id === 'jungle-chess';
   $: playable = implemented;
 </script>
 

@@ -163,6 +163,11 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 - [x] Extract the Secret Hitler AI decision pipeline before considering LangGraph.
 - [ ] Smarter Favor response from AI targets (currently random in v1).
 - [ ] Add a third game to validate the abstraction (Love Letter, Coup, Hanabi). Each = one new doc under `docs/games/` + one new adapter.
+- [ ] Replace Jungle Chess CSS animal pieces with AI-generated `.glb` models.
+  - [ ] Generate eight consistent low-poly animal models for rat, cat, dog, wolf, leopard, tiger, lion, and elephant.
+  - [ ] Normalize scale/origin in Blender and export final `.glb` files to `public/assets/jungle-chess/models/`.
+  - [ ] Render models on the existing moving piece layer with browser-friendly loading and fallback states.
+  - [ ] Prompts and import requirements: [docs/games/jungle-chess/asset-prompts.md](docs/games/jungle-chess/asset-prompts.md).
 - [ ] Optional thin proxy worker template for users who'd rather keep the key server-side.
 
 ---
