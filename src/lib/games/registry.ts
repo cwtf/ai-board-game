@@ -51,4 +51,15 @@ export const games: GameMeta[] = [
     docPath: 'https://www.explodingkittens.com/pages/how-to-play-exploding-kittens',
     videoPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
   },
+  {
+    id: 'chinese-chess',
+    name: '象棋',
+    description:
+      'Cross the river, protect your general, and checkmate the opponent in traditional Chinese Chess.',
+    minPlayers: 2,
+    maxPlayers: 2,
+    hiddenInformation: false,
+    estimatedAITurnTokens: 450,
+    docPath: 'https://en.wikipedia.org/wiki/Xiangqi',
+  },
 ];

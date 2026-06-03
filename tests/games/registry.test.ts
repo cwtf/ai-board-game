@@ -8,6 +8,7 @@ describe('game registry', () => {
       'secret-hitler',
       'jungle-chess',
       'exploding-kittens',
+      'chinese-chess',
     ]);
   });
 
