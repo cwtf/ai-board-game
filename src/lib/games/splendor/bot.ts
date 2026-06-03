@@ -361,13 +361,17 @@ function validPreparedMoves(
   return moves.flatMap((move) =>
     candidateMoves(state, playerIndex, move).filter((candidate) => {
       try {
-        applyMove(state, candidate);
+        applyMoveForBot(state, candidate);
         return true;
       } catch {
         return false;
       }
     }),
   );
+}
+
+function applyMoveForBot(state: SplendorState, move: SplendorMove) {
+  return applyMove(state, move, { allowAfterTerminal: isTerminal(state) });
 }
 
 function randomChoice<T>(items: readonly T[], rng: Rng): T {
@@ -435,7 +439,7 @@ function evaluateMove(
 ): number {
   const before = state.players[playerIndex];
   const card = moveCard(state, before, move);
-  const after = applyMove(state, move);
+  const after = applyMoveForBot(state, move);
   const afterPlayer = after.players[playerIndex];
   const prestigeGain = afterPlayer.prestige - before.prestige;
   const tokenPenalty = tokenTotal(move.discard ?? {}) * 4;
@@ -504,7 +508,7 @@ function nobleFocusScore(
 
   const before = state.players[playerIndex];
   const card = moveCard(state, before, move);
-  const after = applyMove(state, move);
+  const after = applyMoveForBot(state, move);
   const afterPlayer = after.players[playerIndex];
   const claimedNobles = afterPlayer.nobles.length - before.nobles.length;
   const bestProgressGain = Math.max(

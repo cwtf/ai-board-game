@@ -144,6 +144,23 @@ describe('Splendor local bot', () => {
     expect(applyMove(current, move).players[0].prestige).toBe(1);
   });
 
+  it('can choose a move while continuing after the standard final round', () => {
+    const current = state();
+    current.finalRoundTriggered = true;
+    current.finalRoundStartedAt = 0;
+    current.turn = 2;
+    current.current = 0;
+
+    const move = chooseSplendorBotMove(current, 0, legalMoves(current), {
+      difficulty: 'medium',
+      seed: 'after-terminal',
+    });
+
+    expect(() =>
+      applyMove(current, move, { allowAfterTerminal: true }),
+    ).not.toThrow();
+  });
+
   it('adds a discard sub-decision when a token move would exceed the limit', () => {
     const current = state();
     current.board = {
