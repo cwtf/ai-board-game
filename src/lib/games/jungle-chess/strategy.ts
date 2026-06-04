@@ -314,15 +314,177 @@ export function rankJungleMoves(
     .sort((left, right) => right.score - left.score || left.move.id.localeCompare(right.move.id));
 }
 
+// ---- Minimax / Alpha-Beta Search ----
+
+const SEARCH_DEPTH = 4;
+const INF = 1_000_000;
+
+// Fast state transition for search — replicates applyMove logic without the
+// legalMoves validation call that applyMove uses.
+function fastApplyMove(state: JungleState, move: JungleMove): JungleState {
+  const next: JungleState = {
+    ...state,
+    pieces: state.pieces.map((p) => ({ ...p })),
+    turn: state.turn + 1,
+    winner: null,
+    // current stays as state.current until we determine if there's a winner
+  };
+
+  const piece = next.pieces.find((p) => p.id === move.pieceId && !p.captured);
+  if (piece) {
+    if (move.capturedId) {
+      const cap = next.pieces.find((p) => p.id === move.capturedId && !p.captured);
+      if (cap) cap.captured = true;
+    }
+    piece.x = move.to.x;
+    piece.y = move.to.y;
+
+    const denOwner = denOwnerAt(move.to);
+    if (denOwner !== null && denOwner !== piece.owner) {
+      next.winner = piece.owner;
+    } else if (activePieces(next, opponentOf(piece.owner)).length === 0) {
+      next.winner = piece.owner;
+    } else {
+      next.current = opponentOf(state.current);
+    }
+  } else {
+    next.current = opponentOf(state.current);
+  }
+
+  return next;
+}
+
+// Leaf-node evaluation: material balance + den proximity.
+// Deliberately avoids legalMoves calls to keep the search fast.
+function staticEvaluation(state: JungleState, player: JunglePlayer): number {
+  if (state.winner !== null) {
+    return state.winner === player ? INF : -INF;
+  }
+
+  const opponent = opponentOf(player);
+  const myPieces = activePieces(state, player);
+  const oppPieces = activePieces(state, opponent);
+
+  if (myPieces.length === 0) return -INF;
+  if (oppPieces.length === 0) return INF;
+
+  let score = 0;
+
+  for (const piece of myPieces) score += strategicPieceValue(state, piece);
+  for (const piece of oppPieces) score -= strategicPieceValue(state, piece);
+
+  // Den proximity: reward closing the gap to the opponent's den
+  const oppDenCoord = opponentDen(player);
+  const ownDenCoord = ownDen(player);
+  const myMinDist = Math.min(...myPieces.map((p) => distance(p, oppDenCoord)));
+  const oppMinDist = Math.min(...oppPieces.map((p) => distance(p, ownDenCoord)));
+  score += (oppMinDist - myMinDist) * 10;
+
+  return score;
+}
+
+// Order moves to maximise alpha-beta pruning:
+// 1. Immediate den-entry wins
+// 2. Captures (MVV-LVA: high-value victim, low-value attacker)
+// 3. Everything else
+function moveOrderScore(state: JungleState, move: JungleMove, player: JunglePlayer): number {
+  if (denOwnerAt(move.to) === opponentOf(player)) return INF;
+  if (move.capturedId) {
+    const victim = state.pieces.find((p) => p.id === move.capturedId && !p.captured);
+    const attacker = state.pieces.find((p) => p.id === move.pieceId && !p.captured);
+    if (victim && attacker) {
+      return strategicPieceValue(state, victim) * 10 - strategicPieceValue(state, attacker);
+    }
+    return 0;
+  }
+  return -INF;
+}
+
+function orderMovesForSearch(
+  state: JungleState,
+  moves: JungleMove[],
+  player: JunglePlayer,
+): JungleMove[] {
+  return [...moves].sort(
+    (a, b) => moveOrderScore(state, b, player) - moveOrderScore(state, a, player),
+  );
+}
+
+function alphaBeta(
+  state: JungleState,
+  depth: number,
+  alpha: number,
+  beta: number,
+  rootPlayer: JunglePlayer,
+): number {
+  if (state.winner !== null) {
+    return state.winner === rootPlayer ? INF : -INF;
+  }
+
+  if (depth === 0) {
+    return staticEvaluation(state, rootPlayer);
+  }
+
+  const moves = legalMoves(state, state.current);
+
+  if (moves.length === 0) {
+    return state.current === rootPlayer ? -INF : INF;
+  }
+
+  const ordered = orderMovesForSearch(state, moves, state.current);
+
+  if (state.current === rootPlayer) {
+    let best = -INF;
+    for (const move of ordered) {
+      const score = alphaBeta(fastApplyMove(state, move), depth - 1, alpha, beta, rootPlayer);
+      if (score > best) best = score;
+      if (score > alpha) alpha = score;
+      if (alpha >= beta) break;
+    }
+    return best;
+  } else {
+    let best = INF;
+    for (const move of ordered) {
+      const score = alphaBeta(fastApplyMove(state, move), depth - 1, alpha, beta, rootPlayer);
+      if (score < best) best = score;
+      if (score < beta) beta = score;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+}
+
 export function chooseStrategicJungleMove(opts: {
   state: JungleState;
   player: number;
   legalMoves: JungleMove[];
 }): JungleMove {
-  const best = rankJungleMoves(opts.state, opts.player, opts.legalMoves)[0];
-  if (!best) {
+  const player = opts.player as JunglePlayer;
+  const ordered = orderMovesForSearch(opts.state, opts.legalMoves, player);
+
+  if (!ordered.length) {
     throw new Error('No legal Jungle Chess move is available.');
   }
 
-  return best.move;
+  let bestMove = ordered[0]!;
+  let bestScore = -INF - 1;
+  let alpha = -INF;
+
+  for (const move of ordered) {
+    const score = alphaBeta(
+      fastApplyMove(opts.state, move),
+      SEARCH_DEPTH - 1,
+      alpha,
+      INF,
+      player,
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+      if (score > alpha) alpha = score;
+    }
+    if (bestScore >= INF) break;
+  }
+
+  return bestMove;
 }
