@@ -40,6 +40,28 @@ export const games: GameMeta[] = [
     docPath: 'https://en.wikipedia.org/wiki/Jungle_(board_game)',
   },
   {
+    id: 'chinese-chess',
+    name: '象棋',
+    description:
+      'Cross the river, protect your general, and checkmate the opponent in traditional Chinese Chess.',
+    minPlayers: 2,
+    maxPlayers: 2,
+    hiddenInformation: false,
+    estimatedAITurnTokens: 450,
+    docPath: 'https://en.wikipedia.org/wiki/Xiangqi',
+  },
+  {
+    id: 'chess',
+    name: 'Chess',
+    description:
+      'Control the board, protect your king, and checkmate your opponent in this classic game of strategy.',
+    minPlayers: 2,
+    maxPlayers: 2,
+    hiddenInformation: false,
+    estimatedAITurnTokens: 500,
+    docPath: 'https://en.wikipedia.org/wiki/Rules_of_chess',
+  },
+  {
     id: 'exploding-kittens',
     name: 'Exploding Kittens',
     description:
@@ -50,16 +72,5 @@ export const games: GameMeta[] = [
     estimatedAITurnTokens: 600,
     docPath: 'https://www.explodingkittens.com/pages/how-to-play-exploding-kittens',
     videoPath: 'https://www.youtube.com/watch?v=VU2vDerX8_c',
-  },
-  {
-    id: 'chinese-chess',
-    name: '象棋',
-    description:
-      'Cross the river, protect your general, and checkmate the opponent in traditional Chinese Chess.',
-    minPlayers: 2,
-    maxPlayers: 2,
-    hiddenInformation: false,
-    estimatedAITurnTokens: 450,
-    docPath: 'https://en.wikipedia.org/wiki/Xiangqi',
   },
 ];
