@@ -82,13 +82,10 @@ function forwardMobility(state: ChineseChessState, piece: ChineseChessPiece): nu
 
 function soldierAdvancement(piece: ChineseChessPiece): number {
   if (piece.type !== 'soldier') return 0;
-  // Reward soldiers that have crossed the river or are close
   if (isRiverCrossed(piece, piece.owner)) {
-    // Further forward = better
     const forwardProgress = piece.owner === 0 ? 9 - piece.y : piece.y;
     return forwardProgress * 15;
   }
-  // Before crossing, closeness to river
   const distToRiver = piece.owner === 0 ? piece.y - 5 : 4 - piece.y;
   return Math.max(0, -distToRiver * 5);
 }
@@ -97,7 +94,6 @@ function positionalScore(state: ChineseChessState, player: ChineseChessPlayer): 
   return activePieces(state, player).reduce((sum, piece) => {
     let s = centerProximity(piece) + forwardMobility(state, piece) + soldierAdvancement(piece);
     if (piece.type === 'general') {
-      // Slightly prefer general to stay in palace center
       if (piece.x === 4 && (piece.y === 0 || piece.y === 9 || piece.y === 1 || piece.y === 8)) {
         s += 20;
       }
@@ -238,15 +234,158 @@ export function rankChineseChessMoves(
     );
 }
 
+// ---- Minimax / Alpha-Beta Search ----
+
+const SEARCH_DEPTH = 3;
+const INF = 1_000_000;
+
+// Fast state transition for search — skips the validation and checkmate-detection
+// that applyMove does, since legalMoves already guarantees legality.
+function fastApplyMove(state: ChineseChessState, move: ChineseChessMove): ChineseChessState {
+  const next: ChineseChessState = {
+    ...state,
+    pieces: state.pieces.map((p) => ({ ...p })),
+    turn: state.turn + 1,
+    current: opponentOf(state.current),
+    isCheck: false,
+    winner: null,
+  };
+
+  const piece = next.pieces.find((p) => p.id === move.pieceId && !p.captured);
+  if (piece) {
+    if (move.capturedId) {
+      const cap = next.pieces.find((p) => p.id === move.capturedId && !p.captured);
+      if (cap) cap.captured = true;
+    }
+    piece.x = move.to.x;
+    piece.y = move.to.y;
+  }
+
+  // Win if the next player's general was captured (flying-general capture)
+  if (!generalFor(next, next.current)) {
+    next.winner = state.current;
+  }
+
+  return next;
+}
+
+// Leaf-node evaluation: material + simple positional factors.
+// Deliberately avoids calling legalMoves to keep search fast.
+function staticEvaluation(state: ChineseChessState, player: ChineseChessPlayer): number {
+  if (state.winner !== null) {
+    return state.winner === player ? INF : -INF;
+  }
+
+  const opponent = opponentOf(player);
+  let score = 0;
+
+  for (const piece of activePieces(state, player)) {
+    score += pieceValue(piece);
+    score += centerProximity(piece);
+    score += soldierAdvancement(piece);
+  }
+  for (const piece of activePieces(state, opponent)) {
+    score -= pieceValue(piece);
+    score -= centerProximity(piece);
+    score -= soldierAdvancement(piece);
+  }
+
+  return score;
+}
+
+// MVV-LVA: prefer capturing high-value pieces with low-value attackers.
+// Returns a large negative number for non-captures so they sort last.
+function mvvLva(state: ChineseChessState, move: ChineseChessMove): number {
+  if (!move.capturedId) return -INF;
+  const victim = state.pieces.find((p) => p.id === move.capturedId && !p.captured);
+  const attacker = state.pieces.find((p) => p.id === move.pieceId && !p.captured);
+  if (!victim || !attacker) return 0;
+  return pieceValue(victim) * 10 - pieceValue(attacker);
+}
+
+function orderMovesForSearch(
+  state: ChineseChessState,
+  moves: ChineseChessMove[],
+): ChineseChessMove[] {
+  return [...moves].sort((a, b) => mvvLva(state, b) - mvvLva(state, a));
+}
+
+function alphaBeta(
+  state: ChineseChessState,
+  depth: number,
+  alpha: number,
+  beta: number,
+  rootPlayer: ChineseChessPlayer,
+): number {
+  if (state.winner !== null) {
+    return state.winner === rootPlayer ? INF : -INF;
+  }
+
+  if (depth === 0) {
+    return staticEvaluation(state, rootPlayer);
+  }
+
+  const moves = legalMoves(state, state.current);
+
+  if (moves.length === 0) {
+    // No legal moves: checkmate or stalemate — current player loses
+    return state.current === rootPlayer ? -INF : INF;
+  }
+
+  const ordered = orderMovesForSearch(state, moves);
+
+  if (state.current === rootPlayer) {
+    let best = -INF;
+    for (const move of ordered) {
+      const score = alphaBeta(fastApplyMove(state, move), depth - 1, alpha, beta, rootPlayer);
+      if (score > best) best = score;
+      if (score > alpha) alpha = score;
+      if (alpha >= beta) break;
+    }
+    return best;
+  } else {
+    let best = INF;
+    for (const move of ordered) {
+      const score = alphaBeta(fastApplyMove(state, move), depth - 1, alpha, beta, rootPlayer);
+      if (score < best) best = score;
+      if (score < beta) beta = score;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+}
+
 export function chooseStrategicChineseChessMove(opts: {
   state: ChineseChessState;
   player: number;
   legalMoves: ChineseChessMove[];
 }): ChineseChessMove {
-  const best = rankChineseChessMoves(opts.state, opts.player, opts.legalMoves)[0];
-  if (!best) {
+  const player = opts.player as ChineseChessPlayer;
+  const ordered = orderMovesForSearch(opts.state, opts.legalMoves);
+
+  if (!ordered.length) {
     throw new Error('No legal Chinese Chess move is available.');
   }
 
-  return best.move;
+  let bestMove = ordered[0]!;
+  let bestScore = -INF - 1;
+  let alpha = -INF;
+
+  for (const move of ordered) {
+    const score = alphaBeta(
+      fastApplyMove(opts.state, move),
+      SEARCH_DEPTH - 1,
+      alpha,
+      INF,
+      player,
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+      if (score > alpha) alpha = score;
+    }
+    if (bestScore >= INF) break;
+  }
+
+  return bestMove;
 }
