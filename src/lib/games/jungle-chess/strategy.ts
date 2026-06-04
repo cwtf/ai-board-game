@@ -312,9 +312,14 @@ export function evaluateJungleMove(
     risks.push(`The moved ${pieceLabels[movedPiece.type].en} can be captured next.`);
   }
 
-  const hangingValueDelta = hangingValue(after, currentPlayer) - beforeHangingValue;
+  const afterHangingValue = hangingValue(after, currentPlayer);
+  const hangingValueDelta = afterHangingValue - beforeHangingValue;
+  // Penalise the absolute amount of hanging material after this move, not just the change.
+  // Without this, moves that ignore an already-threatened piece score the same as moves
+  // that rescue it (delta = 0 in both cases), causing the bot to keep ignoring threats.
+  score -= afterHangingValue;
   if (hangingValueDelta > 0) {
-    score -= hangingValueDelta * 2;
+    score -= hangingValueDelta;
     risks.push(`Leaves ${hangingValueDelta} strategic material under capture.`);
   } else if (hangingValueDelta < 0) {
     score += Math.abs(hangingValueDelta);
@@ -429,6 +434,26 @@ function staticEvaluation(state: JungleState, player: JunglePlayer): number {
   if (oppElephant && myRat) {
     const dist = distance(oppElephant, myRat);
     if (dist <= 4) score += RAT_ELEPHANT_PENALTY[dist] ?? 0;
+  }
+
+  // General piece safety: discount pieces that can be immediately captured.
+  // legalMoves is cheap in Jungle Chess (no per-move check validation), so calling it
+  // here is affordable and corrects the horizon effect for high-value hanging pieces.
+  const oppCaptures = new Set(
+    legalMoves(state, opponent)
+      .map((m) => m.capturedId)
+      .filter((id): id is string => id !== undefined),
+  );
+  const myCaptures = new Set(
+    legalMoves(state, player)
+      .map((m) => m.capturedId)
+      .filter((id): id is string => id !== undefined),
+  );
+  for (const piece of myPieces) {
+    if (oppCaptures.has(piece.id)) score -= strategicPieceValue(state, piece);
+  }
+  for (const piece of oppPieces) {
+    if (myCaptures.has(piece.id)) score += strategicPieceValue(state, piece);
   }
 
   return score;
