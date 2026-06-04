@@ -257,6 +257,37 @@ export function evaluateJungleMove(
     risks.push('Steps into an enemy trap and becomes rank 0.');
   }
 
+  // Elephant-rat proximity: the rat is the elephant's unique predator.
+  // The 1-ply hangingValue only catches dist=1 threats; this handles dist=2-4.
+  const myElephant = activePieces(state, currentPlayer).find((p) => p.type === 'elephant');
+  const oppRat = activePieces(state, opponent).find((p) => p.type === 'rat');
+  if (myElephant && oppRat) {
+    const distBefore = distance(myElephant, oppRat);
+    if (distBefore <= 4) {
+      const myElephantAfter = activePieces(after, currentPlayer).find((p) => p.type === 'elephant');
+      const oppRatAfter = activePieces(after, opponent).find((p) => p.type === 'rat');
+      const distAfter =
+        myElephantAfter && oppRatAfter ? distance(myElephantAfter, oppRatAfter) : Infinity;
+      // Urgency scales with how close the rat already is
+      const urgency = ([0, 300, 150, 60, 20] as const)[distBefore] ?? 0;
+
+      if (!oppRatAfter) {
+        score += urgency;
+        reasons.push('Captures the rat, ending the threat to the elephant.');
+      } else if (distAfter > distBefore) {
+        score += urgency;
+        reasons.push(`Moves elephant to safety (rat was ${distBefore} step${distBefore === 1 ? '' : 's'} away).`);
+      } else if (distAfter < distBefore) {
+        score -= urgency / 2;
+        risks.push('Allows the rat to close in on the elephant.');
+      } else if (distBefore <= 2) {
+        // Distance unchanged and rat is already dangerous — this move ignores the threat
+        score -= urgency;
+        risks.push('Does not address the rat threat to the elephant.');
+      }
+    }
+  }
+
   const afterOpponentDenThreats = immediateDenThreats(after, opponent);
   if (afterOpponentDenThreats.length > 0) {
     const penalty = afterOpponentDenThreats.length * 350;
@@ -354,7 +385,12 @@ function fastApplyMove(state: JungleState, move: JungleMove): JungleState {
   return next;
 }
 
-// Leaf-node evaluation: material balance + den proximity.
+// Penalty table indexed by Manhattan distance (dist=0 unused; caps at dist=4).
+// The rat is the elephant's unique predator — this corrects the horizon effect
+// where the search cannot see the rat reaching the elephant beyond depth 4.
+const RAT_ELEPHANT_PENALTY = [0, 120, 60, 20, 5] as const;
+
+// Leaf-node evaluation: material balance + den proximity + elephant-rat danger.
 // Deliberately avoids legalMoves calls to keep the search fast.
 function staticEvaluation(state: JungleState, player: JunglePlayer): number {
   if (state.winner !== null) {
@@ -379,6 +415,21 @@ function staticEvaluation(state: JungleState, player: JunglePlayer): number {
   const myMinDist = Math.min(...myPieces.map((p) => distance(p, oppDenCoord)));
   const oppMinDist = Math.min(...oppPieces.map((p) => distance(p, ownDenCoord)));
   score += (oppMinDist - myMinDist) * 10;
+
+  // Elephant-rat proximity: the rat is the only piece that can capture the elephant.
+  // Penalise positions where the enemy rat is close, since the elephant cannot fight back.
+  const myElephant = myPieces.find((p) => p.type === 'elephant');
+  const oppRat = oppPieces.find((p) => p.type === 'rat');
+  if (myElephant && oppRat) {
+    const dist = distance(myElephant, oppRat);
+    if (dist <= 4) score -= RAT_ELEPHANT_PENALTY[dist] ?? 0;
+  }
+  const oppElephant = oppPieces.find((p) => p.type === 'elephant');
+  const myRat = myPieces.find((p) => p.type === 'rat');
+  if (oppElephant && myRat) {
+    const dist = distance(oppElephant, myRat);
+    if (dist <= 4) score += RAT_ELEPHANT_PENALTY[dist] ?? 0;
+  }
 
   return score;
 }
