@@ -683,8 +683,8 @@
             >
               {#each Array.from({ length: BOARD_HEIGHT }) as _, y}
                 {#each Array.from({ length: BOARD_WIDTH }) as _, x}
-                  {@const piece = pieceAt(x, y)}
-                  {@const move = targetMoveAt(x, y)}
+                  {@const piece = state ? pieceAt(x, y) : undefined}
+                  {@const move = selectedMoves ? targetMoveAt(x, y) : undefined}
                   <button
                     class={`chinese-square ${move ? 'target' : ''}`}
                     style={intersectionStyle(x, y)}
@@ -700,10 +700,17 @@
                     {#if x === 4 && (y === 1 || y === 8)}
                       <span class="palace-center"></span>
                     {/if}
-                    {#if move && !piece}
-                      <span
-                        class="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-100 bg-emerald-300/70 shadow-lg"
-                      ></span>
+                    {#if move}
+                      {#if piece}
+                        <span
+                          class="absolute left-1/2 top-1/2 aspect-square w-[135%] rounded-full border-[4px] border-emerald-400/80 bg-emerald-400/20 shadow-[0_0_12px_rgba(52,211,153,0.5)]"
+                          style="transform: translate(-50%, -50%) translateZ(8px);"
+                        ></span>
+                      {:else}
+                        <span
+                          class="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-100 bg-emerald-300/70 shadow-lg"
+                        ></span>
+                      {/if}
                     {/if}
                   </button>
                 {/each}
