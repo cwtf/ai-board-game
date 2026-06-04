@@ -5,10 +5,10 @@
   export let owner: JunglePlayer;
   export let selected = false;
   export let label = '';
-  export let useEmoji = false;
+  export let pieceStyle: 'zh' | 'emoji' = 'zh';
 
   $: sideClass = owner === 0 ? 'red-side' : 'blue-side';
-  $: char = useEmoji ? pieceLabels[type].emoji : pieceLabels[type].zh;
+  $: char = pieceStyle === 'emoji' ? pieceLabels[type].emoji : pieceLabels[type].zh;
 </script>
 
 <span
