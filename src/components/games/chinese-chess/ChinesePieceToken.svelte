@@ -51,8 +51,13 @@
     transform: translateZ(6px) scale(var(--scale));
     filter: drop-shadow(0 10px 7px rgba(0, 0, 0, 0.32));
     transition:
-      transform 180ms ease,
       filter 180ms ease;
+    animation: idleFloat 4s ease-in-out infinite;
+  }
+
+  @keyframes idleFloat {
+    0%, 100% { transform: translateZ(6px) scale(var(--scale)); }
+    50% { transform: translateZ(9px) scale(var(--scale)); }
   }
 
   .piece-token.black-side {
@@ -66,8 +71,14 @@
 
   .piece-token.selected {
     --scale: 1.08;
+    animation: selectedFloat 2.5s ease-in-out infinite;
     filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65))
       drop-shadow(0 20px 14px rgba(0, 0, 0, 0.42));
+  }
+
+  @keyframes selectedFloat {
+    0%, 100% { transform: translateZ(20px) scale(var(--scale)); }
+    50% { transform: translateZ(26px) scale(var(--scale)); }
   }
 
   .piece-shadow {

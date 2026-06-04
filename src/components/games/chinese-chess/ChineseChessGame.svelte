@@ -72,6 +72,15 @@
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
 
+  let boardRotationX = 56;
+  let boardRotationZ = -4;
+  let boardScale = 1;
+  let isDraggingBoard = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let initialRotationX = 56;
+  let initialRotationZ = -4;
+
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
   $: selectedProfile = selectedProfileFor(keys);
@@ -440,6 +449,38 @@
       : '-';
   }
 
+  function handleBoardPointerDown(e: PointerEvent) {
+    if ((e.target as HTMLElement).closest('button')) return; // don't drag if clicking a square
+    isDraggingBoard = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    initialRotationX = boardRotationX;
+    initialRotationZ = boardRotationZ;
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+  }
+
+  function handleBoardPointerMove(e: PointerEvent) {
+    if (!isDraggingBoard) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    boardRotationX = Math.max(0, Math.min(80, initialRotationX - dy * 0.5));
+    boardRotationZ = initialRotationZ + dx * 0.5;
+  }
+
+  function handleBoardPointerUp(e: PointerEvent) {
+    isDraggingBoard = false;
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(e.pointerId)) {
+      target.releasePointerCapture(e.pointerId);
+    }
+  }
+
+  function handleBoardWheel(e: WheelEvent) {
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    boardScale = Math.max(0.4, Math.min(3, boardScale + delta));
+  }
+
   function buildLogEntries(
     current: LoopSnapshot<ChineseChessState, ChineseChessMove> | undefined,
   ): LogEntry[] {
@@ -625,9 +666,21 @@
           </div>
         </aside>
 
-        <div class="flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 bg-[radial-gradient(circle_at_50%_20%,rgba(16,185,129,0.12),transparent_34%),linear-gradient(180deg,#111827,#020617)] p-8">
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 bg-[radial-gradient(circle_at_50%_20%,rgba(16,185,129,0.12),transparent_34%),linear-gradient(180deg,#111827,#020617)] p-8"
+          on:pointerdown={handleBoardPointerDown}
+          on:pointermove={handleBoardPointerMove}
+          on:pointerup={handleBoardPointerUp}
+          on:pointercancel={handleBoardPointerUp}
+          on:wheel|preventDefault={handleBoardWheel}
+          style={`cursor: ${isDraggingBoard ? 'grabbing' : 'grab'};`}
+        >
           <div class="chinese-perspective">
-            <div class="chinese-board">
+            <div
+              class="chinese-board"
+              style={`transform: scale(${boardScale}) rotateX(${boardRotationX}deg) rotateZ(${boardRotationZ}deg); transition: transform ${isDraggingBoard ? '0s' : '0.15s ease-out'};`}
+            >
               {#each Array.from({ length: BOARD_HEIGHT }) as _, y}
                 {#each Array.from({ length: BOARD_WIDTH }) as _, x}
                   {@const piece = pieceAt(x, y)}
@@ -795,7 +848,6 @@
     box-shadow:
       0 38px 70px rgba(0, 0, 0, 0.55),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    transform: rotateX(56deg) rotateZ(-4deg);
     transform-style: preserve-3d;
   }
 
