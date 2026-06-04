@@ -366,7 +366,7 @@
   async function runAIAfterBoardPaint() {
     await tick();
     await new Promise<void>((resolve) => {
-      globalThis.requestAnimationFrame(() => resolve());
+      setTimeout(() => resolve(), 50);
     });
     void runAI();
   }
