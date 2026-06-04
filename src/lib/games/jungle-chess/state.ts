@@ -47,15 +47,15 @@ export interface JungleState {
   winner: JunglePlayer | null;
 }
 
-export const pieceLabels: Record<PieceType, { en: string; zh: string }> = {
-  rat: { en: 'Rat', zh: '鼠' },
-  cat: { en: 'Cat', zh: '猫' },
-  dog: { en: 'Dog', zh: '狗' },
-  wolf: { en: 'Wolf', zh: '狼' },
-  leopard: { en: 'Leopard', zh: '豹' },
-  tiger: { en: 'Tiger', zh: '虎' },
-  lion: { en: 'Lion', zh: '狮' },
-  elephant: { en: 'Elephant', zh: '象' },
+export const pieceLabels: Record<PieceType, { en: string; zh: string; emoji: string }> = {
+  rat: { en: 'Rat', zh: '鼠', emoji: '🐀' },
+  cat: { en: 'Cat', zh: '猫', emoji: '🐈' },
+  dog: { en: 'Dog', zh: '狗', emoji: '🐕' },
+  wolf: { en: 'Wolf', zh: '狼', emoji: '🐺' },
+  leopard: { en: 'Leopard', zh: '豹', emoji: '🐆' },
+  tiger: { en: 'Tiger', zh: '虎', emoji: '🐅' },
+  lion: { en: 'Lion', zh: '狮', emoji: '🦁' },
+  elephant: { en: 'Elephant', zh: '象', emoji: '🐘' },
 };
 
 const startingPieces: Array<Omit<JunglePiece, 'captured'>> = [

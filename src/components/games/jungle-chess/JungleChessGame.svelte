@@ -74,6 +74,7 @@
   let aiPaused = false;
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
+  let useEmoji = false;
 
   let boardRotationX = 56;
   let boardRotationZ = -4;
@@ -620,6 +621,17 @@
             </div>
           </div>
 
+          <div class="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+            <label class="flex items-center gap-2 text-sm text-neutral-200 cursor-pointer">
+              <input
+                type="checkbox"
+                class="rounded border-neutral-700 bg-neutral-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-neutral-950"
+                bind:checked={useEmoji}
+              />
+              Use Emoji Pieces
+            </label>
+          </div>
+
           {#each [0, 1] as player}
             <div
               class="rounded-md border border-neutral-800 bg-neutral-950 p-3"
@@ -744,6 +756,7 @@
                       owner={piece.owner}
                       selected={selectedPieceId === piece.id}
                       label={`${sideName(piece.owner)} ${pieceLabels[piece.type].en}`}
+                      useEmoji={useEmoji}
                     />
                     <span
                       class={`jungle-piece-points ${piece.owner === 0 ? 'red' : 'blue'}`}
