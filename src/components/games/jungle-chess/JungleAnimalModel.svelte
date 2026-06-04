@@ -59,8 +59,13 @@
     transform-style: preserve-3d;
     filter: drop-shadow(0 16px 12px rgba(0, 0, 0, 0.34));
     transition:
-      transform 180ms ease,
       filter 180ms ease;
+    animation: idleFloat 4s ease-in-out infinite;
+  }
+
+  @keyframes idleFloat {
+    0%, 100% { transform: translateZ(30px) rotateZ(4deg) rotateX(-56deg) scale(var(--scale)); }
+    50% { transform: translateZ(34px) rotateZ(4deg) rotateX(-56deg) scale(var(--scale)); }
   }
 
   .animal-model.blue-side {
@@ -69,9 +74,15 @@
   }
 
   .animal-model.selected {
-    --scale: 1.08;
+    --scale: 1.12;
+    animation: selectedFloat 2.5s ease-in-out infinite;
     filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65))
       drop-shadow(0 18px 14px rgba(0, 0, 0, 0.42));
+  }
+
+  @keyframes selectedFloat {
+    0%, 100% { transform: translateZ(48px) rotateZ(4deg) rotateX(-56deg) scale(var(--scale)); }
+    50% { transform: translateZ(55px) rotateZ(4deg) rotateX(-56deg) scale(var(--scale)); }
   }
 
   .animal-base {

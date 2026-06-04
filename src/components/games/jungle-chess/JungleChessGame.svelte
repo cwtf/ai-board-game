@@ -75,6 +75,15 @@
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
 
+  let boardRotationX = 56;
+  let boardRotationZ = -4;
+  let boardScale = 1;
+  let isDraggingBoard = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let initialRotationX = 56;
+  let initialRotationZ = -4;
+
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
   $: selectedProfile = selectedProfileFor(keys);
@@ -459,6 +468,38 @@
       : '-';
   }
 
+  function handleBoardPointerDown(e: PointerEvent) {
+    if ((e.target as HTMLElement).closest('button')) return; // don't drag if clicking a square
+    isDraggingBoard = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    initialRotationX = boardRotationX;
+    initialRotationZ = boardRotationZ;
+    const target = e.currentTarget as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+  }
+
+  function handleBoardPointerMove(e: PointerEvent) {
+    if (!isDraggingBoard) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    boardRotationX = Math.max(0, Math.min(80, initialRotationX - dy * 0.5));
+    boardRotationZ = initialRotationZ + dx * 0.5;
+  }
+
+  function handleBoardPointerUp(e: PointerEvent) {
+    isDraggingBoard = false;
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(e.pointerId)) {
+      target.releasePointerCapture(e.pointerId);
+    }
+  }
+
+  function handleBoardWheel(e: WheelEvent) {
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    boardScale = Math.max(0.4, Math.min(3, boardScale + delta));
+  }
+
   function buildLogEntries(
     current: LoopSnapshot<JungleState, JungleMove> | undefined,
   ): LogEntry[] {
@@ -639,9 +680,21 @@
           </div>
         </aside>
 
-        <div class="flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 bg-[radial-gradient(circle_at_50%_20%,rgba(16,185,129,0.12),transparent_34%),linear-gradient(180deg,#111827,#020617)] p-8">
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 theme-bg p-8"
+          on:pointerdown={handleBoardPointerDown}
+          on:pointermove={handleBoardPointerMove}
+          on:pointerup={handleBoardPointerUp}
+          on:pointercancel={handleBoardPointerUp}
+          on:wheel|preventDefault={handleBoardWheel}
+          style={`cursor: ${isDraggingBoard ? 'grabbing' : 'grab'};`}
+        >
           <div class="jungle-perspective">
-            <div class="jungle-board">
+            <div
+              class="jungle-board"
+              style={`transform: scale(${boardScale}) rotateX(${boardRotationX}deg) rotateZ(${boardRotationZ}deg); transition: transform ${isDraggingBoard ? '0s' : '0.15s ease-out'};`}
+            >
               {#each Array.from({ length: BOARD_HEIGHT }) as _, y}
                 {#each Array.from({ length: BOARD_WIDTH }) as _, x}
                   {@const terrain = terrainAt({ x, y })}
@@ -788,10 +841,23 @@
 {/if}
 
 <style>
+  .theme-bg {
+    --theme-bg: linear-gradient(180deg, #0f172a, #020617);
+    --board-bg: linear-gradient(135deg, rgba(101, 163, 13, 0.24), transparent 38%),
+      linear-gradient(45deg, rgba(14, 165, 233, 0.2), transparent 60%), #1f2920;
+    --board-border: rgba(163, 230, 53, 0.2);
+    --water-bg: rgba(56, 189, 248, 0.24);
+    --water-shadow: 0 0 18px rgba(56, 189, 248, 0.36);
+    --den-color: rgba(255, 255, 255, 0.4);
+    --trap-color: rgba(255, 255, 255, 0.4);
+    background: var(--theme-bg, linear-gradient(180deg, #111827, #020617));
+  }
+
   .jungle-perspective {
     perspective: 1100px;
     width: min(82vh, 680px);
     min-width: 520px;
+    touch-action: none; /* Prevent scroll while dragging */
   }
 
   .jungle-board {
@@ -802,16 +868,12 @@
     grid-template-rows: repeat(9, minmax(0, 1fr));
     gap: 5px;
     padding: 14px;
-    border: 1px solid rgba(148, 163, 184, 0.34);
+    border: 1px solid var(--board-border, rgba(148, 163, 184, 0.34));
     border-radius: 8px;
-    background:
-      linear-gradient(135deg, rgba(132, 204, 22, 0.24), transparent 38%),
-      linear-gradient(45deg, rgba(14, 165, 233, 0.2), transparent 60%),
-      #172018;
+    background: var(--board-bg, #172018);
     box-shadow:
       0 38px 70px rgba(0, 0, 0, 0.55),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transform: rotateX(56deg) rotateZ(-4deg);
     transform-style: preserve-3d;
   }
 
@@ -893,8 +955,9 @@
     position: absolute;
     inset: 18%;
     border-radius: 999px;
-    background: rgba(125, 211, 252, 0.24);
-    box-shadow: 0 0 18px rgba(56, 189, 248, 0.36);
+    background: var(--water-bg, rgba(125, 211, 252, 0.24));
+    box-shadow: var(--water-shadow, 0 0 18px rgba(56, 189, 248, 0.36));
+    backdrop-filter: blur(4px);
   }
 
   .jungle-den,
@@ -903,10 +966,11 @@
     inset: 0;
     display: grid;
     place-items: center;
-    color: rgba(255, 255, 255, 0.32);
+    color: var(--den-color, rgba(255, 255, 255, 0.32));
     font-size: 1.6rem;
     font-weight: 900;
     transform: translateZ(4px);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
   }
 
   @media (max-width: 900px) {
