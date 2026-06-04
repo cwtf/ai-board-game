@@ -984,8 +984,8 @@
   }
 
   .palace-top-right {
-    left: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 5 / 8);
-    top: var(--board-inset);
+    left: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 3 / 8);
+    top: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 2 / 9);
     width: calc((100% - var(--board-inset) * 2) * 2 / 8 * 1.414);
     transform: rotate(-45deg);
   }
@@ -998,8 +998,8 @@
   }
 
   .palace-bottom-right {
-    left: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 5 / 8);
-    top: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 9 / 9);
+    left: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 3 / 8);
+    top: calc(var(--board-inset) + (100% - var(--board-inset) * 2) * 7 / 9);
     width: calc((100% - var(--board-inset) * 2) * 2 / 8 * 1.414);
     transform: rotate(45deg);
   }
