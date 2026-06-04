@@ -45,14 +45,14 @@ export interface ChineseChessState {
   isCheck: boolean;
 }
 
-export const pieceLabels: Record<PieceType, { en: string; zhRed: string; zhBlack: string }> = {
-  general: { en: 'General', zhRed: '帥', zhBlack: '將' },
-  advisor: { en: 'Advisor', zhRed: '仕', zhBlack: '士' },
-  elephant: { en: 'Elephant', zhRed: '相', zhBlack: '象' },
-  horse: { en: 'Horse', zhRed: '傌', zhBlack: '馬' },
-  chariot: { en: 'Chariot', zhRed: '俥', zhBlack: '車' },
-  cannon: { en: 'Cannon', zhRed: '炮', zhBlack: '砲' },
-  soldier: { en: 'Soldier', zhRed: '兵', zhBlack: '卒' },
+export const pieceLabels: Record<PieceType, { en: string; zhRed: string; zhBlack: string; emoji: string }> = {
+  general: { en: 'General', zhRed: '帥', zhBlack: '將', emoji: '👑' },
+  advisor: { en: 'Advisor', zhRed: '仕', zhBlack: '士', emoji: '🛡️' },
+  elephant: { en: 'Elephant', zhRed: '相', zhBlack: '象', emoji: '🐘' },
+  horse: { en: 'Horse', zhRed: '傌', zhBlack: '馬', emoji: '🐎' },
+  chariot: { en: 'Chariot', zhRed: '俥', zhBlack: '車', emoji: '🏰' },
+  cannon: { en: 'Cannon', zhRed: '炮', zhBlack: '砲', emoji: '💣' },
+  soldier: { en: 'Soldier', zhRed: '兵', zhBlack: '卒', emoji: '⚔️' },
 };
 
 export const sideName = (player: ChineseChessPlayer): 'Red' | 'Black' =>

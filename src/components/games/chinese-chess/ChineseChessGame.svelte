@@ -71,6 +71,7 @@
   let aiPaused = false;
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
+  let pieceStyle: 'zh' | 'emoji' = 'zh';
 
   let boardRotationX = 56;
   let boardRotationZ = -4;
@@ -606,6 +607,20 @@
             </div>
           </div>
 
+          <div class="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+            <label class="text-xs font-medium text-neutral-400" for="piece-style">
+              Piece Style
+            </label>
+            <select
+              id="piece-style"
+              class="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm text-neutral-100"
+              bind:value={pieceStyle}
+            >
+              <option value="zh">Chinese Characters</option>
+              <option value="emoji">Emoji</option>
+            </select>
+          </div>
+
           {#each [0, 1] as player}
             <div
               class="rounded-md border border-neutral-800 bg-neutral-950 p-3"
@@ -737,6 +752,7 @@
                       owner={piece.owner}
                       selected={selectedPieceId === piece.id}
                       label={`${sideName(piece.owner)} ${pieceLabels[piece.type].en}`}
+                      pieceStyle={pieceStyle}
                     />
                   </span>
                 {/each}

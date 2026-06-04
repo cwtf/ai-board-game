@@ -1,22 +1,15 @@
 <script lang="ts">
-  import type { ChineseChessPlayer, PieceType } from '@/lib/games/chinese-chess/state';
+  import { pieceLabels, type ChineseChessPlayer, type PieceType } from '@/lib/games/chinese-chess/state';
 
   export let type: PieceType;
   export let owner: ChineseChessPlayer;
   export let selected = false;
   export let label = '';
+  export let pieceStyle: 'zh' | 'emoji' = 'zh';
 
-  const pieceChars: Record<PieceType, { red: string; black: string }> = {
-    general: { red: '帥', black: '將' },
-    advisor: { red: '仕', black: '士' },
-    elephant: { red: '相', black: '象' },
-    horse: { red: '傌', black: '馬' },
-    chariot: { red: '俥', black: '車' },
-    cannon: { red: '炮', black: '砲' },
-    soldier: { red: '兵', black: '卒' },
-  };
-
-  $: char = owner === 0 ? pieceChars[type].red : pieceChars[type].black;
+  $: char = pieceStyle === 'emoji' 
+    ? pieceLabels[type].emoji 
+    : (owner === 0 ? pieceLabels[type].zhRed : pieceLabels[type].zhBlack);
   $: sideClass = owner === 0 ? 'red-side' : 'black-side';
 </script>
 
