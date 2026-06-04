@@ -27,8 +27,10 @@
   title={label}
 >
   <span class="piece-shadow"></span>
-  <span class="piece-wall"></span>
-  <span class="piece-body">
+  {#each Array(8) as _, i}
+    <span class="piece-layer" style="transform: translateZ({i * 1.5}px);"></span>
+  {/each}
+  <span class="piece-top" style="transform: translateZ(12px);">
     <span class="piece-char">{char}</span>
   </span>
 </span>
@@ -37,7 +39,6 @@
   .piece-token {
     --base: #991b1b;
     --base-dark: #681010;
-    --base-edge: #b91c1c;
     --face-ring: #fecaca;
     --body: #fff7f0;
     --text: #7f1d1d;
@@ -48,94 +49,81 @@
     height: 100%;
     min-width: 44px;
     min-height: 44px;
-    transform: translateZ(6px) scale(var(--scale));
-    filter: drop-shadow(0 10px 7px rgba(0, 0, 0, 0.32));
-    transition:
-      filter 180ms ease;
+    transform-style: preserve-3d;
+    transform: translateZ(2px) scale(var(--scale));
     animation: idleFloat 4s ease-in-out infinite;
   }
 
   @keyframes idleFloat {
-    0%, 100% { transform: translateZ(6px) scale(var(--scale)); }
-    50% { transform: translateZ(9px) scale(var(--scale)); }
+    0%, 100% { transform: translateZ(2px) scale(var(--scale)); }
+    50% { transform: translateZ(6px) scale(var(--scale)); }
   }
 
   .piece-token.black-side {
     --base: #1f2937;
     --base-dark: #111827;
-    --base-edge: #374151;
     --face-ring: #d1d5db;
     --body: #f8fafc;
     --text: #111827;
   }
 
   .piece-token.selected {
-    --scale: 1.08;
+    --scale: 1.1;
     animation: selectedFloat 2.5s ease-in-out infinite;
-    filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65))
-      drop-shadow(0 20px 14px rgba(0, 0, 0, 0.42));
   }
 
   @keyframes selectedFloat {
-    0%, 100% { transform: translateZ(20px) scale(var(--scale)); }
-    50% { transform: translateZ(26px) scale(var(--scale)); }
+    0%, 100% { transform: translateZ(18px) scale(var(--scale)); }
+    50% { transform: translateZ(24px) scale(var(--scale)); }
+  }
+
+  .piece-shadow, .piece-layer, .piece-top {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
   }
 
   .piece-shadow {
-    position: absolute;
-    inset: 22% 9% 8%;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.28);
-    filter: blur(9px);
-    transform: translateY(10%);
+    background: rgba(0, 0, 0, 0.5);
+    filter: blur(8px);
+    transform: translateZ(-4px);
+    transition: filter 0.3s, transform 0.3s;
   }
 
-  .piece-wall {
-    position: absolute;
-    inset: 12% 6% 4%;
-    border-radius: 50%;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--base), white 12%) 0%,
-      var(--base) 42%,
-      var(--base-dark) 100%
-    );
-    box-shadow:
-      inset 0 3px 5px rgba(255, 255, 255, 0.18),
-      inset 0 -8px 10px rgba(0, 0, 0, 0.26),
-      0 8px 10px rgba(0, 0, 0, 0.28);
+  .piece-token.selected .piece-shadow {
+    filter: blur(14px);
+    transform: translateZ(-16px);
+    background: rgba(0, 0, 0, 0.4);
   }
 
-  .piece-body {
-    position: absolute;
-    inset: 5% 7% 19%;
-    border-radius: 50%;
+  .piece-layer {
+    background: var(--base-dark);
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.6);
+  }
+
+  .piece-top {
     background:
-      radial-gradient(ellipse at 36% 25%, rgba(255, 255, 255, 0.72), transparent 34%),
-      radial-gradient(ellipse at 50% 86%, color-mix(in srgb, var(--body), black 10%), transparent 60%),
+      radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, 0.3), transparent 60%),
       var(--body);
-    box-shadow:
-      inset 0 -4px 8px rgba(0, 0, 0, 0.14),
-      inset 0 4px 7px rgba(255, 255, 255, 0.3),
-      0 2px 0 color-mix(in srgb, var(--base), black 10%);
-    border: 4px solid var(--face-ring);
+    box-shadow: inset 0 -3px 8px rgba(0, 0, 0, 0.15), inset 0 3px 8px rgba(255, 255, 255, 0.5);
+    border: 3px solid var(--face-ring);
     display: grid;
     place-items: center;
   }
 
-  .piece-body::after {
+  .piece-top::after {
     content: '';
     position: absolute;
-    inset: 10%;
+    inset: 4px;
     border-radius: 50%;
-    border: 2px solid color-mix(in srgb, var(--text), transparent 66%);
+    border: 1px solid color-mix(in srgb, var(--text), transparent 60%);
     pointer-events: none;
   }
 
   .piece-char {
     position: relative;
     z-index: 1;
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     font-weight: 900;
     line-height: 1;
     color: var(--text);
@@ -145,7 +133,9 @@
       "STSong",
       "SimSun",
       serif;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.4);
     user-select: none;
+    /* Optional: rotate character so it always faces upward regardless of the board's Z rotation */
+    transform: rotateZ(4deg);
   }
 </style>
