@@ -27,9 +27,9 @@
 
 <style>
   .piece-token {
-    --base: #b45309;
-    --base-dark: #78350f;
-    --face-ring: #fef3c7;
+    --base: #991b1b;
+    --base-dark: #681010;
+    --face-ring: #fecaca;
     --body: #fffbeb;
     --text: #991b1b; /* red player text */
     --scale: 1;
@@ -50,6 +50,9 @@
   }
 
   .piece-token.blue-side {
+    --base: #0369a1;
+    --base-dark: #082f49;
+    --face-ring: #bae6fd;
     --text: #0369a1; /* blue player text */
   }
 
