@@ -264,13 +264,16 @@
       gold: '#fbbf24',
     };
 
-    // 1. Draw gold prestige points in Top-Right (2x scaled)
+    // 1. Draw gold prestige points in Top-Right (2x scaled, aspect-ratio corrected)
     ctx.save();
+    ctx.translate(404, 108);
+    ctx.scale(1, 410 / 512); // compensate for 512:410 canvas vs 1:1 mesh aspect ratio
+
     ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(404, 108, 60, 0, Math.PI * 2);
+    ctx.arc(0, 0, 60, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
@@ -278,11 +281,10 @@
     ctx.font = 'bold 72px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(noble.prestige), 404, 108);
+    ctx.fillText(String(noble.prestige), 0, 0);
     ctx.restore();
 
-    // 2. Draw cost capsule pill badges in Bottom-Left (2x scaled)
-    ctx.save();
+    // 2. Draw cost capsule pill badges in Bottom-Left (2x scaled, aspect-ratio corrected)
     let idx = 0;
     const spacing = 104;
     const startY = 330;
@@ -293,11 +295,15 @@
       if (costAmount && costAmount > 0) {
         const yPos = startY - idx * spacing;
 
+        ctx.save();
+        ctx.translate(startX, yPos);
+        ctx.scale(1, 410 / 512); // compensate for 512:410 canvas vs 1:1 mesh aspect ratio
+
         // Capsule dimensions (2x scaled)
         const pillW = 164;
         const pillH = 80;
-        const pillX = startX - pillW / 2;
-        const pillY = yPos - pillH / 2;
+        const pillX = -pillW / 2;
+        const pillY = -pillH / 2;
         const r = 40; // corner radius (half height)
 
         // Draw capsule background
@@ -325,6 +331,8 @@
           img.onload = () => {
             gemImages.set(gem, img);
             ctx.save();
+            ctx.translate(startX, yPos);
+            ctx.scale(1, 410 / 512);
             ctx.drawImage(img, pillX + 16, pillY + 16, 48, 48);
             ctx.restore();
             texture.needsUpdate = true;
@@ -336,12 +344,13 @@
         ctx.font = 'bold 48px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(String(costAmount), pillX + 112, yPos);
+        ctx.fillText(String(costAmount), pillX + 112, 0);
+
+        ctx.restore();
 
         idx++;
       }
     }
-    ctx.restore();
   }
 
   function getCachedDynamicNobleTexture(noble: Noble): THREE.Texture {
