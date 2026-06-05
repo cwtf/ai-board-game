@@ -19,7 +19,8 @@
     game.id === 'splendor' ||
     game.id === 'secret-hitler' ||
     game.id === 'jungle-chess' ||
-    game.id === 'chinese-chess';
+    game.id === 'chinese-chess' ||
+    game.id === 'chess';
   $: playable = implemented;
 </script>
 

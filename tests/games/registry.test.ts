@@ -7,8 +7,9 @@ describe('game registry', () => {
       'splendor',
       'secret-hitler',
       'jungle-chess',
-      'exploding-kittens',
       'chinese-chess',
+      'chess',
+      'exploding-kittens',
     ]);
   });
 
