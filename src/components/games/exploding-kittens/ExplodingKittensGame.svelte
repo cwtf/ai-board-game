@@ -46,6 +46,7 @@
     | 'favor_target'
     | 'cat_pair_select'
     | 'three_kind'
+    | 'five_diff_pick'
     | 'five_diff';
 
   const LOCAL_BOT_PROFILE = '__ek_local_bot__';
@@ -73,7 +74,8 @@
   let loop: GameLoop<EKState, EKMove> | undefined;
   let unsubscribe: (() => void) | undefined;
   let playerCount = 3;
-  let seed = 'kittens-table';
+  let seed =
+    typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'kittens-table';
   let snapshot: LoopSnapshot<EKState, EKMove> | undefined = buildInitialSnapshot();
   let activeModal: Modal = null;
   let defusePosition = 0;
@@ -81,6 +83,7 @@
   let selectedCatKind: CardKind | null = null;
   let threeKindCard: CardKind | null = null;
   let threeKindTarget: number | null = null;
+  let fiveDiffSelectedCards: CardKind[] = [];
   let aiController: AbortController | undefined;
   let aiPaused = false;
   let gameOverDismissed = false;
@@ -268,7 +271,11 @@
   function startGame() {
     unsubscribe?.();
     aiController?.abort();
-    seed = seed.trim() || 'kittens-table';
+    seed =
+      seed.trim() ||
+      (typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Date.now().toString(36));
     syncSeedHash(seed);
     selectedCardForPlay = null;
     activeModal = null;
@@ -373,7 +380,8 @@
 
     const fiveDiffMoves = legalMoves.filter((m) => m.kind === 'play_five_diff');
     if (fiveDiffMoves.length > 0) {
-      activeModal = 'five_diff';
+      fiveDiffSelectedCards = [];
+      activeModal = 'five_diff_pick';
       return;
     }
 
@@ -419,11 +427,12 @@
   }
 
   function confirmFiveDiff(discardPick: CardKind) {
-    const m = legalMoves.find(
-      (mv) => mv.kind === 'play_five_diff' && mv.discardPick === discardPick,
-    );
-    if (m) playMove(m);
-    else activeModal = null;
+    playMove({
+      id: `PLAY:five_diff:${discardPick}`,
+      kind: 'play_five_diff',
+      cards: fiveDiffSelectedCards,
+      discardPick,
+    });
   }
 
   function confirmDefuse() {
@@ -677,17 +686,17 @@
                       (m.kind === 'give_favor' && m.card === cardKind),
                   ))}
                 <button
-                  class="relative flex h-16 w-11 flex-col items-center justify-center rounded-md border text-center text-[10px] font-bold leading-tight shadow-md transition-transform
+                  class="relative flex h-48 w-[8.25rem] flex-col items-center justify-center rounded-lg border text-center text-base font-bold leading-tight shadow-md transition-transform
                     {playable
-                      ? 'cursor-pointer border-white/30 hover:-translate-y-2 hover:shadow-lg'
+                      ? 'cursor-pointer border-white/30 hover:-translate-y-3 hover:shadow-lg'
                       : 'cursor-default border-white/10 opacity-60'}
                   "
                   style:background-color={CARD_COLORS[cardKind]}
                   disabled={!playable}
                   on:click={() => handleCardClick(cardKind, idx)}
                 >
-                  <span class="text-xl leading-none">{CARD_EMOJI[cardKind]}</span>
-                  <span class="mt-0.5 px-0.5 text-white/90">
+                  <span class="text-6xl leading-none">{CARD_EMOJI[cardKind]}</span>
+                  <span class="mt-2 px-1 text-white/90">
                     {CARD_LABELS[cardKind].split(' ').slice(0, 2).join(' ')}
                   </span>
                 </button>
@@ -696,11 +705,11 @@
               <!-- Draw button -->
               {#if humanCanAct && legalMoves.some((m) => m.kind === 'draw')}
                 <button
-                  class="flex h-16 w-14 flex-col items-center justify-center rounded-md border border-dashed border-neutral-500 bg-neutral-800 text-[10px] font-bold text-neutral-300 shadow transition-transform hover:-translate-y-1 hover:border-neutral-300"
+                  class="flex h-48 w-[10.5rem] flex-col items-center justify-center rounded-lg border border-dashed border-neutral-500 bg-neutral-800 text-base font-bold text-neutral-300 shadow transition-transform hover:-translate-y-3 hover:border-neutral-300"
                   on:click={handleDeckClick}
                 >
-                  <span class="text-xl">🃏</span>
-                  <span>Draw</span>
+                  <span class="text-6xl">🃏</span>
+                  <span class="mt-2">Draw</span>
                 </button>
               {/if}
             </div>
@@ -936,16 +945,16 @@
         </div>
       {:else}
         <div class="mb-3 text-sm text-neutral-300">Name a card you want from P{threeKindTarget + 1}:</div>
-        <div class="flex max-h-52 flex-wrap gap-1.5 overflow-y-auto">
+        <div class="flex max-h-96 flex-wrap gap-2 overflow-y-scroll">
           {#each ALL_NAMED_KINDS as kind}
             <button
-              class="flex h-12 w-10 flex-col items-center justify-center rounded text-[9px] font-bold text-white transition hover:scale-105
+              class="flex h-24 w-20 flex-col items-center justify-center rounded-lg text-xs font-bold text-white transition hover:scale-105
                 {threeKindCard === kind ? 'ring-2 ring-white' : ''}"
               style:background-color={CARD_COLORS[kind]}
               on:click={() => (threeKindCard = kind)}
             >
-              <span class="text-base">{CARD_EMOJI[kind]}</span>
-              <span class="leading-none">{CARD_LABELS[kind].split(' ')[0]}</span>
+              <span class="text-4xl leading-none">{CARD_EMOJI[kind]}</span>
+              <span class="mt-1 leading-none">{CARD_LABELS[kind].split(' ')[0]}</span>
             </button>
           {/each}
         </div>
@@ -972,21 +981,76 @@
   </div>
 {/if}
 
+<!-- Five different: pick 5 card kinds from hand -->
+{#if activeModal === 'five_diff_pick' && state}
+  {@const uniqueKinds = [...new Set(state.players[HUMAN_PLAYER_INDEX]!.hand)]}
+  {@const selectedSet = new Set(fiveDiffSelectedCards)}
+  <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+    <div class="w-96 rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl">
+      <div class="mb-2 text-lg font-bold text-blue-400">5-Card Combo</div>
+      <div class="mb-4 text-sm text-neutral-300">
+        Choose 5 different card kinds to discard:
+        <span class="ml-1 font-bold text-white">{fiveDiffSelectedCards.length}/5</span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {#each uniqueKinds as cardKind}
+          {@const selected = selectedSet.has(cardKind)}
+          {@const canAdd = fiveDiffSelectedCards.length < 5 && !selected}
+          <button
+            class="flex h-24 w-20 flex-col items-center justify-center rounded-lg border-2 text-xs font-bold text-white transition
+              {selected
+                ? 'scale-105 border-white ring-2 ring-white/60'
+                : canAdd
+                  ? 'border-white/30 hover:scale-105 hover:border-white/60'
+                  : 'cursor-default border-white/10 opacity-40'}"
+            style:background-color={CARD_COLORS[cardKind]}
+            disabled={!selected && !canAdd}
+            on:click={() => {
+              if (selected) {
+                fiveDiffSelectedCards = fiveDiffSelectedCards.filter((c) => c !== cardKind);
+              } else {
+                fiveDiffSelectedCards = [...fiveDiffSelectedCards, cardKind];
+              }
+            }}
+          >
+            <span class="text-4xl leading-none">{CARD_EMOJI[cardKind]}</span>
+            <span class="mt-1 leading-none">{CARD_LABELS[cardKind].split(' ')[0]}</span>
+          </button>
+        {/each}
+      </div>
+      <div class="mt-4 flex gap-2">
+        <button
+          class="flex-1 rounded bg-neutral-800 py-1.5 text-xs text-neutral-500 hover:text-neutral-300"
+          on:click={() => { activeModal = null; fiveDiffSelectedCards = []; }}
+        >Cancel</button>
+        <button
+          class="flex-1 rounded py-1.5 text-xs font-bold transition
+            {fiveDiffSelectedCards.length === 5
+              ? 'bg-blue-600 text-white hover:bg-blue-500'
+              : 'cursor-default bg-neutral-700 text-neutral-500'}"
+          disabled={fiveDiffSelectedCards.length !== 5}
+          on:click={() => { if (fiveDiffSelectedCards.length === 5) activeModal = 'five_diff'; }}
+        >Next: Pick from discard →</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- Five different: pick discard card -->
 {#if activeModal === 'five_diff' && state && state.discard.length > 0}
   <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
     <div class="w-80 rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl">
       <div class="mb-2 text-lg font-bold text-blue-400">5-Card Combo</div>
       <div class="mb-4 text-sm text-neutral-300">Take any card from the discard pile:</div>
-      <div class="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+      <div class="flex max-h-96 flex-wrap gap-2 overflow-y-scroll">
         {#each [...new Set(state.discard)] as kind}
           <button
-            class="flex h-12 w-10 flex-col items-center justify-center rounded text-[9px] font-bold text-white transition hover:scale-105"
+            class="flex h-24 w-20 flex-col items-center justify-center rounded-lg text-xs font-bold text-white transition hover:scale-105"
             style:background-color={CARD_COLORS[kind]}
             on:click={() => confirmFiveDiff(kind)}
           >
-            <span class="text-base">{CARD_EMOJI[kind]}</span>
-            <span class="leading-none">{CARD_LABELS[kind].split(' ')[0]}</span>
+            <span class="text-4xl leading-none">{CARD_EMOJI[kind]}</span>
+            <span class="mt-1 leading-none">{CARD_LABELS[kind].split(' ')[0]}</span>
           </button>
         {/each}
       </div>
