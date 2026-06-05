@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { afterUpdate, onDestroy, onMount, tick } from 'svelte';
   import { fly, scale } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { backOut, cubicIn } from 'svelte/easing';
@@ -95,6 +95,20 @@
   interface FlyingCard { id: number; kind: CardKind | null; sx: number; sy: number; ex: number; ey: number; }
   let flyingCards: FlyingCard[] = [];
   let flyCardCounter = 0;
+
+  // AI avatar overlay positions (viewport-absolute, derived from 3D projection)
+  let aiScreenPositions: Record<number, { x: number; y: number }> = {};
+  let _lastPosStr = '';
+  afterUpdate(() => {
+    if (!view3D || !state) return;
+    const raw = view3D.getScreenPositions().players;
+    const rounded: Record<number, { x: number; y: number }> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      rounded[Number(k)] = { x: Math.round(v.x), y: Math.round(v.y) };
+    }
+    const str = JSON.stringify(rounded);
+    if (str !== _lastPosStr) { _lastPosStr = str; aiScreenPositions = rounded; }
+  });
 
   function spawnFlyCard(kind: CardKind | null, sx: number, sy: number, ex: number, ey: number) {
     flyingCards = [...flyingCards, { id: flyCardCounter++, kind, sx, sy, ex, ey }];
@@ -775,6 +789,59 @@
           humanPlayerIndex={HUMAN_PLAYER_INDEX}
           onDeckClick={handleDeckClick}
         />
+
+        <!-- AI player avatar badges (over 3D zones) -->
+        {#each state.players as player, pi}
+          {#if pi !== HUMAN_PLAYER_INDEX}
+            {@const pos = aiScreenPositions[pi]}
+            {#if pos}
+              <div
+                class="pointer-events-none fixed z-10 flex flex-col items-center"
+                style:left="{pos.x - 56}px"
+                style:top="{pos.y - 170}px"
+              >
+                <div class="relative">
+                  <img
+                    src="/assets/exploding-kittens/avatars/p{pi + 1}.png"
+                    alt="P{pi + 1}"
+                    class="h-28 w-28 rounded-full border-2 object-cover shadow-lg
+                      {!player.alive
+                        ? 'border-rose-800 grayscale opacity-50'
+                        : pi === currentPlayerIdx
+                          ? 'border-yellow-400 shadow-yellow-400/40'
+                          : 'border-neutral-600'}"
+                  />
+                </div>
+                <div class="mt-1 rounded bg-black/75 px-1.5 py-0.5 text-center text-xs font-semibold
+                  {pi === currentPlayerIdx ? 'text-yellow-400' : 'text-neutral-300'}">
+                  P{pi + 1} · {player.alive ? player.hand.length : '💀'}
+                </div>
+              </div>
+            {/if}
+          {/if}
+        {/each}
+
+        <!-- Human avatar (bottom-left) -->
+        <div class="pointer-events-none absolute bottom-4 left-4 z-10 flex flex-col items-center">
+          <div class="relative">
+            <img
+              src="/assets/exploding-kittens/avatars/p1.png"
+              alt="You"
+              class="h-28 w-28 rounded-full border-2 object-cover shadow-lg
+                {!state.players[HUMAN_PLAYER_INDEX]?.alive
+                  ? 'border-rose-800 grayscale opacity-50'
+                  : humanCanAct
+                    ? 'border-yellow-400 shadow-yellow-400/40'
+                    : 'border-neutral-600'}"
+            />
+          </div>
+          <div class="mt-1 rounded bg-black/75 px-1.5 py-0.5 text-center text-xs font-semibold
+            {humanCanAct ? 'text-yellow-400' : 'text-neutral-300'}">
+            You · {state.players[HUMAN_PLAYER_INDEX]?.alive
+              ? state.players[HUMAN_PLAYER_INDEX]!.hand.length
+              : '💀'}
+          </div>
+        </div>
 
         <!-- Human hand strip (2D overlay at bottom) -->
         {#if state.players[HUMAN_PLAYER_INDEX]?.alive}
