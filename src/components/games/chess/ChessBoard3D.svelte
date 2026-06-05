@@ -8,6 +8,7 @@
     type ChessMove,
     type ChessPiece,
     type ChessState,
+    type Coord,
     type PieceType,
   } from '@/lib/games/chess/state';
 
@@ -36,26 +37,86 @@
   let activeState: ChessState | undefined;
   let activeSelectedPieceId = '';
   let activeSelectedMovesKey = '';
+  let selectedMovesRenderKey = '';
   let startedAt = 0;
   let renderMode: 'webgl' | 'fallback' = 'webgl';
 
   const boardObjects: THREE.Object3D[] = [];
   const interactiveObjects: THREE.Object3D[] = [];
   const boardIndexes = [...Array(BOARD_SIZE).keys()];
+  const MOVE_ANIMATION_MS = 420;
+
+  $: selectedMovesRenderKey = selectedMoves
+    .map((move) => `${move.to.x},${move.to.y},${move.promotion ?? ''}`)
+    .sort()
+    .join('|');
 
   $: if (scene && state) {
-    syncDynamicScene();
+    syncDynamicScene(selectedMovesRenderKey, selectedPieceId);
   }
 
   function squarePosition(x: number, y: number): THREE.Vector3 {
     return new THREE.Vector3(x - (BOARD_SIZE - 1) / 2, 0, y - (BOARD_SIZE - 1) / 2);
   }
 
-  function selectedMovesKey(): string {
-    return selectedMoves
-      .map((move) => `${move.to.x},${move.to.y},${move.promotion ?? ''}`)
-      .sort()
-      .join('|');
+  function easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function squareKey(coord: Coord): string {
+    return `${coord.x},${coord.y}`;
+  }
+
+  function targetPieceTypeForMove(move: ChessMove): PieceType {
+    return move.promotion ?? move.piece;
+  }
+
+  function castlingRookMotion(
+    piece: ChessPiece,
+    move: ChessMove | undefined,
+  ): { from: Coord; to: Coord } | undefined {
+    if (!move?.isCastle || piece.type !== 'rook' || piece.owner !== move.owner) {
+      return undefined;
+    }
+
+    const y = move.from.y;
+    const kingside = move.to.x > move.from.x;
+    const from = { x: kingside ? 7 : 0, y };
+    const to = { x: kingside ? 5 : 3, y };
+    return piece.x === to.x && piece.y === to.y ? { from, to } : undefined;
+  }
+
+  function startCoordForPiece(
+    piece: ChessPiece,
+    previousState: ChessState | undefined,
+    animateMove: boolean,
+  ): Coord {
+    const current = { x: piece.x, y: piece.y };
+    if (!animateMove || !previousState || !state.lastMove) {
+      return current;
+    }
+
+    const movedType = targetPieceTypeForMove(state.lastMove);
+    if (
+      piece.owner === state.lastMove.owner &&
+      piece.type === movedType &&
+      squareKey(current) === squareKey(state.lastMove.to)
+    ) {
+      return state.lastMove.from;
+    }
+
+    const rookMotion = castlingRookMotion(piece, state.lastMove);
+    if (rookMotion) {
+      return rookMotion.from;
+    }
+
+    return current;
+  }
+
+  function targetHasCapture(x: number, y: number): boolean {
+    return selectedMoves.some(
+      (move) => move.to.x === x && move.to.y === y && move.isCapture,
+    );
   }
 
   function material(opts: {
@@ -272,16 +333,34 @@
     if (!highlightLayer || !state) return;
 
     const targetMat = material({
-      color: 0x34d399,
-      emissive: 0x105a3a,
+      color: 0x22c55e,
+      emissive: 0x1a7f45,
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.9,
+    });
+    const targetSquareMat = material({
+      color: 0x34d399,
+      emissive: 0x0d3b2a,
+      transparent: true,
+      opacity: 0.4,
+    });
+    const targetHaloMat = material({
+      color: 0xbbf7d0,
+      emissive: 0x22c55e,
+      transparent: true,
+      opacity: 0.5,
+    });
+    const captureMat = material({
+      color: 0xf97316,
+      emissive: 0x6b2508,
+      transparent: true,
+      opacity: 0.92,
     });
     const selectedMat = material({
       color: 0xf8d77e,
       emissive: 0x6a4b10,
       transparent: true,
-      opacity: 0.72,
+      opacity: 0.84,
     });
     const lastMoveMat = material({
       color: 0x60a5fa,
@@ -289,6 +368,16 @@
       transparent: true,
       opacity: 0.42,
     });
+    for (const mat of [
+      targetMat,
+      targetSquareMat,
+      targetHaloMat,
+      captureMat,
+      selectedMat,
+      lastMoveMat,
+    ]) {
+      mat.depthWrite = false;
+    }
 
     if (state.lastMove) {
       for (const coord of [state.lastMove.from, state.lastMove.to]) {
@@ -303,49 +392,103 @@
       addMesh(highlightLayer, new THREE.BoxGeometry(0.88, 0.045, 0.88), selectedMat, [pos.x, 0.12, pos.z]);
     }
 
+    const targetSquares = new Map<string, ChessMove>();
     for (const move of selectedMoves) {
+      targetSquares.set(squareKey(move.to), move);
+    }
+
+    for (const move of targetSquares.values()) {
       const pos = squarePosition(move.to.x, move.to.y);
+      addMesh(
+        highlightLayer,
+        new THREE.BoxGeometry(0.9, 0.035, 0.9),
+        targetSquareMat,
+        [pos.x, 0.18, pos.z],
+      );
+      const halo = addMesh(
+        highlightLayer,
+        new THREE.TorusGeometry(0.37, 0.045, 12, 44),
+        targetHaloMat,
+        [pos.x, 0.28, pos.z],
+        [Math.PI / 2, 0, 0],
+      );
+      halo.userData = { x: move.to.x, y: move.to.y };
+      interactiveObjects.push(halo);
+
       const target = addMesh(
         highlightLayer,
-        new THREE.CylinderGeometry(0.32, 0.32, 0.055, 32),
+        new THREE.CylinderGeometry(0.18, 0.24, 0.34, 32),
         targetMat,
-        [pos.x, 0.16, pos.z],
+        [pos.x, 0.39, pos.z],
       );
       target.userData = { x: move.to.x, y: move.to.y };
       interactiveObjects.push(target);
+
+      if (targetHasCapture(move.to.x, move.to.y)) {
+        const ring = addMesh(
+          highlightLayer,
+          new THREE.TorusGeometry(0.43, 0.045, 12, 42),
+          captureMat,
+          [pos.x, 0.22, pos.z],
+          [Math.PI / 2, 0, 0],
+        );
+        ring.userData = { x: move.to.x, y: move.to.y };
+        interactiveObjects.push(ring);
+      }
     }
   }
 
-  function addPieces() {
+  function addPieces(previousState: ChessState | undefined, animateMove: boolean) {
     if (!pieceLayer || !state) return;
 
     for (const piece of state.pieces) {
       const model = createPieceModel(piece);
-      const position = squarePosition(piece.x, piece.y);
-      model.position.set(position.x, 0.16, position.z);
+      const targetCoord = { x: piece.x, y: piece.y };
+      const startCoord = startCoordForPiece(piece, previousState, animateMove);
+      const start = squarePosition(startCoord.x, startCoord.y);
+      const target = squarePosition(targetCoord.x, targetCoord.y);
+      const isMoving = squareKey(startCoord) !== squareKey(targetCoord);
+      model.position.set(start.x, 0.16, start.z);
+      model.userData = {
+        ...model.userData,
+        startX: start.x,
+        startZ: start.z,
+        targetX: target.x,
+        targetZ: target.z,
+        moveStartedAt: performance.now(),
+        moveDuration: isMoving ? MOVE_ANIMATION_MS : 0,
+        moving: isMoving,
+      };
+      model.traverse((object) => {
+        object.userData = model.userData;
+      });
       pieceLayer.add(model);
       interactiveObjects.push(...model.children);
     }
   }
 
-  function syncDynamicScene() {
-    const nextMovesKey = selectedMovesKey();
+  function syncDynamicScene(
+    nextMovesKey = selectedMovesRenderKey,
+    nextSelectedPieceId = selectedPieceId,
+  ) {
     if (
       activeState === state &&
-      activeSelectedPieceId === selectedPieceId &&
+      activeSelectedPieceId === nextSelectedPieceId &&
       activeSelectedMovesKey === nextMovesKey
     ) {
       return;
     }
 
+    const previousState = activeState;
+    const shouldAnimateMove = Boolean(previousState && previousState !== state);
     activeState = state;
-    activeSelectedPieceId = selectedPieceId;
+    activeSelectedPieceId = nextSelectedPieceId;
     activeSelectedMovesKey = nextMovesKey;
     interactiveObjects.splice(boardObjects.length);
     clearLayer(pieceLayer);
     clearLayer(highlightLayer);
     addHighlights();
-    addPieces();
+    addPieces(previousState, shouldAnimateMove);
   }
 
   function updateCamera() {
@@ -385,12 +528,48 @@
   }
 
   function animate() {
-    const elapsed = (performance.now() - startedAt) / 1000;
+    const now = performance.now();
+    const elapsed = (now - startedAt) / 1000;
     if (pieceLayer) {
       for (const child of pieceLayer.children) {
         const selected = Boolean(child.userData.selected);
+        const duration = Number(child.userData.moveDuration ?? 0);
+        if (duration > 0) {
+          const rawProgress = Math.min(
+            1,
+            (now - Number(child.userData.moveStartedAt ?? now)) / duration,
+          );
+          const progress = easeOutCubic(rawProgress);
+          child.position.x = THREE.MathUtils.lerp(
+            Number(child.userData.startX),
+            Number(child.userData.targetX),
+            progress,
+          );
+          child.position.z = THREE.MathUtils.lerp(
+            Number(child.userData.startZ),
+            Number(child.userData.targetZ),
+            progress,
+          );
+          child.userData.moving = rawProgress < 1;
+          if (rawProgress >= 1) {
+            child.userData.moveDuration = 0;
+          }
+        }
+
+        const movingLift = child.userData.moving
+          ? Math.sin(
+              Math.min(
+                1,
+                (now - Number(child.userData.moveStartedAt ?? now)) /
+                  Math.max(1, duration),
+              ) * Math.PI,
+            ) * 0.24
+          : 0;
         child.position.y =
-          child.userData.baseY + (selected ? 0.2 : 0) + Math.sin(elapsed * 2 + child.position.x) * 0.018;
+          child.userData.baseY +
+          movingLift +
+          (selected ? 0.2 : 0) +
+          Math.sin(elapsed * 2 + child.position.x) * 0.018;
       }
     }
     updateCamera();
@@ -579,8 +758,10 @@
         {#each boardIndexes as x (x)}
           {@const piece = state?.pieces.find((item) => item.x === x && item.y === y)}
           {@const target = selectedMoves.some((move) => move.to.x === x && move.to.y === y)}
+          {@const captureTarget = targetHasCapture(x, y)}
+          {@const selected = piece?.id === selectedPieceId}
           <button
-            class={`fallback-square ${(x + y) % 2 === 0 ? 'light' : 'dark'} ${target ? 'target' : ''}`}
+            class={`fallback-square ${(x + y) % 2 === 0 ? 'light' : 'dark'} ${target ? 'target' : ''} ${captureTarget ? 'capture-target' : ''} ${selected ? 'selected-square' : ''}`}
             type="button"
             aria-label={coordinateLabel(x, y)}
             on:click={() => onSquare(x, y)}
@@ -590,7 +771,7 @@
             {/if}
             {#if piece}
               <span
-                class={`fallback-piece ${piece.owner === 0 ? 'white' : 'black'} ${piece.id === selectedPieceId ? 'selected' : ''}`}
+                class={`fallback-piece ${piece.owner === 0 ? 'white' : 'black'} ${selected ? 'selected' : ''}`}
               >
                 {pieceGlyph(piece)}
               </span>
@@ -677,12 +858,26 @@
     box-shadow: inset 0 0 0 4px rgba(52, 211, 153, 0.72);
   }
 
+  .fallback-square.selected-square {
+    box-shadow: inset 0 0 0 4px rgba(248, 215, 126, 0.78);
+  }
+
+  .fallback-square.capture-target {
+    box-shadow: inset 0 0 0 4px rgba(249, 115, 22, 0.76);
+  }
+
   .fallback-target {
     position: absolute;
     inset: 32%;
     border-radius: 999px;
     background: rgba(52, 211, 153, 0.72);
     transform: translateZ(18px);
+  }
+
+  .fallback-square.capture-target .fallback-target {
+    inset: 20%;
+    border: 3px solid rgba(249, 115, 22, 0.82);
+    background: transparent;
   }
 
   .fallback-piece {
