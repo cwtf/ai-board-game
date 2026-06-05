@@ -41,14 +41,16 @@
 
   // Highlight and menu state
   let hoveredObject: THREE.Object3D | null = null;
-  let activeCardMenu: {
+  let cardOverlays: Array<{
+    id: string | number;
+    type: 'card' | 'deck';
     card?: Card;
-    deckTier?: Tier;
-    x: number;
-    y: number;
+    tier?: Tier;
     buyMove?: SplendorMove;
     reserveMove?: SplendorMove;
-  } | null = null;
+    x: number;
+    y: number;
+  }> = [];
 
   // Keep track of dimensions
   let width = 800;
@@ -892,48 +894,69 @@
       }
     });
 
-    // 3. Keep active card popup position synced with screen space if camera rotates
-    if (activeCardMenu) {
-      updateMenuPosition();
-    }
+    // 3. Update the card overlays positions
+    updateCardOverlays();
 
     controls.update();
     renderer.render(scene, camera);
   }
 
-  function updateMenuPosition() {
-    if (!activeCardMenu || !camera || !canvasEl) return;
-
-    let targetPos = new THREE.Vector3();
-    let found = false;
-
-    if (activeCardMenu.card) {
-      const searchCard = activeCardMenu.card;
-      const mesh = interactiveGroup.children.find(
-        (child) => child.userData.type === 'card' && child.userData.card.id === searchCard.id
-      );
-      if (mesh) {
-        mesh.getWorldPosition(targetPos);
-        found = true;
-      }
-    } else if (activeCardMenu.deckTier) {
-      const searchTier = activeCardMenu.deckTier;
-      const mesh = interactiveGroup.children.find(
-        (child) => child.userData.type === 'deck' && child.userData.tier === searchTier
-      );
-      if (mesh) {
-        mesh.getWorldPosition(targetPos);
-        found = true;
-      }
+  function updateCardOverlays() {
+    if (!camera || !canvasEl || !scene) {
+      cardOverlays = [];
+      return;
     }
 
-    if (found) {
-      // Project 3D coordinate to 2D screen coordinate
-      targetPos.project(camera);
-      const x = (targetPos.x * 0.5 + 0.5) * width;
-      const y = (-(targetPos.y * 0.5) + 0.5) * height;
-      activeCardMenu = { ...activeCardMenu, x, y };
-    }
+    const tempOverlays: typeof cardOverlays = [];
+    const tempPos = new THREE.Vector3();
+
+    interactiveGroup.children.forEach((obj) => {
+      if (obj.userData.type === 'card') {
+        const card = obj.userData.card;
+        
+        // In local coordinates, card is centered at 0, 0, 0
+        // Width is CARD_W along X, Depth is CARD_D along Z
+        // Project bottom-right corner of card: (CARD_W / 2, 0, CARD_D / 2)
+        // We inset it slightly to stay within card visual boundary
+        tempPos.set(CARD_W / 2 - 0.12, 0, CARD_D / 2 - 0.12);
+        obj.localToWorld(tempPos);
+        tempPos.project(camera);
+
+        const x = (tempPos.x * 0.5 + 0.5) * width;
+        const y = (-(tempPos.y * 0.5) + 0.5) * height;
+
+        tempOverlays.push({
+          id: card.id,
+          type: 'card',
+          card: card,
+          buyMove: findBuyMove(card.id, 'board'),
+          reserveMove: findReserveMove(card.id),
+          x,
+          y,
+        });
+      } else if (obj.userData.type === 'deck') {
+        const tier = obj.userData.tier as Tier;
+        
+        // Project bottom-right corner of deck
+        tempPos.set(CARD_W / 2 - 0.12, 0, CARD_D / 2 - 0.12);
+        obj.localToWorld(tempPos);
+        tempPos.project(camera);
+
+        const x = (tempPos.x * 0.5 + 0.5) * width;
+        const y = (-(tempPos.y * 0.5) + 0.5) * height;
+
+        tempOverlays.push({
+          id: `deck-${tier}`,
+          type: 'deck',
+          tier: tier,
+          reserveMove: findReserveDeckMove(tier),
+          x,
+          y,
+        });
+      }
+    });
+
+    cardOverlays = tempOverlays;
   }
 
   // Pointer Interaction Handlers
@@ -990,59 +1013,17 @@
 
       const ud = rootObj.userData;
 
-      if (ud.type === 'card') {
-        if (!humanCanAct) return;
-        const buyMove = ud.buyMove;
-        const reserveMove = ud.reserveMove;
-
-        if (buyMove || reserveMove) {
-          // Calculate screen position
-          const targetPos = new THREE.Vector3();
-          rootObj.getWorldPosition(targetPos);
-          targetPos.project(camera);
-          const x = (targetPos.x * 0.5 + 0.5) * width;
-          const y = (-(targetPos.y * 0.5) + 0.5) * height;
-
-          activeCardMenu = {
-            card: ud.card,
-            x,
-            y,
-            buyMove,
-            reserveMove,
-          };
-        }
-        return;
-      } else if (ud.type === 'deck') {
-        if (!humanCanAct) return;
-        const reserveMove = ud.reserveMove;
-
-        if (reserveMove) {
-          const targetPos = new THREE.Vector3();
-          rootObj.getWorldPosition(targetPos);
-          targetPos.project(camera);
-          const x = (targetPos.x * 0.5 + 0.5) * width;
-          const y = (-(targetPos.y * 0.5) + 0.5) * height;
-
-          activeCardMenu = {
-            deckTier: ud.tier,
-            x,
-            y,
-            reserveMove,
-          };
-        }
+      if (ud.type === 'card' || ud.type === 'deck') {
+        // Clicks on the card or deck itself are handled by the direct overlay HTML buttons
         return;
       } else if (ud.type === 'gem') {
         if (!humanCanAct) return;
         if (ud.gem !== 'gold') {
           onSelectGem(ud.gem as Gem);
         }
-        activeCardMenu = null;
         return;
       }
     }
-
-    // Clicked empty space
-    activeCardMenu = null;
   }
 
   onMount(() => {
@@ -1202,64 +1183,51 @@
     <span class="font-medium text-neutral-200">Controls:</span> Left-Click + Drag to rotate • Right-Click + Drag to pan • Scroll to zoom
   </div>
 
-  <!-- Floating Context Menu Overlay for Board Actions -->
-  {#if activeCardMenu && humanCanAct}
-    <div
-      class="absolute z-50 flex min-w-36 flex-col gap-1 rounded-md border border-neutral-800 bg-neutral-950/95 p-2 shadow-2xl backdrop-blur-sm ring-1 ring-white/10"
-      style={`left: ${activeCardMenu.x}px; top: ${activeCardMenu.y}px; transform: translate(-50%, -100%) translateY(-18px);`}
-    >
-      {#if activeCardMenu.card}
-        <div class="mb-1.5 border-b border-neutral-800 pb-1 text-center text-[10px] font-semibold text-neutral-400">
-          Card {activeCardMenu.card.id}
-        </div>
-        {#if activeCardMenu.buyMove}
-          <button
-            class="w-full cursor-pointer rounded bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-neutral-950 transition hover:bg-emerald-400 active:scale-[0.98]"
-            type="button"
-            on:click={() => {
-              if (activeCardMenu?.buyMove) onBeginMove(activeCardMenu.buyMove);
-              activeCardMenu = null;
-            }}
-          >
-            Buy Card
-          </button>
-        {/if}
-        {#if activeCardMenu.reserveMove}
-          <button
-            class="w-full cursor-pointer rounded border border-amber-300/80 bg-neutral-900/60 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-300/10 active:scale-[0.98]"
-            type="button"
-            on:click={() => {
-              if (activeCardMenu?.reserveMove) onBeginMove(activeCardMenu.reserveMove);
-              activeCardMenu = null;
-            }}
-          >
-            Reserve Card
-          </button>
-        {/if}
-      {:else if activeCardMenu.deckTier}
-        <div class="mb-1.5 border-b border-neutral-800 pb-1 text-center text-[10px] font-semibold text-neutral-400">
-          Tier {activeCardMenu.deckTier} Deck
-        </div>
-        {#if activeCardMenu.reserveMove}
-          <button
-            class="w-full cursor-pointer rounded border border-amber-300/80 bg-neutral-900/60 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-300/10 active:scale-[0.98]"
-            type="button"
-            on:click={() => {
-              if (activeCardMenu?.reserveMove) onBeginMove(activeCardMenu.reserveMove);
-              activeCardMenu = null;
-            }}
-          >
-            Reserve Face-down
-          </button>
-        {/if}
-      {/if}
-      <button
-        class="w-full cursor-pointer rounded border border-neutral-800 bg-neutral-900/40 px-3 py-1 text-xs text-neutral-400 transition hover:bg-neutral-800 hover:text-neutral-200"
-        type="button"
-        on:click={() => (activeCardMenu = null)}
+  <!-- Floating Action Buttons Over Cards and Decks in 3D Mode -->
+  {#if humanCanAct}
+    {#each cardOverlays as overlay (overlay.id)}
+      <div
+        class="absolute pointer-events-auto z-40 flex flex-col gap-1"
+        style={`left: ${overlay.x}px; top: ${overlay.y}px; transform: translate(-100%, -100%) translate(-4px, -4px);`}
+        on:mousedown|stopPropagation
+        on:mouseup|stopPropagation
+        on:click|stopPropagation
       >
-        Cancel
-      </button>
-    </div>
+        {#if overlay.type === 'card'}
+          <button
+            class="cursor-pointer rounded bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
+            type="button"
+            disabled={!overlay.buyMove}
+            on:click|stopPropagation={() => {
+              if (overlay.buyMove) onBeginMove(overlay.buyMove);
+            }}
+          >
+            Buy
+          </button>
+          
+          <button
+            class="cursor-pointer rounded border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
+            type="button"
+            disabled={!overlay.reserveMove}
+            on:click|stopPropagation={() => {
+              if (overlay.reserveMove) onBeginMove(overlay.reserveMove);
+            }}
+          >
+            Reserve
+          </button>
+        {:else if overlay.type === 'deck'}
+          <button
+            class="cursor-pointer rounded border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
+            type="button"
+            disabled={!overlay.reserveMove}
+            on:click|stopPropagation={() => {
+              if (overlay.reserveMove) onBeginMove(overlay.reserveMove);
+            }}
+          >
+            Reserve
+          </button>
+        {/if}
+      </div>
+    {/each}
   {/if}
 </div>
