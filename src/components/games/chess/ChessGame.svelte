@@ -20,7 +20,7 @@
   import { hashWithSeed, seedFromHash } from '@/lib/games/shared/seed-url';
   import type { AIPlayerConfig, MoveRecord } from '@/lib/games/shared/types';
   import { chessAdapter } from '@/lib/games/chess/ai-adapter';
-  import { chooseChessBotMove } from '@/lib/games/chess/bot';
+  import { chooseChessBotMoveAsync } from '@/lib/games/chess/bot';
   import { formatChessMove } from '@/lib/games/chess/move-format';
   import { legalMoves, pieceAt } from '@/lib/games/chess/rules';
   import {
@@ -180,17 +180,18 @@
       kind: 'local',
       label: 'Local bot',
       model: 'Local bot',
-      chooseMove({ state: currentState, player, legalMoves: moves, signal }) {
+      async chooseMove({ state: currentState, player, legalMoves: moves, signal }) {
         if (signal?.aborted) {
           const error = new Error('AI move aborted.');
           error.name = 'AbortError';
           throw error;
         }
 
-        return chooseChessBotMove({
+        return chooseChessBotMoveAsync({
           state: currentState,
           player,
           legalMoves: moves,
+          signal,
         });
       },
     };
