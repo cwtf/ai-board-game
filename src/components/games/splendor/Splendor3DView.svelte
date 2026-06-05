@@ -88,8 +88,9 @@
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
 
     if (type === 'buy') {
@@ -216,8 +217,9 @@
         ctx.moveTo(pillX + r, pillY);
         ctx.lineTo(pillX + pillW - r, pillY);
         ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, r);
-        ctx.lineTo(pillX + r, pillY + pillH);
+        ctx.arcTo(pillX + pillW, pillY + pillH, pillX, pillY + pillH, r);
         ctx.arcTo(pillX, pillY + pillH, pillX, pillY, r);
+        ctx.arcTo(pillX, pillY, pillX + pillW, pillY, r);
         ctx.closePath();
 
         ctx.fillStyle = gemColors[gem];
@@ -377,8 +379,9 @@
         ctx.moveTo(pillX + r, pillY);
         ctx.lineTo(pillX + pillW - r, pillY);
         ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, r);
-        ctx.lineTo(pillX + r, pillY + pillH);
+        ctx.arcTo(pillX + pillW, pillY + pillH, pillX, pillY + pillH, r);
         ctx.arcTo(pillX, pillY + pillH, pillX, pillY, r);
+        ctx.arcTo(pillX, pillY, pillX + pillW, pillY, r);
         ctx.closePath();
 
         ctx.fillStyle = gemColors[gem];
@@ -673,8 +676,9 @@
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
 
     if (isActive) {
