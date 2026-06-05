@@ -1040,7 +1040,6 @@
     // 1. Initialize Scene, Camera & WebGLRenderer
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0a);
-    scene.fog = new THREE.FogExp2(0x0a0a0a, 0.04);
 
     const aspect = containerEl.clientWidth / containerEl.clientHeight;
     camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 100);
