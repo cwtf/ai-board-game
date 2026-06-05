@@ -1530,8 +1530,8 @@
   ></canvas>
 
   <!-- Interactive Camera Overlay Instructions -->
-  <div class="pointer-events-none absolute bottom-3 left-3 select-none rounded-md bg-neutral-950/85 px-3 py-1.5 text-[10px] text-neutral-400 border border-neutral-800/80 ring-1 ring-white/5">
-    <span class="font-medium text-neutral-200">Controls:</span> Left-Click + Drag to rotate • Right-Click + Drag to pan • Scroll to zoom
+  <div class="pointer-events-none absolute right-4 top-4 select-none rounded-md bg-neutral-950/85 px-3 py-1.5 text-[10px] text-neutral-400 border border-neutral-800/80 ring-1 ring-white/5">
+    <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
   </div>
 
   <!-- Direct canvas buttons require no Svelte overlay DOM element structures -->
