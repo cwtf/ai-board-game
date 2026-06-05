@@ -37,6 +37,7 @@
   // Cache for loaded image textures
   const textureCache = new Map<string, THREE.Texture>();
   const textureLoader = new THREE.TextureLoader();
+  const gemImages = new Map<GemOrGold, HTMLImageElement>();
 
   // Highlight and menu state
   let hoveredObject: THREE.Object3D | null = null;
@@ -70,6 +71,262 @@
     }
     const texture = textureLoader.load(url);
     textureCache.set(url, texture);
+    return texture;
+  }
+
+  function drawCardMetadata(ctx: CanvasRenderingContext2D, card: Card, texture: THREE.Texture) {
+    const gemColors: Record<GemOrGold, string> = {
+      emerald: '#10b981',
+      sapphire: '#3b82f6',
+      ruby: '#ef4444',
+      diamond: '#e5e7eb',
+      onyx: '#4b5563',
+      gold: '#fbbf24',
+    };
+
+    // 1. Draw Bonus Gem in Top-Left
+    ctx.save();
+    ctx.fillStyle = gemColors[card.bonus];
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(54, 54, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw the gem SVG icon inside the circle
+    const svgImg = gemImages.get(card.bonus);
+    if (svgImg) {
+      ctx.drawImage(svgImg, 54 - 20, 54 - 20, 40, 40);
+    } else {
+      const img = new Image();
+      img.src = `/assets/splendor/gems/${card.bonus}.svg`;
+      img.onload = () => {
+        gemImages.set(card.bonus, img);
+        ctx.save();
+        ctx.fillStyle = gemColors[card.bonus];
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(54, 54, 34, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.drawImage(img, 54 - 20, 54 - 20, 40, 40);
+        ctx.restore();
+        texture.needsUpdate = true;
+      };
+    }
+    ctx.restore();
+
+    // 2. Draw Prestige Points in Top-Right
+    if (card.prestige > 0) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(458, 54, 30, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(card.prestige), 458, 54);
+      ctx.restore();
+    }
+
+    // 3. Draw Cost bubbles in Bottom-Left
+    ctx.save();
+    let idx = 0;
+    const spacing = 64;
+    const startY = 662;
+    const startX = 50;
+
+    for (const gem of GEMS) {
+      const costAmount = card.cost[gem];
+      if (costAmount && costAmount > 0) {
+        const yPos = startY - idx * spacing;
+        
+        ctx.fillStyle = gemColors[gem];
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(startX, yPos, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = (gem === 'diamond' || gem === 'emerald') ? '#111827' : '#ffffff';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(costAmount), startX, yPos);
+
+        idx++;
+      }
+    }
+    ctx.restore();
+  }
+
+  function getCachedDynamicCardTexture(card: Card, tier: Tier): THREE.Texture {
+    const cacheKey = `card-${card.id}`;
+    if (textureCache.has(cacheKey)) {
+      return textureCache.get(cacheKey)!;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 716;
+    const ctx = canvas.getContext('2d');
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    textureCache.set(cacheKey, texture);
+
+    if (ctx) {
+      const colors = {
+        1: '#14532d',
+        2: '#1e3a8a',
+        3: '#581c87'
+      };
+      ctx.fillStyle = colors[tier];
+      ctx.fillRect(0, 0, 512, 716);
+      
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 12;
+      ctx.strokeRect(10, 10, 492, 696);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Loading ${card.id}...`, 256, 358);
+      texture.needsUpdate = true;
+
+      const img = new Image();
+      img.src = `/assets/splendor/cards/${card.id}.png`;
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, 512, 716);
+        drawCardMetadata(ctx, card, texture);
+        texture.needsUpdate = true;
+      };
+      img.onerror = () => {
+        ctx.fillStyle = '#222222';
+        ctx.fillRect(0, 0, 512, 716);
+        ctx.strokeStyle = '#ff3333';
+        ctx.lineWidth = 10;
+        ctx.strokeRect(10, 10, 492, 696);
+        drawCardMetadata(ctx, card, texture);
+        texture.needsUpdate = true;
+      };
+    }
+
+    return texture;
+  }
+
+  function drawNobleMetadata(ctx: CanvasRenderingContext2D, noble: Noble) {
+    const gemColors: Record<GemOrGold, string> = {
+      emerald: '#10b981',
+      sapphire: '#3b82f6',
+      ruby: '#ef4444',
+      diamond: '#e5e7eb',
+      onyx: '#4b5563',
+      gold: '#fbbf24',
+    };
+
+    // 1. Draw gold prestige points in Top-Right
+    ctx.save();
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(458, 54, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#fef3c7';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(noble.prestige), 458, 54);
+    ctx.restore();
+
+    // 2. Draw cost bubbles in Bottom-Left
+    ctx.save();
+    let idx = 0;
+    const spacing = 64;
+    const startY = 356;
+    const startX = 50;
+
+    for (const gem of GEMS) {
+      const costAmount = noble.cost[gem];
+      if (costAmount && costAmount > 0) {
+        const yPos = startY - idx * spacing;
+
+        ctx.fillStyle = gemColors[gem];
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(startX, yPos, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = (gem === 'diamond' || gem === 'emerald') ? '#111827' : '#ffffff';
+        ctx.font = 'bold 28px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(costAmount), startX, yPos);
+
+        idx++;
+      }
+    }
+    ctx.restore();
+  }
+
+  function getCachedDynamicNobleTexture(noble: Noble): THREE.Texture {
+    const cacheKey = `noble-${noble.id}`;
+    if (textureCache.has(cacheKey)) {
+      return textureCache.get(cacheKey)!;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 410;
+    const ctx = canvas.getContext('2d');
+
+    const texture = new THREE.CanvasTexture(canvas);
+    textureCache.set(cacheKey, texture);
+
+    if (ctx) {
+      ctx.fillStyle = '#3b0764';
+      ctx.fillRect(0, 0, 512, 410);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 10;
+      ctx.strokeRect(8, 8, 496, 394);
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Loading Noble ${noble.id}...`, 256, 205);
+      texture.needsUpdate = true;
+
+      const img = new Image();
+      img.src = `/assets/splendor/nobles/${noble.id}.png`;
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, 512, 410);
+        drawNobleMetadata(ctx, noble);
+        texture.needsUpdate = true;
+      };
+      img.onerror = () => {
+        ctx.fillStyle = '#222222';
+        ctx.fillRect(0, 0, 512, 410);
+        ctx.strokeStyle = '#ff3333';
+        ctx.lineWidth = 10;
+        ctx.strokeRect(8, 8, 496, 394);
+        drawNobleMetadata(ctx, noble);
+        texture.needsUpdate = true;
+      };
+    }
+
     return texture;
   }
 
@@ -394,7 +651,7 @@
           const height = 0.01;
           const geometry = new THREE.BoxGeometry(CARD_W, height, CARD_D);
 
-          const cardTexture = getCachedTexture(`/assets/splendor/cards/${card.id}.png`);
+          const cardTexture = getCachedDynamicCardTexture(card, tier);
           const frontMat = new THREE.MeshStandardMaterial({
             map: cardTexture,
             roughness: 0.3,
@@ -434,7 +691,7 @@
       const height = 0.02;
       const geometry = new THREE.BoxGeometry(NOBLE_W, height, NOBLE_D);
 
-      const nobleTex = getCachedTexture(`/assets/splendor/nobles/${noble.id}.png`);
+      const nobleTex = getCachedDynamicNobleTexture(noble);
       const topMat = new THREE.MeshStandardMaterial({
         map: nobleTex,
         roughness: 0.3,
