@@ -2,48 +2,30 @@
 import JungleChessGame from '@/components/games/jungle-chess/JungleChessGame.svelte';
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
-import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+import { createGameJsonLd, gameSeoById } from '@/lib/seo';
+import { siteUrl } from '@/lib/site';
 import '../styles/global.css';
 
 const baseUrl = siteUrl();
-const pageDescription =
-  'Play 3D 斗兽棋 against configurable AI opponents in a browser-based local-first board game table.';
-const pageImage = '/screenshots/splendor.png';
-const jungleChessJsonLd = {
-  '@type': 'VideoGame',
-  '@id': `${absoluteSiteUrl('/jungle-chess', baseUrl)}#game`,
-  name: '斗兽棋 AI Game',
-  url: absoluteSiteUrl('/jungle-chess', baseUrl),
-  description: pageDescription,
-  image: absoluteSiteUrl(pageImage, baseUrl),
-  gamePlatform: 'Web browser',
-  applicationCategory: 'Game',
-  operatingSystem: 'Web',
-  numberOfPlayers: {
-    '@type': 'QuantitativeValue',
-    minValue: 2,
-    maxValue: 2,
-  },
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'USD',
-  },
-};
+const pageSeo = gameSeoById['jungle-chess'];
+const jungleChessJsonLd = createGameJsonLd(pageSeo, baseUrl);
 ---
 
 <html lang="en">
   <head>
     <SEO
-      title="斗兽棋 AI Game | AI Board Game Platform"
-      description={pageDescription}
-      path="/jungle-chess"
-      image={pageImage}
-      imageAlt="3D Jungle Chess AI game table"
+      title={pageSeo.title}
+      description={pageSeo.description}
+      path={pageSeo.path}
+      image={pageSeo.image}
+      imageAlt={pageSeo.imageAlt}
+      keywords={pageSeo.keywords}
       jsonLd={jungleChessJsonLd}
     />
   </head>
-  <body class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100">
+  <body
+    class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100"
+  >
     <Header client:load backHref="/" />
     <main class="min-h-0 flex-1 overflow-hidden">
       <JungleChessGame client:load />

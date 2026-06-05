@@ -11,13 +11,13 @@ type JungleBotWorkerResponse =
   | { ok: true; move: JungleMove }
   | { ok: false; error: string };
 
-interface JungleBotWorkerScope extends DedicatedWorkerGlobalScope {
+type JungleBotWorkerScope = {
   addEventListener(
     type: 'message',
     listener: (event: MessageEvent<JungleBotWorkerRequest>) => void,
   ): void;
   postMessage(message: JungleBotWorkerResponse): void;
-}
+};
 
 const ctx = globalThis as unknown as JungleBotWorkerScope;
 

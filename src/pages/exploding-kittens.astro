@@ -2,46 +2,30 @@
 import Header from '@/components/shell/Header.svelte';
 import ExplodingKittensGame from '@/components/games/exploding-kittens/ExplodingKittensGame.svelte';
 import SEO from '@/components/shell/SEO.astro';
-import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+import { createGameJsonLd, gameSeoById } from '@/lib/seo';
+import { siteUrl } from '@/lib/site';
 import '../styles/global.css';
 
 const baseUrl = siteUrl();
-const pageDescription =
-  'Play Exploding Kittens against configurable AI opponents in a browser-based local-first board game table.';
-const explodingKittensJsonLd = {
-  '@type': 'VideoGame',
-  '@id': `${absoluteSiteUrl('/exploding-kittens', baseUrl)}#game`,
-  name: 'Exploding Kittens AI Game',
-  url: absoluteSiteUrl('/exploding-kittens', baseUrl),
-  description: pageDescription,
-  gamePlatform: 'Web browser',
-  applicationCategory: 'Game',
-  operatingSystem: 'Web',
-  numberOfPlayers: {
-    '@type': 'QuantitativeValue',
-    minValue: 2,
-    maxValue: 5,
-  },
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'USD',
-  },
-};
+const pageSeo = gameSeoById['exploding-kittens'];
+const explodingKittensJsonLd = createGameJsonLd(pageSeo, baseUrl);
 ---
 
 <html lang="en">
   <head>
     <SEO
-      title="Exploding Kittens AI Game | AI Board Game Platform"
-      description={pageDescription}
-      path="/exploding-kittens"
-      image="/screenshots/exploding-kittens.png"
-      imageAlt="Exploding Kittens AI game table screenshot"
+      title={pageSeo.title}
+      description={pageSeo.description}
+      path={pageSeo.path}
+      image={pageSeo.image}
+      imageAlt={pageSeo.imageAlt}
+      keywords={pageSeo.keywords}
       jsonLd={explodingKittensJsonLd}
     />
   </head>
-  <body class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100">
+  <body
+    class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100"
+  >
     <Header client:load backHref="/" />
     <main class="min-h-0 flex-1 overflow-hidden">
       <ExplodingKittensGame client:load />

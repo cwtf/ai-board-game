@@ -1,12 +1,10 @@
 import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+import { publicSeoRoutes } from '@/lib/seo';
 
-const routes = [
-  '/',
-  '/about',
-  '/splendor',
-  '/secret-hitler',
-  '/exploding-kittens',
-];
+const routePriority = new Map([
+  ['/', '1.0'],
+  ['/about', '0.6'],
+]);
 
 function escapeXml(value: string): string {
   return value
@@ -18,13 +16,17 @@ function escapeXml(value: string): string {
 }
 
 export function GET() {
-  const urls = routes
+  const urls = publicSeoRoutes
     .map((route) => {
-      const location = escapeXml(absoluteSiteUrl(route, siteUrl()));
+      const location = escapeXml(absoluteSiteUrl(route.path, siteUrl()));
+      const priority =
+        routePriority.get(route.path) ?? (route.path === '/' ? '1.0' : '0.8');
 
       return [
         '  <url>',
         `    <loc>${location}</loc>`,
+        '    <changefreq>weekly</changefreq>',
+        `    <priority>${priority}</priority>`,
         '  </url>',
       ].join('\n');
     })

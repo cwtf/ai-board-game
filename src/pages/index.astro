@@ -2,47 +2,23 @@
 import GameGrid from '@/components/games/GameGrid.svelte';
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
-import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+import { createHomeJsonLd, homeSeo } from '@/lib/seo';
+import { siteUrl } from '@/lib/site';
 import '../styles/global.css';
 
 const baseUrl = siteUrl();
-const pageDescription =
-  'Play local-first board games against configurable AI opponents with bring-your-own-key provider settings.';
-const pageImage = '/screenshots/secret-hitler.png';
-const homeJsonLd = [
-  {
-    '@type': 'WebSite',
-    '@id': `${baseUrl}/#website`,
-    name: 'AI Board Games',
-    url: baseUrl,
-    description: pageDescription,
-  },
-  {
-    '@type': 'SoftwareApplication',
-    '@id': `${baseUrl}/#app`,
-    name: 'AI Board Games',
-    applicationCategory: 'GameApplication',
-    operatingSystem: 'Web',
-    url: baseUrl,
-    description: pageDescription,
-    image: absoluteSiteUrl(pageImage, baseUrl),
-    offers: {
-      '@type': 'Offer',
-      price: '0',
-      priceCurrency: 'USD',
-    },
-  },
-];
+const homeJsonLd = createHomeJsonLd(baseUrl);
 ---
 
 <html lang="en">
   <head>
     <SEO
-      title="AI Board Game Platform | Local AI Tabletop Games"
-      description={pageDescription}
-      path="/"
-      image={pageImage}
-      imageAlt="Secret Hitler game table screenshot from AI Board Games"
+      title={homeSeo.title}
+      description={homeSeo.description}
+      path={homeSeo.path}
+      image={homeSeo.image}
+      imageAlt={homeSeo.imageAlt}
+      keywords={homeSeo.keywords}
       jsonLd={homeJsonLd}
     />
   </head>
@@ -83,7 +59,8 @@ const homeJsonLd = [
           <div>
             <h2 class="text-2xl font-semibold tracking-normal">Games</h2>
             <p class="mt-2 text-sm text-neutral-400">
-              Play now, then add model profiles from settings whenever you want AI opponents.
+              Play now, then add model profiles from settings whenever you want
+              AI opponents.
             </p>
           </div>
         </div>

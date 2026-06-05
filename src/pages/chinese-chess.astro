@@ -2,48 +2,30 @@
 import ChineseChessGame from '@/components/games/chinese-chess/ChineseChessGame.svelte';
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
-import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+import { createGameJsonLd, gameSeoById } from '@/lib/seo';
+import { siteUrl } from '@/lib/site';
 import '../styles/global.css';
 
 const baseUrl = siteUrl();
-const pageDescription =
-  'Play 3D 象棋 (Chinese Chess / Xiangqi) against configurable AI opponents in a browser-based local-first board game table.';
-const pageImage = '/screenshots/splendor.png';
-const chineseChessJsonLd = {
-  '@type': 'VideoGame',
-  '@id': `${absoluteSiteUrl('/chinese-chess', baseUrl)}#game`,
-  name: '象棋 AI Game',
-  url: absoluteSiteUrl('/chinese-chess', baseUrl),
-  description: pageDescription,
-  image: absoluteSiteUrl(pageImage, baseUrl),
-  gamePlatform: 'Web browser',
-  applicationCategory: 'Game',
-  operatingSystem: 'Web',
-  numberOfPlayers: {
-    '@type': 'QuantitativeValue',
-    minValue: 2,
-    maxValue: 2,
-  },
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'USD',
-  },
-};
+const pageSeo = gameSeoById['chinese-chess'];
+const chineseChessJsonLd = createGameJsonLd(pageSeo, baseUrl);
 ---
 
 <html lang="en">
   <head>
     <SEO
-      title="象棋 AI Game | AI Board Game Platform"
-      description={pageDescription}
-      path="/chinese-chess"
-      image={pageImage}
-      imageAlt="3D Chinese Chess AI game table"
+      title={pageSeo.title}
+      description={pageSeo.description}
+      path={pageSeo.path}
+      image={pageSeo.image}
+      imageAlt={pageSeo.imageAlt}
+      keywords={pageSeo.keywords}
       jsonLd={chineseChessJsonLd}
     />
   </head>
-  <body class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100">
+  <body
+    class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100"
+  >
     <Header client:load backHref="/" />
     <main class="min-h-0 flex-1 overflow-hidden">
       <ChineseChessGame client:load />

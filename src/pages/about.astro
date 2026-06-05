@@ -1,33 +1,23 @@
 ---
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
-import { absoluteSiteUrl, siteUrl } from '@/lib/site';
+import { aboutSeo, createAboutJsonLd } from '@/lib/seo';
+import { siteUrl } from '@/lib/site';
 import '../styles/global.css';
 
 const baseUrl = siteUrl();
-const aboutJsonLd = {
-  '@type': 'AboutPage',
-  '@id': `${absoluteSiteUrl('/about', baseUrl)}#about`,
-  name: 'About AI Board Games',
-  url: absoluteSiteUrl('/about', baseUrl),
-  mainEntity: {
-    '@type': 'SoftwareApplication',
-    '@id': `${baseUrl}/#app`,
-    name: 'AI Board Games',
-    applicationCategory: 'GameApplication',
-    operatingSystem: 'Web',
-  },
-};
+const aboutJsonLd = createAboutJsonLd(baseUrl);
 ---
 
 <html lang="en">
   <head>
     <SEO
-      title="About | AI Board Game Platform"
-      description="Learn how AI Board Games runs local-first tabletop game engines with configurable AI model profiles and browser-stored provider keys."
-      path="/about"
-      image="/screenshots/secret-hitler.png"
-      imageAlt="AI Board Games browser table screenshot"
+      title={aboutSeo.title}
+      description={aboutSeo.description}
+      path={aboutSeo.path}
+      image={aboutSeo.image}
+      imageAlt={aboutSeo.imageAlt}
+      keywords={aboutSeo.keywords}
       jsonLd={aboutJsonLd}
     />
   </head>
@@ -37,10 +27,14 @@ const aboutJsonLd = {
       <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
         About
       </p>
-      <h1 class="mt-4 max-w-3xl text-4xl font-semibold tracking-normal sm:text-5xl">
+      <h1
+        class="mt-4 max-w-3xl text-4xl font-semibold tracking-normal sm:text-5xl"
+      >
         A local-first board game table for AI opponents.
       </h1>
-      <div class="mt-6 max-w-3xl space-y-4 text-base leading-7 text-neutral-300">
+      <div
+        class="mt-6 max-w-3xl space-y-4 text-base leading-7 text-neutral-300"
+      >
         <p>
           AI Board Games is a browser-based playground for running tabletop
           games against configurable AI players. You pick a game, choose which
@@ -49,10 +43,10 @@ const aboutJsonLd = {
         </p>
         <p>
           The project uses a bring-your-own-key model. Provider credentials are
-          saved in browser storage on your machine, and AI turns are sent only to
-          the provider and model profile you select. The goal is to make it easy
-          to compare different models inside the same board game without hiding
-          the game state or player controls.
+          saved in browser storage on your machine, and AI turns are sent only
+          to the provider and model profile you select. The goal is to make it
+          easy to compare different models inside the same board game without
+          hiding the game state or player controls.
         </p>
       </div>
 
@@ -60,7 +54,8 @@ const aboutJsonLd = {
         <div class="rounded-md border border-neutral-800 bg-neutral-900 p-5">
           <h2 class="text-lg font-semibold tracking-normal">Playable Games</h2>
           <p class="mt-3 text-sm leading-6 text-neutral-400">
-            Splendor and Secret Hitler are currently implemented. More to come soon (if I have the time 😭).
+            Splendor and Secret Hitler are currently implemented. More to come
+            soon (if I have the time 😭).
           </p>
         </div>
         <div class="rounded-md border border-neutral-800 bg-neutral-900 p-5">
@@ -79,13 +74,17 @@ const aboutJsonLd = {
         </div>
       </section>
 
-      <section class="mt-12 rounded-md border border-neutral-800 bg-neutral-900 p-6">
+      <section
+        class="mt-12 rounded-md border border-neutral-800 bg-neutral-900 p-6"
+      >
         <h2 class="text-2xl font-semibold tracking-normal">
           Tools and Frameworks
         </h2>
         <div class="mt-6 grid gap-6 md:grid-cols-2">
           <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-neutral-400">
+            <h3
+              class="text-sm font-semibold uppercase tracking-wide text-neutral-400"
+            >
               Application
             </h3>
             <ul class="mt-3 space-y-2 text-sm leading-6 text-neutral-300">
@@ -93,11 +92,18 @@ const aboutJsonLd = {
               <li>Svelte for interactive game and settings components.</li>
               <li>TypeScript for typed game state, adapters, and UI logic.</li>
               <li>Tailwind CSS for layout and visual styling.</li>
-              <li>Native Web APIs (like <code>localStorage</code> and <code>fetch</code>) for local-first BYOK storage and AI connections without heavy SDKs.</li>
+              <li>
+                Native Web APIs (like <code>localStorage</code> and <code
+                  >fetch</code
+                >) for local-first BYOK storage and AI connections without heavy
+                SDKs.
+              </li>
             </ul>
           </div>
           <div>
-            <h3 class="text-sm font-semibold uppercase tracking-wide text-neutral-400">
+            <h3
+              class="text-sm font-semibold uppercase tracking-wide text-neutral-400"
+            >
               Development
             </h3>
             <ul class="mt-3 space-y-2 text-sm leading-6 text-neutral-300">
@@ -110,7 +116,9 @@ const aboutJsonLd = {
               <li>fal.ai and Python for generating the game asset sets.</li>
               <li>Vitest for rules and AI-adapter tests.</li>
               <li>Astro Check for type and component diagnostics.</li>
-              <li>ESLint for linting JavaScript, TypeScript, Astro, and Svelte.</li>
+              <li>
+                ESLint for linting JavaScript, TypeScript, Astro, and Svelte.
+              </li>
               <li>Prettier with Astro and Svelte plugins for formatting.</li>
               <li>Antigravity + Gemini 3.1 Pro</li>
               <li>Cline + Kimi K2.6</li>
@@ -124,11 +132,12 @@ const aboutJsonLd = {
         class="mt-12 rounded-md border border-neutral-800 bg-neutral-900 p-6"
       >
         <h2 class="text-2xl font-semibold tracking-normal">Built by</h2>
-        <div class="mt-4 max-w-3xl space-y-4 text-base leading-7 text-neutral-300">
+        <div
+          class="mt-4 max-w-3xl space-y-4 text-base leading-7 text-neutral-300"
+        >
           <p>
-            cwtf. AI trainer, recovering software engineer, and the
-            person responsible for this mildly over-engineered board game
-            website.
+            cwtf. AI trainer, recovering software engineer, and the person
+            responsible for this mildly over-engineered board game website.
           </p>
           <p>
             This started as a demo for a corporate AI workshop and somehow
@@ -137,8 +146,8 @@ const aboutJsonLd = {
           </p>
           <p>
             Want to learn how to vibe-code something like this yourself? I run
-            hands-on AI workshops for teams and companies. Yes,
-            they're HRD Corp claimable.
+            hands-on AI workshops for teams and companies. Yes, they're HRD Corp
+            claimable.
           </p>
         </div>
         <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -166,7 +175,7 @@ const aboutJsonLd = {
             >
               <path
                 d="M12 2C6.48 2 2 6.58 2 12.26c0 4.54 2.87 8.39 6.84 9.75.5.09.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.38-3.37-1.38-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.93.86.09-.67.35-1.12.63-1.38-2.22-.26-4.55-1.14-4.55-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.36 9.36 0 0 1 12 6.99c.85 0 1.7.12 2.5.35 1.9-1.33 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.59.69.49A10.04 10.04 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"
-              />
+              ></path>
             </svg>
           </a>
           <a
@@ -185,7 +194,7 @@ const aboutJsonLd = {
             >
               <path
                 d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1s2.48 1.12 2.48 2.5ZM.3 8.1h4.4V23H.3V8.1Zm7.1 0h4.22v2.04h.06c.59-1.12 2.03-2.3 4.18-2.3 4.47 0 5.3 2.94 5.3 6.77V23h-4.4v-7.43c0-1.77-.03-4.05-2.47-4.05-2.47 0-2.85 1.93-2.85 3.92V23H7.4V8.1Z"
-              />
+              ></path>
             </svg>
           </a>
         </div>

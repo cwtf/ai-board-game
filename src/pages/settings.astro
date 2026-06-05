@@ -2,15 +2,18 @@
 import SettingsPanel from '@/components/ai/SettingsPanel.svelte';
 import Header from '@/components/shell/Header.svelte';
 import SEO from '@/components/shell/SEO.astro';
+import { settingsSeo } from '@/lib/seo';
 import '../styles/global.css';
 ---
 
 <html lang="en">
   <head>
     <SEO
-      title="Settings | AI Board Game Platform"
-      description="Configure local browser provider keys and AI model profiles for AI Board Game Platform."
-      path="/settings"
+      title={settingsSeo.title}
+      description={settingsSeo.description}
+      path={settingsSeo.path}
+      image={settingsSeo.image}
+      imageAlt={settingsSeo.imageAlt}
       noindex
     />
   </head>
