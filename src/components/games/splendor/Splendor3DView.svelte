@@ -46,6 +46,29 @@
   // Highlight and menu state
   let hoveredObject: THREE.Object3D | null = null;
 
+  // Animation structures
+  let prevBoardCards: Record<string, string | null> = {};
+  let boardCardMeshes = new Map<string, THREE.Mesh>();
+  interface CardAnimation {
+    type: 'deal' | 'take';
+    mesh: THREE.Mesh;
+    startX: number;
+    startY: number;
+    startZ: number;
+    startRotZ: number;
+    targetX: number;
+    targetY: number;
+    targetZ: number;
+    targetRotZ: number;
+    startTime: number;
+    duration: number;
+  }
+  let activeAnimations: CardAnimation[] = [];
+
+  function easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
   // Keep track of dimensions
   let width = 800;
   let height = 600;
@@ -793,13 +816,159 @@
   function updateScene() {
     if (!scene || !state) return;
 
-    // Clear old elements from interactive group
-    while (interactiveGroup.children.length > 0) {
-      const obj = interactiveGroup.children[0];
-      interactiveGroup.remove(obj);
+    meshMap.clear();
+
+    const cardsToKeep = new Set<THREE.Mesh>();
+
+    // A. Detect card changes and trigger animations
+    for (const tier of [3, 2, 1] as const) {
+      const boardKeyStr = `tier${tier}` as const;
+      const row = state.board[boardKeyStr];
+      const zPos = TIER_Z_MAP[tier];
+
+      row.forEach((card, index) => {
+        const slotKey = `${tier}-${index}`;
+        const newCardId = card ? card.id : null;
+        const oldCardId = prevBoardCards[slotKey] || null;
+
+        if (card) {
+          const cardX = CARD_START_X + index * CARD_SPACING_X;
+          const height = 0.01;
+
+          let mesh = boardCardMeshes.get(slotKey);
+
+          if (!mesh || newCardId !== oldCardId) {
+            // Card changed or is new!
+            if (mesh) {
+              boardCardMeshes.delete(slotKey);
+              interactiveGroup.remove(mesh);
+              scene.add(mesh); // Keep in scene for flight animation
+
+              if (hoveredObject === mesh) hoveredObject = null;
+
+              activeAnimations.push({
+                type: 'take',
+                mesh: mesh,
+                startX: mesh.position.x,
+                startY: mesh.position.y,
+                startZ: mesh.position.z,
+                startRotZ: mesh.rotation.z,
+                targetX: 0,
+                targetY: 2.0,
+                targetZ: 6.0,
+                targetRotZ: Math.PI,
+                startTime: performance.now(),
+                duration: 650,
+              });
+            }
+
+            // Create new card mesh
+            const geometry = new THREE.BoxGeometry(CARD_W, height, CARD_D);
+            const cardTexture = getCachedDynamicCardTexture(card, tier);
+            
+            const item = cardCanvases.get(card.id);
+            if (item && item.img.complete) {
+              item.ctx.drawImage(item.img, 0, 0, 512, 716);
+              drawCardMetadata(item.ctx, card, cardTexture);
+              cardTexture.needsUpdate = true;
+            }
+
+            const frontMat = new THREE.MeshStandardMaterial({
+              map: cardTexture,
+              roughness: 0.3,
+            });
+            const backMat = cardBackMaterials.get(tier)!;
+            const sideMat = cardEdgeMaterial;
+            const materials = [sideMat, sideMat, frontMat, backMat, sideMat, sideMat];
+            
+            mesh = new THREE.Mesh(geometry, materials);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            const maxCards = tier === 1 ? 36 : tier === 2 ? 26 : 16;
+            const deckCount = state.decks[boardKeyStr] ? state.decks[boardKeyStr].length : 0;
+            const deckHeight = 0.04 + (deckCount / maxCards) * 0.46;
+            mesh.position.set(DECK_X, deckHeight, zPos);
+            mesh.rotation.set(0, 0, Math.PI); // face down
+
+            mesh.userData = {
+              type: 'card',
+              card: card,
+              source: 'board',
+              buyMove: findBuyMove(card.id, 'board'),
+              reserveMove: findReserveMove(card.id),
+              isAnimating: true
+            };
+
+            boardCardMeshes.set(slotKey, mesh);
+            interactiveGroup.add(mesh);
+
+            activeAnimations.push({
+              type: 'deal',
+              mesh: mesh,
+              startX: DECK_X,
+              startY: deckHeight,
+              startZ: zPos,
+              startRotZ: Math.PI,
+              targetX: cardX,
+              targetY: height / 2,
+              targetZ: zPos,
+              targetRotZ: 0,
+              startTime: performance.now(),
+              duration: 750,
+            });
+          } else {
+            // Same card: update metadata, moves, and button states
+            mesh.userData.buyMove = findBuyMove(card.id, 'board');
+            mesh.userData.reserveMove = findReserveMove(card.id);
+
+            const cardTexture = getCachedDynamicCardTexture(card, tier);
+            const item = cardCanvases.get(card.id);
+            if (item && item.img.complete) {
+              item.ctx.drawImage(item.img, 0, 0, 512, 716);
+              drawCardMetadata(item.ctx, card, cardTexture);
+              cardTexture.needsUpdate = true;
+            }
+          }
+
+          cardsToKeep.add(mesh);
+        } else {
+          const mesh = boardCardMeshes.get(slotKey);
+          if (mesh) {
+            boardCardMeshes.delete(slotKey);
+            interactiveGroup.remove(mesh);
+            scene.add(mesh);
+
+            if (hoveredObject === mesh) hoveredObject = null;
+
+            activeAnimations.push({
+              type: 'take',
+              mesh: mesh,
+              startX: mesh.position.x,
+              startY: mesh.position.y,
+              startZ: mesh.position.z,
+              startRotZ: mesh.rotation.z,
+              targetX: 0,
+              targetY: 2.0,
+              targetZ: 6.0,
+              targetRotZ: Math.PI,
+              startTime: performance.now(),
+              duration: 650,
+            });
+          }
+        }
+
+        prevBoardCards[slotKey] = newCardId;
+      });
     }
 
-    meshMap.clear();
+    // B. Clean up interactiveGroup: remove anything that is not in cardsToKeep
+    for (let i = interactiveGroup.children.length - 1; i >= 0; i--) {
+      const child = interactiveGroup.children[i];
+      if (!cardsToKeep.has(child as THREE.Mesh)) {
+        interactiveGroup.remove(child);
+      }
+    }
 
     // 1. Render Decks with Thickness Reflecting Remaining Cards
     const deckTiers: Tier[] = [3, 2, 1];
@@ -842,59 +1011,6 @@
 
         interactiveGroup.add(mesh);
       }
-    }
-
-    // 2. Render Face-Up Board Cards
-    for (const tier of [3, 2, 1] as const) {
-      const boardKeyStr = `tier${tier}` as const;
-      const row = state.board[boardKeyStr];
-      const zPos = TIER_Z_MAP[tier];
-
-      row.forEach((card, index) => {
-        if (card) {
-          const cardX = CARD_START_X + index * CARD_SPACING_X;
-
-          // Thin card box
-          const height = 0.01;
-          const geometry = new THREE.BoxGeometry(CARD_W, height, CARD_D);
-
-          const cardTexture = getCachedDynamicCardTexture(card, tier);
-          
-          // Force redraw card metadata texture to update button active/disabled states
-          const item = cardCanvases.get(card.id);
-          if (item && item.img.complete) {
-            item.ctx.drawImage(item.img, 0, 0, 512, 716);
-            drawCardMetadata(item.ctx, card, cardTexture);
-            cardTexture.needsUpdate = true;
-          }
-
-          const frontMat = new THREE.MeshStandardMaterial({
-            map: cardTexture,
-            roughness: 0.3,
-          });
-          const backMat = cardBackMaterials.get(tier)!;
-          const sideMat = cardEdgeMaterial;
-
-          // Box face order: [Right, Left, Top, Bottom, Front, Back]
-          // In Three.js, top face is +Y (front of our card), bottom face is -Y (back of card)
-          const materials = [sideMat, sideMat, frontMat, backMat, sideMat, sideMat];
-          const mesh = new THREE.Mesh(geometry, materials);
-
-          mesh.position.set(cardX, height / 2, zPos);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-
-          mesh.userData = {
-            type: 'card',
-            card: card,
-            source: 'board',
-            buyMove: findBuyMove(card.id, 'board'),
-            reserveMove: findReserveMove(card.id),
-          };
-
-          interactiveGroup.add(mesh);
-        }
-      });
     }
 
     // 3. Render Nobles at the top of the board
@@ -1026,15 +1142,71 @@
       }
     });
 
-    // 2. Smoothly animate card hover scale effects
+    // 2. Smoothly animate card hover scale effects (skipping cards currently animating deal/take)
     interactiveGroup.children.forEach((obj) => {
-      if (obj.userData.type === 'card' || obj.userData.type === 'deck' || obj.userData.type === 'noble') {
+      if ((obj.userData.type === 'card' || obj.userData.type === 'deck' || obj.userData.type === 'noble') && !obj.userData.isAnimating) {
         const isHovered = hoveredObject === obj;
         const targetScale = isHovered ? 1.06 : 1.0;
         obj.scale.x += (targetScale - obj.scale.x) * 0.2;
         obj.scale.y += (targetScale - obj.scale.y) * 0.2;
         obj.scale.z += (targetScale - obj.scale.z) * 0.2;
       }
+    });
+
+    // 3. Process active card deal and take animations
+    const nowTime = performance.now();
+    activeAnimations = activeAnimations.filter((anim) => {
+      const elapsed = nowTime - anim.startTime;
+      const t = Math.min(elapsed / anim.duration, 1.0);
+      const ease = easeOutCubic(t);
+      const mesh = anim.mesh;
+
+      if (anim.type === 'deal') {
+        // Position: lerp X and Z + smooth parabolic arc in Y
+        mesh.position.x = anim.startX + (anim.targetX - anim.startX) * ease;
+        mesh.position.z = anim.startZ + (anim.targetZ - anim.startZ) * ease;
+        // Peak arch height of 1.2
+        mesh.position.y = anim.startY + (anim.targetY - anim.startY) * ease + Math.sin(t * Math.PI) * 1.2;
+        
+        // Rotation: flip card face-up (lerp Z rotation from Math.PI to 0)
+        mesh.rotation.z = anim.startRotZ + (anim.targetRotZ - anim.startRotZ) * ease;
+        
+        // Add a slight tilt on X during flight for realism
+        mesh.rotation.x = Math.sin(t * Math.PI) * 0.25;
+
+        // Scale: slight pop during flight
+        const scale = 1.0 + Math.sin(t * Math.PI) * 0.1;
+        mesh.scale.set(scale, scale, scale);
+      } else if (anim.type === 'take') {
+        // Fly towards camera/player
+        mesh.position.x = anim.startX + (anim.targetX - anim.startX) * ease;
+        mesh.position.z = anim.startZ + (anim.targetZ - anim.startZ) * ease;
+        mesh.position.y = anim.startY + (anim.targetY - anim.startY) * ease + Math.sin(t * Math.PI) * 1.5;
+
+        // Spin and tumble
+        mesh.rotation.x = t * Math.PI * 1.5;
+        mesh.rotation.y = t * Math.PI * 0.8;
+        mesh.rotation.z = anim.startRotZ + (anim.targetRotZ - anim.startRotZ) * ease;
+
+        // Scale down to 0
+        const scale = 1.0 - ease;
+        mesh.scale.set(scale, scale, scale);
+      }
+
+      if (t >= 1.0) {
+        if (anim.type === 'take') {
+          scene.remove(mesh);
+          mesh.geometry.dispose();
+        } else {
+          // Snap to exact target
+          mesh.position.set(anim.targetX, anim.targetY, anim.targetZ);
+          mesh.rotation.set(0, 0, anim.targetRotZ);
+          mesh.scale.set(1.0, 1.0, 1.0);
+          mesh.userData.isAnimating = false;
+        }
+        return false; // Remove from active list
+      }
+      return true; // Keep in active list
     });
 
     controls.update();
