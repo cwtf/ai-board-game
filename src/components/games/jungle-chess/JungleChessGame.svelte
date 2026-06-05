@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from 'svelte';
   import TokenUsageBadge from '@/components/ai/TokenUsageBadge.svelte';
   import JungleAnimalModel from '@/components/games/jungle-chess/JungleAnimalModel.svelte';
+  import JungleChessBoard3D from '@/components/games/jungle-chess/JungleChessBoard3D.svelte';
   import { getProvider } from '@/lib/ai';
   import type { ProviderId } from '@/lib/ai';
   import {
@@ -74,7 +75,7 @@
   let aiPaused = false;
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
-  let pieceStyle: 'zh' | 'emoji' = 'zh';
+  let pieceStyle: 'zh' | 'emoji' | '3d' = 'zh';
 
   let boardRotationX = 56;
   let boardRotationZ = -4;
@@ -661,6 +662,7 @@
             >
               <option value="zh">Chinese Characters</option>
               <option value="emoji">Emoji</option>
+              <option value="3d">3D WebGL</option>
             </select>
           </div>
 
@@ -724,6 +726,20 @@
           </div>
         </aside>
 
+        <div class="flex flex-col min-h-0">
+        {#if pieceStyle === '3d'}
+          <div class="relative min-h-[660px] w-full overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
+            <JungleChessBoard3D
+              {state}
+              {selectedPieceId}
+              {selectedMoves}
+              onSquare={chooseSquare}
+            />
+            <div class="pointer-events-none absolute right-4 top-4 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
+              <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
+            </div>
+          </div>
+        {:else}
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           class="relative flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 theme-bg p-8"
@@ -806,10 +822,12 @@
             <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
           </div>
         </div>
+        {/if}
       </div>
     </div>
+  </div>
 
-    <aside class="flex min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900/70">
+  <aside class="flex min-h-0 flex-col rounded-md border border-neutral-800 bg-neutral-900/70">
       <div class="border-b border-neutral-800 p-4">
         <div class="flex items-start justify-between gap-3">
           <div>

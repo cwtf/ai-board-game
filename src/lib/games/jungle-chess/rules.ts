@@ -293,5 +293,6 @@ export function applyMove(state: JungleState, move: JungleMove): JungleState {
   }
 
   next.turn += 1;
+  next.lastMove = legalMove;
   return next;
 }

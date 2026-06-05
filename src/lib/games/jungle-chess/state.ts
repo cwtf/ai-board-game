@@ -45,6 +45,7 @@ export interface JungleState {
   pieces: JunglePiece[];
   turn: number;
   winner: JunglePlayer | null;
+  lastMove?: JungleMove;
 }
 
 export const pieceLabels: Record<PieceType, { en: string; zh: string; emoji: string }> = {
