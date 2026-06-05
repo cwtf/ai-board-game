@@ -435,7 +435,7 @@ The standard process for any new game:
 | Game | Doc | Status |
 |---|---|---|
 | Splendor | [docs/games/splendor.md](docs/games/splendor.md) | Implemented |
-| Exploding Kittens | [docs/games/exploding-kittens.md](docs/games/exploding-kittens.md) | Implemented |
+| Exploding Kittens | [docs/games/exploding-kittens.md](docs/games/exploding-kittens.md) | TODO |
 | Secret Hitler | [docs/games/secret-hitler.md](docs/games/secret-hitler.md) | Implemented |
 | Chess | — | Implemented (local bot + provider AI) |
 | 象棋 (Chinese Chess) | — | Implemented (local bot + provider AI) |

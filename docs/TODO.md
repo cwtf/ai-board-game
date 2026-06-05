@@ -103,7 +103,42 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 48. [x] [ui] TokenUsageBadge: per-turn and session totals.
 49. [test] Playwright e2e: human-vs-AI quick game with a mocked provider returning scripted moves; assert end state. **Blocked until Playwright dependency/config is added.**
 
-## Phase 7 — Exploding Kittens engine
+## Phase 7 — Secret Hitler engine
+
+72. [x] [engine] `src/lib/games/secret-hitler/state.ts`: game state types and `init()` factory (role assignment, policy deck, game phases).
+73. [x] [engine] `src/lib/games/secret-hitler/rules.ts`: `legalMoves`, `applyMove`, `isTerminal`, `winner`. Policy enactment, presidential powers, Hitler-chancellor win condition.
+74. [x] [engine] `src/lib/games/secret-hitler/personalities.ts`: per-player personality descriptors for AI roleplay.
+75. [x] [ai] `src/lib/games/secret-hitler/ai-adapter.ts`: `systemPrompt` (incorporating role secrecy), `serializeForAI` (redact private info per role), `parseAIMove`.
+76. [x] [ai] `src/lib/games/secret-hitler/ai-pipeline.ts`: multi-stage decision pipeline (nominate, vote, legislative session, executive action).
+
+## Phase 8 — Secret Hitler UI
+
+77. [x] [ui] `src/pages/secret-hitler.astro` mounts Svelte island.
+78. [x] [ui] `SecretHitlerGame.svelte`: role reveal, board state (policy tracks, player list), voting interface, legislative session, executive action flow, elimination/win modal.
+79. [x] [ui] AI thinking indicator + per-seat AI configuration.
+
+## Phase 9 — Chess
+
+80. [x] [engine] `src/lib/games/chess/state.ts` + `rules.ts`: standard chess state, move generation, check/checkmate/stalemate detection, castling, en passant, promotion.
+81. [x] [engine] `src/lib/games/chess/strategy.ts` + `bot.ts` + `bot-worker.ts`: local bot with minimax/heuristic search running off main thread via web worker.
+82. [x] [ai] `src/lib/games/chess/ai-adapter.ts` + `move-format.ts`: AI move serialization, `parseAIMove`.
+83. [x] [ui] `src/pages/chess.astro` + `ChessGame.svelte`: 3D board, move animation, last-move highlighting, undo, local bot seat option.
+
+## Phase 10 — Chinese Chess (象棋)
+
+84. [x] [engine] `src/lib/games/chinese-chess/state.ts` + `rules.ts`: 象棋 state, move generation, check detection, all piece types and their movement constraints.
+85. [x] [engine] `src/lib/games/chinese-chess/strategy.ts` + `bot.ts`: local heuristic bot.
+86. [x] [ai] `src/lib/games/chinese-chess/ai-adapter.ts` + `move-format.ts`: AI move serialization.
+87. [x] [ui] `src/pages/chinese-chess.astro` + `ChineseChessGame.svelte`: 3D board with panning, move animation, last-move highlighting, undo.
+
+## Phase 11 — Jungle Chess (斗兽棋)
+
+88. [x] [engine] `src/lib/games/jungle-chess/state.ts` + `rules.ts`: 斗兽棋 state, capture-by-rank rules, terrain rules (water squares, traps, dens).
+89. [x] [engine] `src/lib/games/jungle-chess/strategy.ts` + `bot.ts`: local heuristic bot.
+90. [x] [ai] `src/lib/games/jungle-chess/ai-adapter.ts` + `move-format.ts`: AI move serialization.
+91. [x] [ui] `src/pages/jungle-chess.astro` + `JungleChessGame.svelte`: board with panning, move animation, last-move highlighting, undo.
+
+## Phase 12 — Exploding Kittens engine
 
 > **Read [docs/games/exploding-kittens.md](docs/games/exploding-kittens.md) before starting. Note: Nope is deferred to v1.1.**
 
@@ -122,7 +157,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 54. [ai] `src/lib/games/exploding-kittens/ai-adapter.ts`: per-player state filtering per §6 (no opponent hand contents leaked), `systemPrompt`, `serializeForAI`, `parseAIMove` (including defuse-position and favor-give sub-decisions).
 55. [test] Information-hiding test: serialised state for player P never contains another player's hand contents. Run a fuzz-style scan across many states.
 
-## Phase 8 — Exploding Kittens UI
+## Phase 13 — Exploding Kittens UI
 
 56. [ui] `src/pages/exploding-kittens.astro` mounts a Svelte/React island.
 57. [ui] Table view: deck size, discard top, each player's hand size, current turn, pending-turns badge.
@@ -133,7 +168,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 62. [ui] AI thinking indicator + abort.
 63. [test] Playwright e2e with mocked provider: scripted game to elimination; assert winner.
 
-## Phase 9 — Polish
+## Phase 14 — Polish
 
 64. [ui] Onboarding tooltip on first visit: BYOK explained in three sentences.
 65. [ui] Per-game "How to play" modal (rules summary, link to full doc).
@@ -144,7 +179,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 70. [ui] Accessibility: focus rings, ARIA on modals, contrast check, alt text.
 71. [ui] Error boundary around the game island with a "Copy state for bug report" button.
 
-## Phase 10 — Stretch (post-MVP)
+## Phase 15 — Stretch (post-MVP)
 
 - [ ] Nope sub-phase for Exploding Kittens (synchronous polling window — see docs/games/exploding-kittens.md §9).
 - [ ] Passphrase-encrypted key storage (Web Crypto AES-GCM).
@@ -162,7 +197,7 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 - [x] Per-seat AI configuration: let each AI player use a different configured provider/model in Splendor, then extract the assignment UI/config shape for future games.
 - [x] Extract the Secret Hitler AI decision pipeline before considering LangGraph.
 - [ ] Smarter Favor response from AI targets (currently random in v1).
-- [ ] Add a third game to validate the abstraction (Love Letter, Coup, Hanabi). Each = one new doc under `docs/games/` + one new adapter.
+- [x] Add additional games to validate the abstraction. Each = one new doc under `docs/games/` + one new adapter. Added: Secret Hitler, Chess, Chinese Chess (象棋), Jungle Chess (斗兽棋).
 - [ ] Replace Jungle Chess CSS animal pieces with AI-generated `.glb` models.
   - [ ] Generate eight consistent low-poly animal models for rat, cat, dog, wolf, leopard, tiger, lion, and elephant.
   - [ ] Normalize scale/origin in Blender and export final `.glb` files to `public/assets/jungle-chess/models/`.
@@ -174,11 +209,10 @@ Legend: `[scaffold]` = boilerplate, `[engine]` = game logic, `[ui]` = UI work, `
 
 ## Definition of done for v1
 
-- Landing page lists Splendor and Exploding Kittens, each with a link to its design doc.
+- Landing page lists all games, each with a link to its design doc.
 - Settings page lets the user enter and test credentials or local endpoint settings for every v1 provider.
 - Each game playable end-to-end against AI, human as one seat, AI in the others.
 - AI moves always succeed (retry + random fallback verified by e2e test).
 - No keys are sent to any host other than the selected provider (verified by network inspection during e2e).
 - Information-hiding test for Exploding Kittens passes.
 - CI green; CSP in place; security notice visible on settings page.
-
