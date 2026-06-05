@@ -38,6 +38,7 @@ export interface GameLoop<State, Move> {
   setAIPlayers(aiPlayers: GameLoopOptions<State, Move>['aiPlayers']): void;
   clearWarning(): void;
   playHumanMove(move: Move): void;
+  undo(): boolean;
   step(signal?: AbortSignal): Promise<boolean>;
   runUntilBlocked(signal?: AbortSignal): Promise<void>;
 }
@@ -325,6 +326,30 @@ export function createGameLoop<State, Move>({
 
       warning = undefined;
       applyMove({ move, source: 'human', player });
+    },
+    undo() {
+      if (status === 'thinking' || log.length === 0) return false;
+
+      // Walk back through trailing AI moves to find the last human move, then remove all of them.
+      // This returns the board to the state before the human's last action.
+      let movesToRemove = 0;
+      let foundHuman = false;
+      for (let i = log.length - 1; i >= 0; i--) {
+        movesToRemove++;
+        if (log[i]!.source === 'human') {
+          foundHuman = true;
+          break;
+        }
+      }
+      if (!foundHuman) movesToRemove = 1;
+
+      log.splice(log.length - movesToRemove, movesToRemove);
+      state = log.reduce((s, record) => adapter.applyMove(s, record.move), initialState);
+      totalUsage = log.reduce((sum, record) => addUsage(sum, record.usage), { input: 0, output: 0 });
+      status = adapter.isTerminal(state) ? 'terminal' : 'idle';
+      warning = undefined;
+      emit();
+      return true;
     },
     async step(signal) {
       if (adapter.isTerminal(state)) {

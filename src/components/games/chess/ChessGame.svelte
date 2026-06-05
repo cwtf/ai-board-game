@@ -87,6 +87,7 @@
     playerProfileSelections[HUMAN_PLAYER_INDEX] === HUMAN_SEAT_ID &&
     snapshot?.status !== 'thinking' &&
     snapshot?.status !== 'terminal';
+  $: canUndo = (snapshot?.log.length ?? 0) > 0 && snapshot?.status !== 'thinking';
   $: allLegalMoves = state ? legalMoves(state, currentPlayer) : [];
   $: selectedPiece = state
     ? state.pieces.find((piece) => piece.id === selectedPieceId)
@@ -313,6 +314,12 @@
 
   function abortAI() {
     aiController?.abort();
+  }
+
+  function undoMove() {
+    if (!loop || !canUndo) return;
+    aiController?.abort();
+    loop.undo();
   }
 
   async function runAI() {
@@ -573,6 +580,15 @@
           >
             {aiPaused ? 'Resume AI' : 'Pause AI'}
           </button>
+          {#if canUndo}
+            <button
+              class="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-200 hover:border-neutral-500 hover:text-white"
+              type="button"
+              on:click={undoMove}
+            >
+              Undo
+            </button>
+          {/if}
           <button
             class="rounded-md bg-emerald-500 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
             type="button"

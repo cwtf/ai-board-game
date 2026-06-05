@@ -16,7 +16,7 @@ export interface ChessMoveEvaluation {
 }
 
 const INF = 1_000_000;
-const SEARCH_DEPTH = 2;
+const SEARCH_DEPTH = 3;
 
 const pieceValues: Record<ChessPiece['type'], number> = {
   pawn: 100,
@@ -121,6 +121,63 @@ function orderMoves(state: ChessState, moves: ChessMove[]): ChessMove[] {
   });
 }
 
+// Extends search past depth 0 for captures/promotions until the position is quiet,
+// preventing the horizon effect where a mid-exchange evaluation looks deceptively good.
+function quiesce(
+  state: ChessState,
+  alpha: number,
+  beta: number,
+  rootPlayer: ChessPlayer,
+  qdepth = 6,
+): number {
+  if (state.winner !== null) {
+    return state.winner === rootPlayer ? INF : -INF;
+  }
+  if (state.status !== 'active') {
+    return 0;
+  }
+
+  const standPat = staticEvaluation(state, rootPlayer);
+
+  if (state.current === rootPlayer) {
+    if (standPat >= beta) return standPat;
+    alpha = Math.max(alpha, standPat);
+  } else {
+    if (standPat <= alpha) return standPat;
+    beta = Math.min(beta, standPat);
+  }
+
+  if (qdepth === 0) return standPat;
+
+  const captures = orderMoves(
+    state,
+    legalMoves(state, state.current).filter((m) => m.captured || m.isPromotion),
+  );
+
+  let best = standPat;
+  if (state.current === rootPlayer) {
+    for (const move of captures) {
+      const score = quiesce(applyMove(state, move), alpha, beta, rootPlayer, qdepth - 1);
+      if (score > best) {
+        best = score;
+        alpha = Math.max(alpha, best);
+        if (alpha >= beta) break;
+      }
+    }
+  } else {
+    for (const move of captures) {
+      const score = quiesce(applyMove(state, move), alpha, beta, rootPlayer, qdepth - 1);
+      if (score < best) {
+        best = score;
+        beta = Math.min(beta, best);
+        if (alpha >= beta) break;
+      }
+    }
+  }
+
+  return best;
+}
+
 function alphaBeta(
   state: ChessState,
   depth: number,
@@ -131,8 +188,11 @@ function alphaBeta(
   if (state.winner !== null) {
     return state.winner === rootPlayer ? INF : -INF;
   }
-  if (state.status !== 'active' || depth === 0) {
+  if (state.status !== 'active') {
     return staticEvaluation(state, rootPlayer);
+  }
+  if (depth === 0) {
+    return quiesce(state, alpha, beta, rootPlayer);
   }
 
   const moves = orderMoves(state, legalMoves(state, state.current));
@@ -180,8 +240,6 @@ export function evaluateChessMove(
   const risks: string[] = [];
   let score = 0;
 
-  const beforeMaterial =
-    materialFor(state, currentPlayer) - materialFor(state, opponent);
   const after = applyMove(state, move);
 
   if (after.winner === currentPlayer) {
@@ -207,13 +265,6 @@ export function evaluateChessMove(
   if (move.isCastle) {
     score += 55;
     reasons.push('Castles to improve king safety.');
-  }
-
-  const afterMaterial =
-    materialFor(after, currentPlayer) - materialFor(after, opponent);
-  const materialSwing = afterMaterial - beforeMaterial;
-  if (materialSwing !== 0) {
-    score += materialSwing * 4;
   }
 
   const positionalSwing =
