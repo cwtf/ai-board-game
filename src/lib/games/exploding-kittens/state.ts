@@ -90,6 +90,8 @@ export interface EKState {
   pendingNope: {
     action: EKMove;
     byPlayer: number;
+    nopeCount: number;
+    lastNoper: number | null;
     waitingFor: number[];
   } | null;
   turn: number;

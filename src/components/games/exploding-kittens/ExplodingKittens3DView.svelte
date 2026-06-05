@@ -589,6 +589,25 @@
     canvasEl?.removeEventListener('mousemove', handleMouseMove);
     canvasEl?.removeEventListener('click', handleClick);
   });
+
+  export function getScreenPositions(): {
+    deck: { x: number; y: number };
+    discard: { x: number; y: number };
+  } {
+    if (!canvasEl || !camera) return { deck: { x: 0, y: 0 }, discard: { x: 0, y: 0 } };
+    const rect = canvasEl.getBoundingClientRect();
+    function project(wx: number, wy: number, wz: number) {
+      const ndc = new THREE.Vector3(wx, wy, wz).project(camera);
+      return {
+        x: (ndc.x * 0.5 + 0.5) * rect.width + rect.left,
+        y: (-ndc.y * 0.5 + 0.5) * rect.height + rect.top,
+      };
+    }
+    return {
+      deck: project(-1.6, 0.4, -0.8),
+      discard: project(1.6, 0.1, -0.8),
+    };
+  }
 </script>
 
 <div bind:this={containerEl} class="relative h-full w-full overflow-hidden">

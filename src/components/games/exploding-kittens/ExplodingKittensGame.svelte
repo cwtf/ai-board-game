@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
+  import { fly, scale } from 'svelte/transition';
+  import { flip } from 'svelte/animate';
+  import { backOut, cubicIn } from 'svelte/easing';
   import TokenUsageBadge from '@/components/ai/TokenUsageBadge.svelte';
   import SettingsPanel from '@/components/ai/SettingsPanel.svelte';
   import ExplodingKittens3DView from '@/components/games/exploding-kittens/ExplodingKittens3DView.svelte';
@@ -85,6 +88,51 @@
   let threeKindCard: CardKind | null = null;
   let threeKindTarget: number | null = null;
   let fiveDiffSelectedCards: CardKind[] = [];
+
+  // Flying card animation overlay
+  let view3D: { getScreenPositions(): { deck: { x: number; y: number }; discard: { x: number; y: number } } };
+  interface FlyingCard { id: number; kind: CardKind | null; sx: number; sy: number; ex: number; ey: number; }
+  let flyingCards: FlyingCard[] = [];
+  let flyCardCounter = 0;
+
+  function spawnFlyCard(kind: CardKind | null, sx: number, sy: number, ex: number, ey: number) {
+    flyingCards = [...flyingCards, { id: flyCardCounter++, kind, sx, sy, ex, ey }];
+  }
+
+  function flyCardAction(node: HTMLElement, fc: FlyingCard) {
+    const dx = fc.ex - fc.sx, dy = fc.ey - fc.sy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const arc = -Math.min(dist * 0.28, 130);
+    const rot = fc.kind === null ? -12 : 8;
+    const anim = node.animate(
+      [
+        { transform: 'translate(0px,0px) rotate(0deg) scale(1)', opacity: 1 },
+        { transform: `translate(${dx/2}px,${dy/2 + arc}px) rotate(${rot/2}deg) scale(0.92)`, opacity: 1, offset: 0.5 },
+        { transform: `translate(${dx}px,${dy}px) rotate(${rot}deg) scale(0.8)`, opacity: 0.15 },
+      ],
+      { duration: fc.kind === null ? 520 : 400, easing: 'ease-in-out', fill: 'forwards' },
+    );
+    anim.onfinish = () => { flyingCards = flyingCards.filter((c) => c.id !== fc.id); };
+    return { destroy() { anim.cancel(); } };
+  }
+
+  function getPlayedCardKind(move: EKMove): CardKind | null {
+    if (move.kind === 'play_single') return move.card;
+    if (move.kind === 'play_favor') return 'favor';
+    if (move.kind === 'play_cat_pair') return move.cardKind;
+    if (move.kind === 'play_three_kind') return move.cardKind;
+    if (move.kind === 'play_five_diff') return move.cards[0] ?? null;
+    if (move.kind === 'nope') return 'nope';
+    return null;
+  }
+
+  function getHandCardCenter(handIdx: number): { x: number; y: number } | null {
+    if (typeof document === 'undefined') return null;
+    const el = document.querySelector<HTMLElement>(`[data-hand-idx="${handIdx}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
   let aiController: AbortController | undefined;
   let aiPaused = false;
   let gameOverDismissed = false;
@@ -324,11 +372,29 @@
 
   function playMove(move: EKMove) {
     if (!loop || !humanCanAct) return;
+
+    // Capture played card position before state mutates
+    let playAnim: { kind: CardKind; sx: number; sy: number } | null = null;
+    const playedKind = getPlayedCardKind(move);
+    if (playedKind && state) {
+      const handIdx = state.players[HUMAN_PLAYER_INDEX]!.hand.indexOf(playedKind);
+      if (handIdx !== -1) {
+        const center = getHandCardCenter(handIdx);
+        if (center) playAnim = { kind: playedKind, ...center };
+      }
+    }
+
     try {
       loop.playHumanMove(move);
       selectedCardForPlay = null;
       activeModal = null;
       message = '';
+
+      // Fly played card to discard pile
+      if (playAnim) {
+        const pos = view3D?.getScreenPositions();
+        if (pos) spawnFlyCard(playAnim.kind, playAnim.sx, playAnim.sy, pos.discard.x, pos.discard.y);
+      }
     } catch (e) {
       message = e instanceof Error ? e.message : 'Invalid move.';
     }
@@ -396,9 +462,20 @@
     message = 'No playable action for that card right now.';
   }
 
-  function handleDeckClick() {
+  async function handleDeckClick() {
     const draw = legalMoves.find((m) => m.kind === 'draw');
-    if (draw) playMove(draw);
+    if (!draw || !state) return;
+    const deckPos = view3D?.getScreenPositions().deck;
+    const handLenBefore = state.players[HUMAN_PLAYER_INDEX]!.hand.length;
+    playMove(draw);
+    if (deckPos) {
+      await tick();
+      const newLen = state?.players[HUMAN_PLAYER_INDEX]?.hand.length ?? 0;
+      if (newLen > handLenBefore) {
+        const dest = getHandCardCenter(newLen - 1);
+        if (dest) spawnFlyCard(null, deckPos.x, deckPos.y, dest.x, dest.y);
+      }
+    }
   }
 
   function confirmFavorTarget(targetIndex: number) {
@@ -654,6 +731,7 @@
     <div class="relative min-h-0 flex-1 overflow-hidden">
       {#if state}
         <ExplodingKittens3DView
+          bind:this={view3D}
           {state}
           {legalMoves}
           {humanCanAct}
@@ -681,7 +759,7 @@
 
             <!-- Hand cards -->
             <div class="flex flex-nowrap justify-center px-4">
-              {#each state.players[HUMAN_PLAYER_INDEX]!.hand as cardKind, idx}
+              {#each state.players[HUMAN_PLAYER_INDEX]!.hand as cardKind, idx (idx)}
                 {@const playable =
                   humanCanAct &&
                   (legalMoves.some(
@@ -694,11 +772,15 @@
                       (m.kind === 'give_favor' && m.card === cardKind),
                   ))}
                 <button
-                  class="relative flex h-48 w-[8.25rem] flex-shrink-0 flex-col items-center justify-center rounded-lg border text-center text-base font-bold leading-tight shadow-md transition-all duration-150
+                  in:fly={{ y: -160, duration: 420, easing: backOut }}
+                  out:fly={{ y: -120, duration: 260, easing: cubicIn }}
+                  animate:flip={{ duration: 220 }}
+                  class="relative flex h-48 w-[8.25rem] flex-shrink-0 flex-col items-center justify-center rounded-lg border text-center text-base font-bold leading-tight shadow-md transition-[transform,box-shadow] duration-150
                     {playable
                       ? 'cursor-pointer border-white/30 hover:-translate-y-4 hover:z-10 hover:shadow-xl'
                       : 'cursor-default border-white/10 opacity-60'}
                   "
+                  data-hand-idx={idx}
                   style:background-color={CARD_COLORS[cardKind]}
                   style:margin-left={idx === 0 ? '0' : '-3.5rem'}
                   disabled={!playable}
@@ -714,7 +796,9 @@
               <!-- Draw button -->
               {#if humanCanAct && legalMoves.some((m) => m.kind === 'draw')}
                 <button
-                  class="relative flex h-48 w-[10.5rem] flex-shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-500 bg-neutral-800 text-base font-bold text-neutral-300 shadow transition-all duration-150 hover:-translate-y-4 hover:z-10 hover:border-neutral-300 hover:shadow-xl"
+                  in:scale={{ duration: 300, easing: backOut }}
+                  out:scale={{ duration: 200, easing: cubicIn }}
+                  class="relative flex h-48 w-[10.5rem] flex-shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-500 bg-neutral-800 text-base font-bold text-neutral-300 shadow transition-[transform,box-shadow] duration-150 hover:-translate-y-4 hover:z-10 hover:border-neutral-300 hover:shadow-xl"
                   style:margin-left={state.players[HUMAN_PLAYER_INDEX]!.hand.length > 0 ? '-3.5rem' : '0'}
                   on:click={handleDeckClick}
                 >
@@ -1079,7 +1163,7 @@
   {@const pending = state.pendingNope}
   {@const byName = `P${pending.byPlayer + 1}`}
   {@const action = pending.action}
-  {@const actionDesc = (() => {
+  {@const baseDesc = (() => {
     if (action.kind === 'play_single') return `${byName} played ${CARD_LABELS[action.card]}`;
     if (action.kind === 'play_favor') return `${byName} played Favor targeting P${action.targetIndex + 1}`;
     if (action.kind === 'play_cat_pair') return `${byName} played a Cat Pair targeting P${action.targetIndex + 1}`;
@@ -1087,11 +1171,25 @@
     if (action.kind === 'play_five_diff') return `${byName} played 5-Card Combo`;
     return `${byName} played a card`;
   })()}
+  {@const goingThrough = pending.nopeCount % 2 === 0}
   {@const hasNope = legalMoves.some((m) => m.kind === 'nope')}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
     <div class="w-80 rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl">
       <div class="mb-1 text-lg font-bold text-neutral-100">⚡ Nope?</div>
-      <div class="mb-5 text-sm text-neutral-300">{actionDesc}</div>
+      <div class="mb-1 text-sm text-neutral-300">{baseDesc}</div>
+      {#if pending.nopeCount > 0}
+        <div class="mb-3 flex items-center gap-1.5 text-xs">
+          {#each Array(pending.nopeCount) as _, i}
+            <span class="rounded bg-neutral-700 px-1.5 py-0.5 font-bold text-red-400">🚫 Nope</span>
+          {/each}
+          <span class="text-neutral-400">→</span>
+          <span class="font-semibold {goingThrough ? 'text-green-400' : 'text-red-400'}">
+            {goingThrough ? 'goes through' : 'cancelled'}
+          </span>
+        </div>
+      {:else}
+        <div class="mb-3"></div>
+      {/if}
       <div class="flex gap-3">
         <button
           class="flex-1 rounded-lg py-3 text-sm font-bold transition
@@ -1121,3 +1219,25 @@
     </div>
   </div>
 {/if}
+
+<!-- Flying card overlay -->
+{#each flyingCards as fc (fc.id)}
+  <div
+    class="pointer-events-none fixed z-[300] flex flex-col items-center justify-center rounded-lg border text-base font-bold leading-tight text-white shadow-2xl"
+    style:width="8.25rem"
+    style:height="12rem"
+    style:left="{fc.sx - 66}px"
+    style:top="{fc.sy - 96}px"
+    style:background-color={fc.kind === null ? '#1a1a2e' : CARD_COLORS[fc.kind]}
+    style:border-color={fc.kind === null ? '#444' : 'rgba(255,255,255,0.3)'}
+    use:flyCardAction={fc}
+  >
+    {#if fc.kind === null}
+      <span class="text-5xl leading-none">💣</span>
+      <span class="mt-2 text-xs text-neutral-500">???</span>
+    {:else}
+      <span class="text-5xl leading-none">{CARD_EMOJI[fc.kind]}</span>
+      <span class="mt-2 px-1">{CARD_LABELS[fc.kind].split(' ').slice(0, 2).join(' ')}</span>
+    {/if}
+  </div>
+{/each}

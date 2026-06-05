@@ -20,7 +20,7 @@ function cloneState(state: EKState): EKState {
     log: [...state.log],
     pendingNope: state.pendingNope
       ? { ...state.pendingNope, waitingFor: [...state.pendingNope.waitingFor] }
-      : null,
+      : null,  // nopeCount and lastNoper are primitives — spread handles them
   };
 }
 
@@ -251,17 +251,27 @@ export function applyMove(state: EKState, move: EKMove): EKState {
     const player = s.pendingNope!.waitingFor[0]!;
     s.players[player]!.hand = removeOne(s.players[player]!.hand, 'nope');
     s.discard = ['nope', ...s.discard];
-    // Action is cancelled — clear the pending nope entirely
-    s.pendingNope = null;
+    s.pendingNope!.nopeCount++;
+    s.pendingNope!.lastNoper = player;
+    // Let everyone else (except the just-noped player) counter-Nope
+    const counters = nopeWaiters(s, player);
+    if (counters.length === 0) {
+      const { action, byPlayer, nopeCount } = s.pendingNope!;
+      s.pendingNope = null;
+      if (nopeCount % 2 === 0) resolveEffect(s, action, byPlayer);
+      // odd = cancelled
+    } else {
+      s.pendingNope!.waitingFor = counters;
+    }
     return s;
   }
 
   if (move.kind === 'pass_nope') {
     s.pendingNope!.waitingFor.shift();
     if (s.pendingNope!.waitingFor.length === 0) {
-      const { action, byPlayer } = s.pendingNope!;
+      const { action, byPlayer, nopeCount } = s.pendingNope!;
       s.pendingNope = null;
-      resolveEffect(s, action, byPlayer);
+      if (nopeCount % 2 === 0) resolveEffect(s, action, byPlayer);
     }
     return s;
   }
@@ -332,7 +342,7 @@ export function applyMove(state: EKState, move: EKMove): EKState {
     s.discard = [...Array<CardKind>(count).fill(cardKind), ...s.discard];
     const waiters = nopeWaiters(s, byPlayer);
     if (waiters.length > 0) {
-      s.pendingNope = { action, byPlayer, waitingFor: waiters };
+      s.pendingNope = { action, byPlayer, nopeCount: 0, lastNoper: null, waitingFor: waiters };
     } else {
       resolveEffect(s, action, byPlayer);
     }
@@ -353,7 +363,7 @@ export function applyMove(state: EKState, move: EKMove): EKState {
     s.discard = [move.cardKind, move.cardKind, ...s.discard];
     const waiters = nopeWaiters(s, player);
     if (waiters.length > 0) {
-      s.pendingNope = { action: move, byPlayer: player, waitingFor: waiters };
+      s.pendingNope = { action: move, byPlayer: player, nopeCount: 0, lastNoper: null, waitingFor: waiters };
     } else {
       resolveEffect(s, move, player);
     }
@@ -366,7 +376,7 @@ export function applyMove(state: EKState, move: EKMove): EKState {
     s.discard = [move.cardKind, move.cardKind, move.cardKind, ...s.discard];
     const waiters = nopeWaiters(s, player);
     if (waiters.length > 0) {
-      s.pendingNope = { action: move, byPlayer: player, waitingFor: waiters };
+      s.pendingNope = { action: move, byPlayer: player, nopeCount: 0, lastNoper: null, waitingFor: waiters };
     } else {
       resolveEffect(s, move, player);
     }
@@ -383,7 +393,7 @@ export function applyMove(state: EKState, move: EKMove): EKState {
     s.discard = [...move.cards, ...s.discard];
     const waiters = nopeWaiters(s, player);
     if (waiters.length > 0) {
-      s.pendingNope = { action: move, byPlayer: player, waitingFor: waiters };
+      s.pendingNope = { action: move, byPlayer: player, nopeCount: 0, lastNoper: null, waitingFor: waiters };
     } else {
       resolveEffect(s, move, player);
     }

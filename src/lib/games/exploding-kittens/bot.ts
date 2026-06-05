@@ -20,17 +20,25 @@ export function chooseEKBotMove(
   player: number,
   moves: EKMove[],
 ): EKMove {
-  // Nope window: decide whether to cancel the pending action
+  // Nope window: decide whether to Nope or counter-Nope
   if (moves.some((m) => m.kind === 'nope' || m.kind === 'pass_nope')) {
     const nopeMove = moves.find((m) => m.kind === 'nope');
     const passMove = moves.find((m) => m.kind === 'pass_nope')!;
     if (!nopeMove) return passMove;
-    const action = state.pendingNope!.action;
-    const targetsMe =
-      ('targetIndex' in action && action.targetIndex === player) ||
-      (action.kind === 'play_favor' && action.targetIndex === player);
-    const isAttack = action.kind === 'play_single' && action.card === 'attack';
-    return isAttack || targetsMe ? nopeMove : passMove;
+    const pn = state.pendingNope!;
+    const action = pn.action;
+    const currentlyGoingThrough = pn.nopeCount % 2 === 0;
+    if (currentlyGoingThrough) {
+      // Action would resolve — Nope if it harms us
+      const targetsMe =
+        ('targetIndex' in action && action.targetIndex === player) ||
+        (action.kind === 'play_favor' && action.targetIndex === player);
+      const isAttack = action.kind === 'play_single' && action.card === 'attack';
+      return isAttack || targetsMe ? nopeMove : passMove;
+    } else {
+      // Action is currently Noped — counter-Nope to restore it if it was ours
+      return pn.byPlayer === player ? nopeMove : passMove;
+    }
   }
 
   // Sub-decision: defuse — bury at bottom 70% of deck
