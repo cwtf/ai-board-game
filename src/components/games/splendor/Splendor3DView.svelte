@@ -84,20 +84,20 @@
       gold: '#fbbf24',
     };
 
-    // 1. Draw Bonus Gem in Top-Left
+    // 1. Draw Bonus Gem in Top-Left (2x scaled)
     ctx.save();
     ctx.fillStyle = gemColors[card.bonus];
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 8;
     ctx.beginPath();
-    ctx.arc(54, 54, 34, 0, Math.PI * 2);
+    ctx.arc(108, 108, 68, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
     // Draw the gem SVG icon inside the circle
     const svgImg = gemImages.get(card.bonus);
     if (svgImg) {
-      ctx.drawImage(svgImg, 54 - 20, 54 - 20, 40, 40);
+      ctx.drawImage(svgImg, 108 - 40, 108 - 40, 80, 80);
     } else {
       const img = new Image();
       img.src = `/assets/splendor/gems/${card.bonus}.svg`;
@@ -106,55 +106,55 @@
         ctx.save();
         ctx.fillStyle = gemColors[card.bonus];
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 8;
         ctx.beginPath();
-        ctx.arc(54, 54, 34, 0, Math.PI * 2);
+        ctx.arc(108, 108, 68, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.drawImage(img, 54 - 20, 54 - 20, 40, 40);
+        ctx.drawImage(img, 108 - 40, 108 - 40, 80, 80);
         ctx.restore();
         texture.needsUpdate = true;
       };
     }
     ctx.restore();
 
-    // 2. Draw Prestige Points in Top-Right
+    // 2. Draw Prestige Points in Top-Right (2x scaled)
     if (card.prestige > 0) {
       ctx.save();
       ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(458, 54, 30, 0, Math.PI * 2);
+      ctx.arc(404, 108, 60, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 36px sans-serif';
+      ctx.font = 'bold 72px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(card.prestige), 458, 54);
+      ctx.fillText(String(card.prestige), 404, 108);
       ctx.restore();
     }
 
-    // 3. Draw Cost capsule pill badges in Bottom-Left
+    // 3. Draw Cost capsule pill badges in Bottom-Left (2x scaled)
     ctx.save();
     let idx = 0;
-    const spacing = 52;
-    const startY = 668;
-    const startX = 56;
+    const spacing = 104;
+    const startY = 636;
+    const startX = 112;
 
     for (const gem of GEMS) {
       const costAmount = card.cost[gem];
       if (costAmount && costAmount > 0) {
         const yPos = startY - idx * spacing;
         
-        // Capsule dimensions
-        const pillW = 82;
-        const pillH = 40;
+        // Capsule dimensions (2x scaled)
+        const pillW = 164;
+        const pillH = 80;
         const pillX = startX - pillW / 2;
         const pillY = yPos - pillH / 2;
-        const r = 20; // corner radius (half height)
+        const r = 40; // corner radius (half height)
 
         // Draw capsule background
         ctx.beginPath();
@@ -167,21 +167,21 @@
 
         ctx.fillStyle = gemColors[gem];
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 6;
         ctx.fill();
         ctx.stroke();
 
         // Draw gem SVG icon on the left
         const svgImg = gemImages.get(gem);
         if (svgImg) {
-          ctx.drawImage(svgImg, pillX + 8, pillY + 8, 24, 24);
+          ctx.drawImage(svgImg, pillX + 16, pillY + 16, 48, 48);
         } else {
           const img = new Image();
           img.src = `/assets/splendor/gems/${gem}.svg`;
           img.onload = () => {
             gemImages.set(gem, img);
             ctx.save();
-            ctx.drawImage(img, pillX + 8, pillY + 8, 24, 24);
+            ctx.drawImage(img, pillX + 16, pillY + 16, 48, 48);
             ctx.restore();
             texture.needsUpdate = true;
           };
@@ -189,10 +189,10 @@
 
         // Draw cost number on the right
         ctx.fillStyle = (gem === 'diamond' || gem === 'emerald') ? '#111827' : '#ffffff';
-        ctx.font = 'bold 24px sans-serif';
+        ctx.font = 'bold 48px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(String(costAmount), pillX + 56, yPos);
+        ctx.fillText(String(costAmount), pillX + 112, yPos);
 
         idx++;
       }
@@ -264,41 +264,41 @@
       gold: '#fbbf24',
     };
 
-    // 1. Draw gold prestige points in Top-Right
+    // 1. Draw gold prestige points in Top-Right (2x scaled)
     ctx.save();
     ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
     ctx.strokeStyle = '#fbbf24';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(458, 54, 30, 0, Math.PI * 2);
+    ctx.arc(404, 108, 60, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#fef3c7';
-    ctx.font = 'bold 36px sans-serif';
+    ctx.font = 'bold 72px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(noble.prestige), 458, 54);
+    ctx.fillText(String(noble.prestige), 404, 108);
     ctx.restore();
 
-    // 2. Draw cost capsule pill badges in Bottom-Left
+    // 2. Draw cost capsule pill badges in Bottom-Left (2x scaled)
     ctx.save();
     let idx = 0;
-    const spacing = 52;
-    const startY = 362;
-    const startX = 56;
+    const spacing = 104;
+    const startY = 330;
+    const startX = 112;
 
     for (const gem of GEMS) {
       const costAmount = noble.cost[gem];
       if (costAmount && costAmount > 0) {
         const yPos = startY - idx * spacing;
 
-        // Capsule dimensions
-        const pillW = 82;
-        const pillH = 40;
+        // Capsule dimensions (2x scaled)
+        const pillW = 164;
+        const pillH = 80;
         const pillX = startX - pillW / 2;
         const pillY = yPos - pillH / 2;
-        const r = 20; // corner radius (half height)
+        const r = 40; // corner radius (half height)
 
         // Draw capsule background
         ctx.beginPath();
@@ -311,21 +311,21 @@
 
         ctx.fillStyle = gemColors[gem];
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 6;
         ctx.fill();
         ctx.stroke();
 
         // Draw gem SVG icon on the left
         const svgImg = gemImages.get(gem);
         if (svgImg) {
-          ctx.drawImage(svgImg, pillX + 8, pillY + 8, 24, 24);
+          ctx.drawImage(svgImg, pillX + 16, pillY + 16, 48, 48);
         } else {
           const img = new Image();
           img.src = `/assets/splendor/gems/${gem}.svg`;
           img.onload = () => {
             gemImages.set(gem, img);
             ctx.save();
-            ctx.drawImage(img, pillX + 8, pillY + 8, 24, 24);
+            ctx.drawImage(img, pillX + 16, pillY + 16, 48, 48);
             ctx.restore();
             texture.needsUpdate = true;
           };
@@ -333,10 +333,10 @@
 
         // Draw cost number on the right
         ctx.fillStyle = (gem === 'diamond' || gem === 'emerald') ? '#111827' : '#ffffff';
-        ctx.font = 'bold 24px sans-serif';
+        ctx.font = 'bold 48px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(String(costAmount), pillX + 56, yPos);
+        ctx.fillText(String(costAmount), pillX + 112, yPos);
 
         idx++;
       }
