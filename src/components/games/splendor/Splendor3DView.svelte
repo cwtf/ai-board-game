@@ -623,7 +623,8 @@
     return texture;
   }
 
-  function drawDeckTexture(ctx: CanvasRenderingContext2D, tier: Tier, texture: THREE.Texture) {
+  function drawDeckTexture(ctx: CanvasRenderingContext2D, tier: Tier, texture: THREE.Texture, count?: number) {
+    const deckCount = count !== undefined ? count : (tier === 1 ? 36 : (tier === 2 ? 26 : 16));
     const colors = {
       1: { bg: '#064e3b', gold: '#fbbf24', text: 'I' },
       2: { bg: '#1e3a8a', gold: '#fbbf24', text: 'II' },
@@ -674,6 +675,39 @@
       ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // Draw remaining cards counter badge
+    ctx.save();
+    const badgeW = 96;
+    const badgeH = 22;
+    const badgeX = 128 - badgeW / 2;
+    const badgeY = 24;
+    const badgeR = 4;
+
+    ctx.beginPath();
+    ctx.moveTo(badgeX + badgeR, badgeY);
+    ctx.lineTo(badgeX + badgeW - badgeR, badgeY);
+    ctx.arcTo(badgeX + badgeW, badgeY, badgeX + badgeW, badgeY + badgeH, badgeR);
+    ctx.arcTo(badgeX + badgeW, badgeY + badgeH, badgeX, badgeY + badgeH, badgeR);
+    ctx.arcTo(badgeX, badgeY + badgeH, badgeX, badgeY, badgeR);
+    ctx.arcTo(badgeX, badgeY, badgeX + badgeW, badgeY, badgeR);
+    ctx.closePath();
+
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)'; // gold border
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#fef3c7'; // gold text
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('Deck', badgeX + 8, badgeY + badgeH / 2);
+    
+    ctx.textAlign = 'right';
+    ctx.fillText(String(deckCount), badgeX + badgeW - 8, badgeY + badgeH / 2);
+    ctx.restore();
 
     // Draw "Reserve" button on the bottom right of the deck
     const reserveMove = findReserveDeckMove(tier);
@@ -988,10 +1022,10 @@
         const topMat = cardBackMaterials.get(tier)!;
         const bottomMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
 
-        // Force redraw deck texture for this tier to update Reserve button state
+        // Force redraw deck texture for this tier to update Reserve button state and count
         const item = deckCanvases.get(tier);
         if (item) {
-          drawDeckTexture(item.ctx, tier, item.texture);
+          drawDeckTexture(item.ctx, tier, item.texture, count);
           item.texture.needsUpdate = true;
         }
 
