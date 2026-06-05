@@ -32,7 +32,7 @@
   let pointerStartY = 0;
   let yaw = -32;
   let pitch = 54;
-  let distance = 11.8;
+  let distance = 13.8;
   let activeState: ChessState | undefined;
   let activeSelectedPieceId = '';
   let activeSelectedMovesKey = '';
@@ -444,7 +444,6 @@
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x050505);
-    scene.fog = new THREE.Fog(0x050505, 9, 17);
 
     camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     raycaster = new THREE.Raycaster();
@@ -541,7 +540,7 @@
 
   function handleWheel(event: WheelEvent) {
     event.preventDefault();
-    distance = Math.max(6.4, Math.min(13.5, distance + (event.deltaY > 0 ? 0.55 : -0.55)));
+    distance = Math.max(6.4, Math.min(18, distance + (event.deltaY > 0 ? 0.55 : -0.55)));
     updateCamera();
   }
 
@@ -615,9 +614,10 @@
 <style>
   .board-shell {
     position: relative;
-    width: min(100%, 84vh, 760px);
-    min-width: 520px;
-    aspect-ratio: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 360px;
+    min-width: 0;
     overflow: hidden;
     border-radius: 8px;
     background:
@@ -737,8 +737,7 @@
 
   @media (max-width: 900px) {
     .board-shell {
-      min-width: 0;
-      width: min(100%, 92vw, 680px);
+      min-height: 340px;
     }
   }
 </style>
