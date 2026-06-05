@@ -87,6 +87,11 @@ export interface EKState {
   knownTopN: Record<number, CardKind[]>;
   pendingFavor: { from: number; to: number } | null;
   pendingDefuse: boolean;
+  pendingNope: {
+    action: EKMove;
+    byPlayer: number;
+    waitingFor: number[];
+  } | null;
   turn: number;
   log: MoveRecord<EKMove>[];
 }
@@ -108,7 +113,9 @@ export type EKMove =
   | (BaseMove & { kind: 'play_five_diff'; cards: CardKind[]; discardPick: CardKind })
   | (BaseMove & { kind: 'draw' })
   | (BaseMove & { kind: 'defuse'; insertAt: number })
-  | (BaseMove & { kind: 'give_favor'; card: CardKind });
+  | (BaseMove & { kind: 'give_favor'; card: CardKind })
+  | (BaseMove & { kind: 'nope' })
+  | (BaseMove & { kind: 'pass_nope' });
 
 export function init(opts: {
   seed?: string;
@@ -177,6 +184,7 @@ export function init(opts: {
     knownTopN: {},
     pendingFavor: null,
     pendingDefuse: false,
+    pendingNope: null,
     turn: 0,
     log: [],
   };

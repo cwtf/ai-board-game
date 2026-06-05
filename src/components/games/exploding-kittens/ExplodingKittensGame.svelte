@@ -47,7 +47,8 @@
     | 'cat_pair_select'
     | 'three_kind'
     | 'five_diff_pick'
-    | 'five_diff';
+    | 'five_diff'
+    | 'nope_prompt';
 
   const LOCAL_BOT_PROFILE = '__ek_local_bot__';
   const localBotSeatOptions: LocalAISeatOption[] = [
@@ -146,6 +147,13 @@
     activeModal !== 'give_favor'
   ) {
     activeModal = 'give_favor';
+  }
+  $: if (
+    humanCanAct &&
+    state?.pendingNope !== null &&
+    activeModal !== 'nope_prompt'
+  ) {
+    activeModal = 'nope_prompt';
   }
   // Reset see-future acknowledgement when the card set changes (new peek)
   $: {
@@ -1060,6 +1068,54 @@
       >
         Cancel
       </button>
+    </div>
+  </div>
+{/if}
+
+<!-- Nope prompt -->
+{#if activeModal === 'nope_prompt' && state?.pendingNope}
+  {@const pending = state.pendingNope}
+  {@const byName = `P${pending.byPlayer + 1}`}
+  {@const action = pending.action}
+  {@const actionDesc = (() => {
+    if (action.kind === 'play_single') return `${byName} played ${CARD_LABELS[action.card]}`;
+    if (action.kind === 'play_favor') return `${byName} played Favor targeting P${action.targetIndex + 1}`;
+    if (action.kind === 'play_cat_pair') return `${byName} played a Cat Pair targeting P${action.targetIndex + 1}`;
+    if (action.kind === 'play_three_kind') return `${byName} played 3-of-a-Kind, naming ${CARD_LABELS[action.namedCard]}`;
+    if (action.kind === 'play_five_diff') return `${byName} played 5-Card Combo`;
+    return `${byName} played a card`;
+  })()}
+  {@const hasNope = legalMoves.some((m) => m.kind === 'nope')}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+    <div class="w-80 rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl">
+      <div class="mb-1 text-lg font-bold text-neutral-100">⚡ Nope?</div>
+      <div class="mb-5 text-sm text-neutral-300">{actionDesc}</div>
+      <div class="flex gap-3">
+        <button
+          class="flex-1 rounded-lg py-3 text-sm font-bold transition
+            {hasNope
+              ? 'bg-red-600 text-white hover:bg-red-500'
+              : 'cursor-default bg-neutral-700 text-neutral-500'}"
+          disabled={!hasNope}
+          on:click={() => {
+            const m = legalMoves.find((mv) => mv.kind === 'nope');
+            if (m) { activeModal = null; playMove(m); }
+          }}
+        >
+          <div class="text-2xl">🚫</div>
+          Nope!
+        </button>
+        <button
+          class="flex-1 rounded-lg bg-neutral-700 py-3 text-sm font-bold text-neutral-200 transition hover:bg-neutral-600"
+          on:click={() => {
+            const m = legalMoves.find((mv) => mv.kind === 'pass_nope');
+            if (m) { activeModal = null; playMove(m); }
+          }}
+        >
+          <div class="text-2xl">✅</div>
+          Let it happen
+        </button>
+      </div>
     </div>
   </div>
 {/if}

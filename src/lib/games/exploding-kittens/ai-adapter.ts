@@ -41,6 +41,9 @@ function publicState(state: EKState, viewer: number) {
     pendingTurns: state.pendingTurns,
     pendingFavor: state.pendingFavor,
     pendingDefuse: state.pendingDefuse,
+    pendingNope: state.pendingNope
+      ? { byPlayer: state.pendingNope.byPlayer, waitingFor: state.pendingNope.waitingFor }
+      : null,
     deckSize: state.deck.length,
     discard: state.discard.slice(0, 8),
     topOfDeck: state.knownTopN[viewer] ?? null,

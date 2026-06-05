@@ -20,6 +20,19 @@ export function chooseEKBotMove(
   player: number,
   moves: EKMove[],
 ): EKMove {
+  // Nope window: decide whether to cancel the pending action
+  if (moves.some((m) => m.kind === 'nope' || m.kind === 'pass_nope')) {
+    const nopeMove = moves.find((m) => m.kind === 'nope');
+    const passMove = moves.find((m) => m.kind === 'pass_nope')!;
+    if (!nopeMove) return passMove;
+    const action = state.pendingNope!.action;
+    const targetsMe =
+      ('targetIndex' in action && action.targetIndex === player) ||
+      (action.kind === 'play_favor' && action.targetIndex === player);
+    const isAttack = action.kind === 'play_single' && action.card === 'attack';
+    return isAttack || targetsMe ? nopeMove : passMove;
+  }
+
   // Sub-decision: defuse — bury at bottom 70% of deck
   const defuseMoves = moves.filter((m): m is Extract<EKMove, { kind: 'defuse' }> => m.kind === 'defuse');
   if (defuseMoves.length > 0) {
