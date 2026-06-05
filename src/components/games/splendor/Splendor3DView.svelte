@@ -676,13 +676,13 @@
       ctx.fill();
     }
 
-    // Draw remaining cards counter badge
+    // Draw remaining cards counter badge (2x scaled for 3D camera readability)
     ctx.save();
-    const badgeW = 96;
-    const badgeH = 22;
+    const badgeW = 192;
+    const badgeH = 44;
     const badgeX = 128 - badgeW / 2;
-    const badgeY = 24;
-    const badgeR = 4;
+    const badgeY = 22;
+    const badgeR = 8;
 
     ctx.beginPath();
     ctx.moveTo(badgeX + badgeR, badgeY);
@@ -695,18 +695,18 @@
 
     ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
     ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)'; // gold border
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 3;
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = '#fef3c7'; // gold text
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = 'bold 20px sans-serif';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillText('Deck', badgeX + 8, badgeY + badgeH / 2);
+    ctx.fillText('Deck', badgeX + 16, badgeY + badgeH / 2);
     
     ctx.textAlign = 'right';
-    ctx.fillText(String(deckCount), badgeX + badgeW - 8, badgeY + badgeH / 2);
+    ctx.fillText(String(deckCount), badgeX + badgeW - 16, badgeY + badgeH / 2);
     ctx.restore();
 
     // Draw "Reserve" button on the bottom right of the deck
