@@ -680,7 +680,7 @@
             {/if}
 
             <!-- Hand cards -->
-            <div class="flex flex-wrap justify-center gap-1.5 px-4">
+            <div class="flex flex-nowrap justify-center px-4">
               {#each state.players[HUMAN_PLAYER_INDEX]!.hand as cardKind, idx}
                 {@const playable =
                   humanCanAct &&
@@ -694,12 +694,13 @@
                       (m.kind === 'give_favor' && m.card === cardKind),
                   ))}
                 <button
-                  class="relative flex h-48 w-[8.25rem] flex-col items-center justify-center rounded-lg border text-center text-base font-bold leading-tight shadow-md transition-transform
+                  class="relative flex h-48 w-[8.25rem] flex-shrink-0 flex-col items-center justify-center rounded-lg border text-center text-base font-bold leading-tight shadow-md transition-all duration-150
                     {playable
-                      ? 'cursor-pointer border-white/30 hover:-translate-y-3 hover:shadow-lg'
+                      ? 'cursor-pointer border-white/30 hover:-translate-y-4 hover:z-10 hover:shadow-xl'
                       : 'cursor-default border-white/10 opacity-60'}
                   "
                   style:background-color={CARD_COLORS[cardKind]}
+                  style:margin-left={idx === 0 ? '0' : '-3.5rem'}
                   disabled={!playable}
                   on:click={() => handleCardClick(cardKind, idx)}
                 >
@@ -713,7 +714,8 @@
               <!-- Draw button -->
               {#if humanCanAct && legalMoves.some((m) => m.kind === 'draw')}
                 <button
-                  class="flex h-48 w-[10.5rem] flex-col items-center justify-center rounded-lg border border-dashed border-neutral-500 bg-neutral-800 text-base font-bold text-neutral-300 shadow transition-transform hover:-translate-y-3 hover:border-neutral-300"
+                  class="relative flex h-48 w-[10.5rem] flex-shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-neutral-500 bg-neutral-800 text-base font-bold text-neutral-300 shadow transition-all duration-150 hover:-translate-y-4 hover:z-10 hover:border-neutral-300 hover:shadow-xl"
+                  style:margin-left={state.players[HUMAN_PLAYER_INDEX]!.hand.length > 0 ? '-3.5rem' : '0'}
                   on:click={handleDeckClick}
                 >
                   <span class="text-6xl">🃏</span>
