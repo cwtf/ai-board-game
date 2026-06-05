@@ -79,11 +79,16 @@
   let boardRotationX = 56;
   let boardRotationZ = -4;
   let boardScale = 1;
+  let boardPanX = 0;
+  let boardPanY = 0;
   let isDraggingBoard = false;
+  let isPanningBoard = false;
   let dragStartX = 0;
   let dragStartY = 0;
   let initialRotationX = 56;
   let initialRotationZ = -4;
+  let initialPanX = 0;
+  let initialPanY = 0;
 
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
@@ -472,10 +477,13 @@
   function handleBoardPointerDown(e: PointerEvent) {
     if ((e.target as HTMLElement).closest('button')) return; // don't drag if clicking a square
     isDraggingBoard = true;
+    isPanningBoard = e.button === 2 || e.button === 1 || e.shiftKey;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
     initialRotationX = boardRotationX;
     initialRotationZ = boardRotationZ;
+    initialPanX = boardPanX;
+    initialPanY = boardPanY;
     const target = e.currentTarget as HTMLElement;
     target.setPointerCapture(e.pointerId);
   }
@@ -484,8 +492,13 @@
     if (!isDraggingBoard) return;
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
-    boardRotationX = Math.max(0, Math.min(80, initialRotationX - dy * 0.5));
-    boardRotationZ = initialRotationZ + dx * 0.5;
+    if (isPanningBoard) {
+      boardPanX = initialPanX + dx / boardScale;
+      boardPanY = initialPanY + dy / boardScale;
+    } else {
+      boardRotationX = Math.max(0, Math.min(80, initialRotationX - dy * 0.5));
+      boardRotationZ = initialRotationZ + dx * 0.5;
+    }
   }
 
   function handleBoardPointerUp(e: PointerEvent) {
@@ -697,18 +710,19 @@
 
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
-          class="flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 theme-bg p-8"
+          class="relative flex min-h-[660px] items-center justify-center overflow-hidden rounded-md border border-neutral-800 theme-bg p-8"
           on:pointerdown={handleBoardPointerDown}
           on:pointermove={handleBoardPointerMove}
           on:pointerup={handleBoardPointerUp}
           on:pointercancel={handleBoardPointerUp}
           on:wheel|preventDefault={handleBoardWheel}
+          on:contextmenu|preventDefault
           style={`cursor: ${isDraggingBoard ? 'grabbing' : 'grab'};`}
         >
           <div class="jungle-perspective">
             <div
               class="jungle-board"
-              style={`transform: scale(${boardScale}) rotateX(${boardRotationX}deg) rotateZ(${boardRotationZ}deg); transition: transform ${isDraggingBoard ? '0s' : '0.15s ease-out'};`}
+              style={`transform: scale(${boardScale}) translate(${boardPanX}px, ${boardPanY}px) rotateX(${boardRotationX}deg) rotateZ(${boardRotationZ}deg); transition: transform ${isDraggingBoard ? '0s' : '0.15s ease-out'};`}
             >
               {#each Array.from({ length: BOARD_HEIGHT }) as _, y}
                 {#each Array.from({ length: BOARD_WIDTH }) as _, x}
@@ -771,6 +785,9 @@
                 {/each}
               </div>
             </div>
+          </div>
+          <div class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
+            <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
           </div>
         </div>
       </div>
