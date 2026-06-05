@@ -2,19 +2,19 @@
   import { onDestroy, onMount } from 'svelte';
   import * as THREE from 'three';
   import {
-    BOARD_SIZE,
-    coordinateLabel,
-    pieceGlyph,
-    type ChessMove,
-    type ChessPiece,
-    type ChessState,
+    BOARD_HEIGHT,
+    BOARD_WIDTH,
+    type ChineseChessMove,
+    type ChineseChessPiece,
+    type ChineseChessState,
     type Coord,
     type PieceType,
-  } from '@/lib/games/chess/state';
+  } from '@/lib/games/chinese-chess/state';
+  import { coordinateLabel } from '@/lib/games/chinese-chess/move-format';
 
-  export let state: ChessState;
+  export let state: ChineseChessState;
   export let selectedPieceId = '';
-  export let selectedMoves: ChessMove[] = [];
+  export let selectedMoves: ChineseChessMove[] = [];
   export let onSquare: (x: number, y: number) => void = () => {};
 
   let canvas: HTMLCanvasElement;
@@ -34,10 +34,10 @@
   let pointerStartY = 0;
   let yaw = -32;
   let pitch = 54;
-  let distance = 13.8;
+  let distance = 14.8;
   let focusX = 0;
   let focusZ = 0;
-  let activeState: ChessState | undefined;
+  let activeState: ChineseChessState | undefined;
   let activeSelectedPieceId = '';
   let activeSelectedMovesKey = '';
   let selectedMovesRenderKey = '';
@@ -46,11 +46,10 @@
 
   const boardObjects: THREE.Object3D[] = [];
   const interactiveObjects: THREE.Object3D[] = [];
-  const boardIndexes = [...Array(BOARD_SIZE).keys()];
   const MOVE_ANIMATION_MS = 420;
 
   $: selectedMovesRenderKey = selectedMoves
-    .map((move) => `${move.to.x},${move.to.y},${move.promotion ?? ''}`)
+    .map((move) => `${move.to.x},${move.to.y}`)
     .sort()
     .join('|');
 
@@ -59,7 +58,7 @@
   }
 
   function squarePosition(x: number, y: number): THREE.Vector3 {
-    return new THREE.Vector3(x - (BOARD_SIZE - 1) / 2, 0, y - (BOARD_SIZE - 1) / 2);
+    return new THREE.Vector3(x - (BOARD_WIDTH - 1) / 2, 0, y - (BOARD_HEIGHT - 1) / 2);
   }
 
   function easeOutCubic(t: number): number {
@@ -70,55 +69,23 @@
     return `${coord.x},${coord.y}`;
   }
 
-  function targetPieceTypeForMove(move: ChessMove): PieceType {
-    return move.promotion ?? move.piece;
-  }
-
-  function castlingRookMotion(
-    piece: ChessPiece,
-    move: ChessMove | undefined,
-  ): { from: Coord; to: Coord } | undefined {
-    if (!move?.isCastle || piece.type !== 'rook' || piece.owner !== move.owner) {
-      return undefined;
-    }
-
-    const y = move.from.y;
-    const kingside = move.to.x > move.from.x;
-    const from = { x: kingside ? 7 : 0, y };
-    const to = { x: kingside ? 5 : 3, y };
-    return piece.x === to.x && piece.y === to.y ? { from, to } : undefined;
-  }
-
   function startCoordForPiece(
-    piece: ChessPiece,
-    previousState: ChessState | undefined,
+    piece: ChineseChessPiece,
+    previousState: ChineseChessState | undefined,
     animateMove: boolean,
   ): Coord {
     const current = { x: piece.x, y: piece.y };
-    if (!animateMove || !previousState || !state.lastMove) {
-      return current;
-    }
-
-    const movedType = targetPieceTypeForMove(state.lastMove);
-    if (
-      piece.owner === state.lastMove.owner &&
-      piece.type === movedType &&
-      squareKey(current) === squareKey(state.lastMove.to)
-    ) {
-      return state.lastMove.from;
-    }
-
-    const rookMotion = castlingRookMotion(piece, state.lastMove);
-    if (rookMotion) {
-      return rookMotion.from;
-    }
-
+    // We don't have lastMove recorded in ChineseChessState unfortunately in this specific implementation without changing state.ts.
+    // Wait, the state doesn't track lastMove. So we can't easily animate the opponent's move automatically here without external logs.
+    // For now, pieces will just snap, or we can look up the move from external state if we had it.
+    // Wait! ChessState has `lastMove` because it was added. ChineseChessState might not. Let's check `ChineseChessState` in `state.ts`.
+    // It doesn't have `lastMove`. So we'll skip move animation from opponent for now, and it will snap. 
     return current;
   }
 
   function targetHasCapture(x: number, y: number): boolean {
     return selectedMoves.some(
-      (move) => move.to.x === x && move.to.y === y && move.isCapture,
+      (move) => move.to.x === x && move.to.y === y && move.capturedId != null,
     );
   }
 
@@ -158,28 +125,28 @@
     return mesh;
   }
 
-  function pieceMaterials(piece: ChessPiece) {
-    const white = piece.owner === 0;
+  function pieceMaterials(piece: ChineseChessPiece) {
+    const isRed = piece.owner === 0;
     return {
       body: material({
-        color: white ? 0xf6ead3 : 0x2b3141,
-        roughness: 0.42,
-        metalness: 0.08,
+        color: isRed ? 0xebd9b4 : 0x3d2b1f,
+        roughness: 0.6,
+        metalness: 0.05,
       }),
       trim: material({
-        color: white ? 0xc9a15e : 0x94a3b8,
-        roughness: 0.34,
-        metalness: 0.38,
-      }),
-      dark: material({
-        color: white ? 0x9b6a31 : 0x111827,
-        roughness: 0.62,
+        color: isRed ? 0xcdb183 : 0x24180f,
+        roughness: 0.5,
         metalness: 0.1,
       }),
+      dark: material({
+        color: isRed ? 0xa88554 : 0x160e09,
+        roughness: 0.7,
+        metalness: 0.05,
+      }),
       accent: material({
-        color: white ? 0xffffff : 0x64748b,
-        roughness: 0.35,
-        metalness: 0.2,
+        color: isRed ? 0xab2222 : 0x1a1a1a,
+        roughness: 0.4,
+        metalness: 0.15,
       }),
     };
   }
@@ -190,13 +157,21 @@
     addMesh(group, new THREE.CylinderGeometry(0.46, 0.55, 0.22, 40), mats.body, [0, 0.45, 0]);
   }
 
-  function addPawn(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+  function addSoldier(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
     addMesh(group, new THREE.CylinderGeometry(0.22, 0.3, 0.38, 32), mats.body, [0, 0.75, 0]);
     addMesh(group, new THREE.SphereGeometry(0.34, 32, 20), mats.body, [0, 1.08, 0]);
-    addMesh(group, new THREE.TorusGeometry(0.25, 0.045, 12, 32), mats.trim, [0, 0.86, 0], [Math.PI / 2, 0, 0]);
+    addMesh(group, new THREE.ConeGeometry(0.45, 0.25, 32), mats.trim, [0, 1.35, 0]);
   }
 
-  function addRook(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+  function addHorse(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+    addMesh(group, new THREE.CylinderGeometry(0.24, 0.34, 0.52, 28), mats.body, [0, 0.76, 0]);
+    addMesh(group, new THREE.BoxGeometry(0.38, 0.62, 0.32), mats.body, [0.05, 1.18, 0], [0, 0, -0.28]);
+    addMesh(group, new THREE.BoxGeometry(0.34, 0.2, 0.28), mats.body, [0.25, 1.34, 0], [0, 0, 0.08]);
+    addMesh(group, new THREE.ConeGeometry(0.09, 0.3, 4), mats.trim, [-0.05, 1.58, 0.08], [0.15, 0.35, 0.1]);
+    addMesh(group, new THREE.ConeGeometry(0.09, 0.28, 4), mats.trim, [0.08, 1.58, -0.08], [-0.15, -0.35, -0.1]);
+  }
+
+  function addChariot(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
     addMesh(group, new THREE.CylinderGeometry(0.4, 0.5, 0.62, 36), mats.body, [0, 0.88, 0]);
     addMesh(group, new THREE.CylinderGeometry(0.52, 0.45, 0.16, 36), mats.trim, [0, 1.26, 0]);
     for (let i = 0; i < 4; i += 1) {
@@ -211,60 +186,60 @@
     }
   }
 
-  function addKnight(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
-    addMesh(group, new THREE.CylinderGeometry(0.24, 0.34, 0.52, 28), mats.body, [0, 0.76, 0]);
-    addMesh(group, new THREE.BoxGeometry(0.38, 0.62, 0.32), mats.body, [0.05, 1.18, 0], [0, 0, -0.28]);
-    addMesh(group, new THREE.BoxGeometry(0.34, 0.2, 0.28), mats.body, [0.25, 1.34, 0], [0, 0, 0.08]);
-    addMesh(group, new THREE.ConeGeometry(0.09, 0.3, 4), mats.trim, [-0.05, 1.58, 0.08], [0.15, 0.35, 0.1]);
-    addMesh(group, new THREE.ConeGeometry(0.09, 0.28, 4), mats.trim, [0.08, 1.58, -0.08], [-0.15, -0.35, -0.1]);
+  function addCannon(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+    addMesh(group, new THREE.BoxGeometry(0.5, 0.6, 0.4), mats.body, [0, 0.8, 0]);
+    addMesh(group, new THREE.CylinderGeometry(0.18, 0.22, 1.1, 32), mats.dark, [0.1, 1.2, 0], [0, 0, -Math.PI / 2 + 0.2]);
+    addMesh(group, new THREE.TorusGeometry(0.2, 0.04, 16, 32), mats.trim, [0.4, 1.26, 0], [0, Math.PI/2, Math.PI / 2 - 0.2]);
+    addMesh(group, new THREE.SphereGeometry(0.22, 16, 16), mats.dark, [-0.42, 1.1, 0]);
   }
 
-  function addBishop(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
-    addMesh(group, new THREE.CylinderGeometry(0.22, 0.34, 0.32, 32), mats.body, [0, 0.72, 0]);
-    addMesh(group, new THREE.SphereGeometry(0.36, 32, 20), mats.body, [0, 1.08, 0], [0, 0, 0], [0.88, 1.22, 0.88]);
-    addMesh(group, new THREE.BoxGeometry(0.08, 0.58, 0.06), mats.dark, [0.12, 1.16, 0.34], [0, 0, -0.62]);
-    addMesh(group, new THREE.SphereGeometry(0.11, 20, 12), mats.trim, [0, 1.56, 0]);
+  function addElephant(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+    addMesh(group, new THREE.CylinderGeometry(0.45, 0.55, 0.6, 32), mats.body, [0, 0.85, 0]);
+    addMesh(group, new THREE.SphereGeometry(0.45, 32, 20), mats.body, [0, 1.15, 0]);
+    addMesh(group, new THREE.ConeGeometry(0.08, 0.4, 16), mats.trim, [0.35, 1.1, 0.15], [Math.PI/2 - 0.2, 0, -Math.PI/4]);
+    addMesh(group, new THREE.ConeGeometry(0.08, 0.4, 16), mats.trim, [0.35, 1.1, -0.15], [-Math.PI/2 + 0.2, 0, -Math.PI/4]);
+    addMesh(group, new THREE.CylinderGeometry(0.1, 0.15, 0.5, 16), mats.dark, [0.45, 1.0, 0], [0, 0, -Math.PI/4]);
+    addMesh(group, new THREE.CylinderGeometry(0.2, 0.2, 0.06, 16), mats.body, [0.1, 1.2, 0.4], [Math.PI/2, -0.3, 0], [1.2, 1, 1.5]);
+    addMesh(group, new THREE.CylinderGeometry(0.2, 0.2, 0.06, 16), mats.body, [0.1, 1.2, -0.4], [Math.PI/2, 0.3, 0], [1.2, 1, 1.5]);
   }
 
-  function addQueen(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
-    addMesh(group, new THREE.CylinderGeometry(0.28, 0.42, 0.54, 36), mats.body, [0, 0.88, 0]);
-    addMesh(group, new THREE.CylinderGeometry(0.48, 0.38, 0.14, 36), mats.trim, [0, 1.2, 0]);
-    for (let i = 0; i < 6; i += 1) {
-      const angle = (Math.PI * 2 * i) / 6;
-      addMesh(
-        group,
-        new THREE.SphereGeometry(0.105, 16, 10),
-        mats.trim,
-        [Math.cos(angle) * 0.36, 1.48, Math.sin(angle) * 0.36],
-      );
-    }
-    addMesh(group, new THREE.SphereGeometry(0.14, 18, 12), mats.accent, [0, 1.58, 0]);
+  function addAdvisor(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+    addMesh(group, new THREE.CylinderGeometry(0.25, 0.38, 0.55, 32), mats.body, [0, 0.83, 0]);
+    addMesh(group, new THREE.SphereGeometry(0.3, 32, 20), mats.body, [0, 1.2, 0]);
+    addMesh(group, new THREE.BoxGeometry(0.5, 0.1, 0.5), mats.dark, [0, 1.45, 0]);
+    addMesh(group, new THREE.BoxGeometry(0.1, 0.3, 0.8), mats.dark, [-0.15, 1.35, 0], [0, 0, 0.2]);
   }
 
-  function addKing(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
-    addMesh(group, new THREE.CylinderGeometry(0.3, 0.44, 0.64, 36), mats.body, [0, 0.92, 0]);
-    addMesh(group, new THREE.CylinderGeometry(0.44, 0.36, 0.12, 36), mats.trim, [0, 1.3, 0]);
-    addMesh(group, new THREE.BoxGeometry(0.14, 0.48, 0.12), mats.trim, [0, 1.58, 0]);
-    addMesh(group, new THREE.BoxGeometry(0.42, 0.12, 0.12), mats.trim, [0, 1.66, 0]);
+  function addGeneral(group: THREE.Group, mats: ReturnType<typeof pieceMaterials>) {
+    addMesh(group, new THREE.CylinderGeometry(0.32, 0.48, 0.7, 36), mats.body, [0, 0.9, 0]);
+    addMesh(group, new THREE.CylinderGeometry(0.48, 0.4, 0.14, 36), mats.trim, [0, 1.32, 0]);
+    addMesh(group, new THREE.SphereGeometry(0.35, 32, 20), mats.dark, [0, 1.5, 0]);
+    addMesh(group, new THREE.ConeGeometry(0.15, 0.4, 16), mats.accent, [0, 1.8, 0]);
   }
 
-  function createPieceModel(piece: ChessPiece): THREE.Group {
+  function createPieceModel(piece: ChineseChessPiece): THREE.Group {
     const group = new THREE.Group();
     const mats = pieceMaterials(piece);
     addBase(group, mats);
 
     const builders: Record<PieceType, () => void> = {
-      pawn: () => addPawn(group, mats),
-      knight: () => addKnight(group, mats),
-      bishop: () => addBishop(group, mats),
-      rook: () => addRook(group, mats),
-      queen: () => addQueen(group, mats),
-      king: () => addKing(group, mats),
+      soldier: () => addSoldier(group, mats),
+      horse: () => addHorse(group, mats),
+      elephant: () => addElephant(group, mats),
+      advisor: () => addAdvisor(group, mats),
+      chariot: () => addChariot(group, mats),
+      cannon: () => addCannon(group, mats),
+      general: () => addGeneral(group, mats),
     };
     builders[piece.type]();
 
     group.scale.setScalar(0.46);
-    group.rotation.y = piece.owner === 0 ? Math.PI : 0;
+    // Orient the pieces appropriately
+    // By default, x-axis is 'forward' for our models (horse facing, cannon facing)
+    // We want Red (owner 0) to face Black (negative Z direction)
+    // And Black (owner 1) to face Red (positive Z direction)
+    // If our forward is +x, we rotate to point to -z
+    group.rotation.y = piece.owner === 0 ? Math.PI / 2 : -Math.PI / 2;
     group.userData = {
       pieceId: piece.id,
       x: piece.x,
@@ -295,33 +270,51 @@
   function addBoard() {
     if (!scene || !tableGroup) return;
 
-    const lightSquare = material({ color: 0xd8b46f, roughness: 0.72 });
-    const darkSquare = material({ color: 0x6d765f, roughness: 0.75 });
-    const edge = material({ color: 0x2b2118, roughness: 0.68 });
+    const boardMat = material({ color: 0xdca86b, roughness: 0.78, metalness: 0.02 });
+    const edgeMat = material({ color: 0x2b2118, roughness: 0.68 });
+    const lineMat = material({ color: 0x4a2c14, roughness: 0.9, metalness: 0.0 });
 
-    addMesh(tableGroup, new THREE.BoxGeometry(8.65, 0.28, 8.65), edge, [0, -0.16, 0]);
+    addMesh(tableGroup, new THREE.BoxGeometry(10.6, 0.28, 11.6), edgeMat, [0, -0.16, 0]);
+    addMesh(tableGroup, new THREE.BoxGeometry(10.4, 0.05, 11.4), boardMat, [0, -0.01, 0]);
 
-    for (let y = 0; y < BOARD_SIZE; y += 1) {
-      for (let x = 0; x < BOARD_SIZE; x += 1) {
-        const square = new THREE.Mesh(
-          new THREE.BoxGeometry(0.98, 0.11, 0.98),
-          (x + y) % 2 === 0 ? lightSquare : darkSquare,
-        );
+    // Grid lines
+    for (let x = 0; x < BOARD_WIDTH; x++) {
+      const px = x - (BOARD_WIDTH - 1) / 2;
+      // Lines break at the river for columns 1 to 7
+      if (x > 0 && x < BOARD_WIDTH - 1) {
+        addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 4), lineMat, [px, 0.02, -2.5]);
+        addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 4), lineMat, [px, 0.02, 2.5]);
+      } else {
+        addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 9), lineMat, [px, 0.02, 0]);
+      }
+    }
+
+    for (let y = 0; y < BOARD_HEIGHT; y++) {
+      const pz = y - (BOARD_HEIGHT - 1) / 2;
+      addMesh(tableGroup, new THREE.BoxGeometry(8, 0.01, 0.04), lineMat, [0, 0.02, pz]);
+    }
+
+    // Palace diagonals
+    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, -3.5], [0, Math.PI / 4, 0]);
+    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, -3.5], [0, -Math.PI / 4, 0]);
+    
+    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, 3.5], [0, Math.PI / 4, 0]);
+    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, 3.5], [0, -Math.PI / 4, 0]);
+
+    // Invisible hitboxes for intersections
+    const hitboxMat = material({ color: 0xff0000, transparent: true, opacity: 0 });
+    hitboxMat.depthWrite = false;
+    for (let y = 0; y < BOARD_HEIGHT; y += 1) {
+      for (let x = 0; x < BOARD_WIDTH; x += 1) {
+        const square = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 0.9), hitboxMat);
         const position = squarePosition(x, y);
-        square.position.set(position.x, 0, position.z);
+        square.position.set(position.x, 0.05, position.z);
         square.userData = { x, y, square: coordinateLabel(x, y) };
-        square.receiveShadow = true;
         tableGroup.add(square);
         boardObjects.push(square);
         interactiveObjects.push(square);
       }
     }
-
-    const frameMat = material({ color: 0x17120d, roughness: 0.48, metalness: 0.16 });
-    addMesh(tableGroup, new THREE.BoxGeometry(8.9, 0.32, 0.16), frameMat, [0, 0.03, -4.46]);
-    addMesh(tableGroup, new THREE.BoxGeometry(8.9, 0.32, 0.16), frameMat, [0, 0.03, 4.46]);
-    addMesh(tableGroup, new THREE.BoxGeometry(0.16, 0.32, 8.9), frameMat, [-4.46, 0.03, 0]);
-    addMesh(tableGroup, new THREE.BoxGeometry(0.16, 0.32, 8.9), frameMat, [4.46, 0.03, 0]);
   }
 
   function clearLayer(layer: THREE.Group | undefined) {
@@ -365,37 +358,23 @@
       transparent: true,
       opacity: 0.84,
     });
-    const lastMoveMat = material({
-      color: 0x60a5fa,
-      emissive: 0x173d72,
-      transparent: true,
-      opacity: 0.42,
-    });
     for (const mat of [
       targetMat,
       targetSquareMat,
       targetHaloMat,
       captureMat,
       selectedMat,
-      lastMoveMat,
     ]) {
       mat.depthWrite = false;
-    }
-
-    if (state.lastMove) {
-      for (const coord of [state.lastMove.from, state.lastMove.to]) {
-        const pos = squarePosition(coord.x, coord.y);
-        addMesh(highlightLayer, new THREE.BoxGeometry(0.9, 0.035, 0.9), lastMoveMat, [pos.x, 0.09, pos.z]);
-      }
     }
 
     const selectedPiece = state.pieces.find((piece) => piece.id === selectedPieceId);
     if (selectedPiece) {
       const pos = squarePosition(selectedPiece.x, selectedPiece.y);
-      addMesh(highlightLayer, new THREE.BoxGeometry(0.88, 0.045, 0.88), selectedMat, [pos.x, 0.12, pos.z]);
+      addMesh(highlightLayer, new THREE.BoxGeometry(0.88, 0.045, 0.88), selectedMat, [pos.x, 0.04, pos.z]);
     }
 
-    const targetSquares = new Map<string, ChessMove>();
+    const targetSquares = new Map<string, ChineseChessMove>();
     for (const move of selectedMoves) {
       targetSquares.set(squareKey(move.to), move);
     }
@@ -406,13 +385,13 @@
         highlightLayer,
         new THREE.BoxGeometry(0.9, 0.035, 0.9),
         targetSquareMat,
-        [pos.x, 0.18, pos.z],
+        [pos.x, 0.05, pos.z],
       );
       const halo = addMesh(
         highlightLayer,
         new THREE.TorusGeometry(0.37, 0.045, 12, 44),
         targetHaloMat,
-        [pos.x, 0.28, pos.z],
+        [pos.x, 0.15, pos.z],
         [Math.PI / 2, 0, 0],
       );
       halo.userData = { x: move.to.x, y: move.to.y };
@@ -422,7 +401,7 @@
         highlightLayer,
         new THREE.CylinderGeometry(0.18, 0.24, 0.34, 32),
         targetMat,
-        [pos.x, 0.39, pos.z],
+        [pos.x, 0.26, pos.z],
       );
       target.userData = { x: move.to.x, y: move.to.y };
       interactiveObjects.push(target);
@@ -432,7 +411,7 @@
           highlightLayer,
           new THREE.TorusGeometry(0.43, 0.045, 12, 42),
           captureMat,
-          [pos.x, 0.22, pos.z],
+          [pos.x, 0.1, pos.z],
           [Math.PI / 2, 0, 0],
         );
         ring.userData = { x: move.to.x, y: move.to.y };
@@ -441,17 +420,18 @@
     }
   }
 
-  function addPieces(previousState: ChessState | undefined, animateMove: boolean) {
+  function addPieces(previousState: ChineseChessState | undefined, animateMove: boolean) {
     if (!pieceLayer || !state) return;
 
     for (const piece of state.pieces) {
+      if (piece.captured) continue;
       const model = createPieceModel(piece);
       const targetCoord = { x: piece.x, y: piece.y };
       const startCoord = startCoordForPiece(piece, previousState, animateMove);
       const start = squarePosition(startCoord.x, startCoord.y);
       const target = squarePosition(targetCoord.x, targetCoord.y);
       const isMoving = squareKey(startCoord) !== squareKey(targetCoord);
-      model.position.set(start.x, 0.16, start.z);
+      model.position.set(start.x, 0.05, start.z);
       model.userData = {
         ...model.userData,
         startX: start.x,
@@ -461,6 +441,7 @@
         moveStartedAt: performance.now(),
         moveDuration: isMoving ? MOVE_ANIMATION_MS : 0,
         moving: isMoving,
+        baseY: 0.05,
       };
       model.traverse((object) => {
         object.userData = model.userData;
@@ -502,11 +483,11 @@
     const canvasWidth = renderer.domElement.clientWidth;
     const responsiveDistance =
       canvasWidth < 430
-        ? Math.max(distance, 16)
+        ? Math.max(distance, 18)
         : camera.aspect < 0.72
-          ? Math.max(distance, 13)
+          ? Math.max(distance, 15)
           : camera.aspect < 1
-            ? Math.max(distance, 11.2)
+            ? Math.max(distance, 13)
             : distance;
     camera.position.set(
       focusX + Math.sin(yawRad) * Math.cos(pitchRad) * responsiveDistance,
@@ -625,7 +606,6 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050505);
 
     camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     raycaster = new THREE.Raycaster();
@@ -738,16 +718,11 @@
 
   function handleWheel(event: WheelEvent) {
     event.preventDefault();
-    distance = Math.max(6.4, Math.min(18, distance + (event.deltaY > 0 ? 0.55 : -0.55)));
+    distance = Math.max(6.4, Math.min(22, distance + (event.deltaY > 0 ? 0.55 : -0.55)));
     updateCamera();
   }
 
   onMount(() => {
-    if (canvas.getBoundingClientRect().width < 430) {
-      renderMode = 'fallback';
-      return;
-    }
-
     try {
       initScene();
     } catch (error) {
@@ -772,43 +747,19 @@
 
 <div class="board-shell" on:wheel={handleWheel}>
   {#if renderMode === 'fallback'}
-    <div class="fallback-board" aria-label="Interactive chess board">
-      {#each boardIndexes as y (y)}
-        {#each boardIndexes as x (x)}
-          {@const piece = state?.pieces.find((item) => item.x === x && item.y === y)}
-          {@const target = selectedMoves.some((move) => move.to.x === x && move.to.y === y)}
-          {@const captureTarget = targetHasCapture(x, y)}
-          {@const selected = piece?.id === selectedPieceId}
-          <button
-            class={`fallback-square ${(x + y) % 2 === 0 ? 'light' : 'dark'} ${target ? 'target' : ''} ${captureTarget ? 'capture-target' : ''} ${selected ? 'selected-square' : ''}`}
-            type="button"
-            aria-label={coordinateLabel(x, y)}
-            on:click={() => onSquare(x, y)}
-          >
-            {#if target}
-              <span class="fallback-target"></span>
-            {/if}
-            {#if piece}
-              <span
-                class={`fallback-piece ${piece.owner === 0 ? 'white' : 'black'} ${selected ? 'selected' : ''}`}
-              >
-                {pieceGlyph(piece)}
-              </span>
-            {/if}
-          </button>
-        {/each}
-      {/each}
+    <div class="fallback-message">
+      WebGL is required for the 3D board. Please select a different piece style or enable WebGL.
     </div>
   {:else}
     <canvas
       bind:this={canvas}
-      aria-label="Interactive 3D chess board"
+      aria-label="Interactive 3D Chinese chess board"
       on:pointerdown={handlePointerDown}
       on:pointermove={handlePointerMove}
       on:pointerup={handlePointerUp}
       on:pointercancel={handlePointerUp}
       on:contextmenu|preventDefault
-    >Interactive 3D chess board</canvas>
+    >Interactive 3D Chinese chess board</canvas>
   {/if}
 </div>
 
@@ -818,141 +769,27 @@
     width: 100%;
     height: 100%;
     min-height: 360px;
-    min-width: 0;
-    overflow: hidden;
-    border-radius: 8px;
-    background:
-      radial-gradient(circle at 50% 18%, rgba(52, 211, 153, 0.12), transparent 30%),
-      linear-gradient(180deg, #0f172a, #050505 76%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 34px 70px rgba(0, 0, 0, 0.55);
-    cursor: grab;
-  }
-
-  .board-shell:active {
-    cursor: grabbing;
-  }
-
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
     touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
-
-  .fallback-board {
+  
+  canvas {
     position: absolute;
-    left: 50%;
-    top: 50%;
-    display: grid;
-    width: min(78%, 620px);
-    aspect-ratio: 1;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
-    border: 8px solid #17120d;
-    border-radius: 8px;
-    box-shadow:
-      0 26px 52px rgba(0, 0, 0, 0.55),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-    transform: translate(-50%, -50%) rotateX(58deg) rotateZ(-5deg);
-    transform-style: preserve-3d;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    outline: none;
   }
-
-  .fallback-square {
-    position: relative;
-    min-width: 0;
-    border: 0;
-    padding: 0;
-    transform-style: preserve-3d;
-  }
-
-  .fallback-square.light {
-    background: #d8b46f;
-  }
-
-  .fallback-square.dark {
-    background: #6d765f;
-  }
-
-  .fallback-square.target {
-    box-shadow: inset 0 0 0 4px rgba(52, 211, 153, 0.72);
-  }
-
-  .fallback-square.selected-square {
-    box-shadow: inset 0 0 0 4px rgba(248, 215, 126, 0.78);
-  }
-
-  .fallback-square.capture-target {
-    box-shadow: inset 0 0 0 4px rgba(249, 115, 22, 0.76);
-  }
-
-  .fallback-target {
-    position: absolute;
-    inset: 32%;
-    border-radius: 999px;
-    background: rgba(52, 211, 153, 0.72);
-    transform: translateZ(18px);
-  }
-
-  .fallback-square.capture-target .fallback-target {
-    inset: 20%;
-    border: 3px solid rgba(249, 115, 22, 0.82);
-    background: transparent;
-  }
-
-  .fallback-piece {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    display: grid;
-    width: 74%;
-    aspect-ratio: 1;
-    place-items: center;
-    border-radius: 999px;
-    border: 3px solid var(--piece-ring);
-    background:
-      radial-gradient(circle at 35% 26%, rgba(255, 255, 255, 0.46), transparent 35%),
-      var(--piece-body);
-    box-shadow:
-      0 10px 0 var(--piece-side),
-      0 18px 18px rgba(0, 0, 0, 0.32),
-      inset 0 -5px 10px rgba(0, 0, 0, 0.18);
-    color: var(--piece-text);
-    font-size: clamp(1.4rem, 4.6vw, 2.5rem);
-    font-weight: 900;
-    line-height: 1;
-    transform: translate(-50%, -50%) translateZ(36px) rotateZ(5deg);
-    transition:
-      box-shadow 160ms ease,
-      transform 160ms ease;
-  }
-
-  .fallback-piece.white {
-    --piece-body: #f6ead3;
-    --piece-ring: #c9a15e;
-    --piece-side: #9b6a31;
-    --piece-text: #4a3217;
-  }
-
-  .fallback-piece.black {
-    --piece-body: #2b3141;
-    --piece-ring: #94a3b8;
-    --piece-side: #111827;
-    --piece-text: #f8fafc;
-  }
-
-  .fallback-piece.selected {
-    transform: translate(-50%, -58%) translateZ(58px) rotateZ(5deg);
-    box-shadow:
-      0 14px 0 var(--piece-side),
-      0 0 26px rgba(251, 191, 36, 0.52),
-      0 24px 22px rgba(0, 0, 0, 0.38),
-      inset 0 -5px 10px rgba(0, 0, 0, 0.18);
-  }
-
-  @media (max-width: 900px) {
-    .board-shell {
-      min-height: 340px;
-    }
+  
+  .fallback-message {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    color: #ef4444;
   }
 </style>

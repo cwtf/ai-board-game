@@ -679,13 +679,16 @@
           {/if}
         </aside>
 
-        <div class="order-first flex min-h-[430px] min-w-0 items-center justify-center overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3 sm:min-h-[560px] lg:order-none lg:min-h-[660px] lg:p-5">
+        <div class="relative order-first flex min-h-[430px] min-w-0 items-center justify-center overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-3 sm:min-h-[560px] lg:order-none lg:min-h-[660px] lg:p-5">
           <ChessBoard3D
             {state}
             {selectedPieceId}
             {selectedMoves}
             onSquare={chooseSquare}
           />
+          <div class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
+            <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
+          </div>
         </div>
       </div>
     </div>
