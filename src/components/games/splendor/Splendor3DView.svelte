@@ -39,18 +39,12 @@
   const textureLoader = new THREE.TextureLoader();
   const gemImages = new Map<GemOrGold, HTMLImageElement>();
 
+  // Caches for canvases and dynamic textures
+  const cardCanvases = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; img: HTMLImageElement; texture: THREE.Texture }>();
+  const deckCanvases = new Map<Tier, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; texture: THREE.Texture }>();
+
   // Highlight and menu state
   let hoveredObject: THREE.Object3D | null = null;
-  let cardOverlays: Array<{
-    id: string | number;
-    type: 'card' | 'deck';
-    card?: Card;
-    tier?: Tier;
-    buyMove?: SplendorMove;
-    reserveMove?: SplendorMove;
-    x: number;
-    y: number;
-  }> = [];
 
   // Keep track of dimensions
   let width = 800;
@@ -74,6 +68,68 @@
     const texture = textureLoader.load(url);
     textureCache.set(url, texture);
     return texture;
+  }
+
+  function drawTextureButton(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    text: string,
+    isActive: boolean,
+    type: 'buy' | 'reserve'
+  ) {
+    ctx.save();
+    
+    // Draw rounded rect
+    const r = 12; // corner radius
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.closePath();
+
+    if (type === 'buy') {
+      if (isActive) {
+        ctx.fillStyle = '#10b981'; // active green
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+      } else {
+        ctx.fillStyle = '#374151'; // disabled gray
+        ctx.strokeStyle = '#4b5563';
+        ctx.lineWidth = 4;
+      }
+    } else { // reserve
+      if (isActive) {
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.9)';
+        ctx.strokeStyle = '#fbbf24'; // gold border
+        ctx.lineWidth = 4;
+      } else {
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
+        ctx.strokeStyle = '#374151';
+        ctx.lineWidth = 4;
+      }
+    }
+
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw text
+    if (type === 'buy') {
+      ctx.fillStyle = isActive ? '#111827' : '#9ca3af';
+    } else {
+      ctx.fillStyle = isActive ? '#fef3c7' : '#6b7280';
+    }
+    
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w / 2, y + h / 2);
+
+    ctx.restore();
   }
 
   function drawCardMetadata(ctx: CanvasRenderingContext2D, card: Card, texture: THREE.Texture) {
@@ -200,12 +256,21 @@
       }
     }
     ctx.restore();
+
+    // 4. Draw Buy and Reserve buttons directly on the card face
+    const buyMove = findBuyMove(card.id, 'board');
+    const reserveMove = findReserveMove(card.id);
+    
+    // Draw Buy button at (332, 556)
+    drawTextureButton(ctx, 332, 556, 144, 60, 'Buy', !!buyMove, 'buy');
+
+    // Draw Reserve button at (332, 636)
+    drawTextureButton(ctx, 332, 636, 144, 60, 'Reserve', !!reserveMove, 'reserve');
   }
 
   function getCachedDynamicCardTexture(card: Card, tier: Tier): THREE.Texture {
-    const cacheKey = `card-${card.id}`;
-    if (textureCache.has(cacheKey)) {
-      return textureCache.get(cacheKey)!;
+    if (cardCanvases.has(card.id)) {
+      return cardCanvases.get(card.id)!.texture;
     }
 
     const canvas = document.createElement('canvas');
@@ -214,9 +279,13 @@
     const ctx = canvas.getContext('2d');
     
     const texture = new THREE.CanvasTexture(canvas);
-    textureCache.set(cacheKey, texture);
 
     if (ctx) {
+      const img = new Image();
+      img.src = `/assets/splendor/cards/${card.id}.png`;
+      
+      cardCanvases.set(card.id, { canvas, ctx, img, texture });
+
       const colors = {
         1: '#14532d',
         2: '#1e3a8a',
@@ -235,8 +304,6 @@
       ctx.fillText(`Loading ${card.id}...`, 256, 358);
       texture.needsUpdate = true;
 
-      const img = new Image();
-      img.src = `/assets/splendor/cards/${card.id}.png`;
       img.onload = () => {
         ctx.drawImage(img, 0, 0, 512, 716);
         drawCardMetadata(ctx, card, texture);
@@ -515,13 +582,25 @@
   }
 
   // Canvas textures generator for Card Backs (Top) and Edges
-  function createCardBackTexture(tier: Tier): THREE.Texture {
+  function getCachedDeckTexture(tier: Tier): THREE.Texture {
+    if (deckCanvases.has(tier)) {
+      return deckCanvases.get(tier)!.texture;
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 358;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return new THREE.Texture();
+    const texture = new THREE.CanvasTexture(canvas);
+    
+    if (ctx) {
+      deckCanvases.set(tier, { canvas, ctx, texture });
+      drawDeckTexture(ctx, tier, texture);
+    }
+    return texture;
+  }
 
+  function drawDeckTexture(ctx: CanvasRenderingContext2D, tier: Tier, texture: THREE.Texture) {
     const colors = {
       1: { bg: '#064e3b', gold: '#fbbf24', text: 'I' },
       2: { bg: '#1e3a8a', gold: '#fbbf24', text: 'II' },
@@ -573,8 +652,55 @@
       ctx.fill();
     }
 
-    const texture = new THREE.CanvasTexture(canvas);
-    return texture;
+    // Draw "Reserve" button on the bottom right of the deck
+    const reserveMove = findReserveDeckMove(tier);
+    // Draw button scaled by 0.5 (w=72, h=32, x=166, y=312)
+    drawTextureButtonScaled(ctx, 166, 312, 72, 32, 'Reserve', !!reserveMove, 'reserve');
+  }
+
+  function drawTextureButtonScaled(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    text: string,
+    isActive: boolean,
+    type: 'buy' | 'reserve'
+  ) {
+    ctx.save();
+    
+    // Draw rounded rect
+    const r = 6; // corner radius
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.closePath();
+
+    if (isActive) {
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.9)';
+      ctx.strokeStyle = '#fbbf24'; // gold border
+      ctx.lineWidth = 2;
+    } else {
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
+      ctx.strokeStyle = '#374151';
+      ctx.lineWidth = 2;
+    }
+
+    ctx.fill();
+    ctx.stroke();
+
+    // Draw text
+    ctx.fillStyle = isActive ? '#fef3c7' : '#6b7280';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w / 2, y + h / 2);
+
+    ctx.restore();
   }
 
   function createCardEdgeTexture(): THREE.Texture {
@@ -633,7 +759,7 @@
       cardBackMaterials.set(
         tier,
         new THREE.MeshStandardMaterial({
-          map: createCardBackTexture(tier),
+          map: getCachedDeckTexture(tier),
           roughness: 0.4,
         })
       );
@@ -692,6 +818,13 @@
         const topMat = cardBackMaterials.get(tier)!;
         const bottomMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
 
+        // Force redraw deck texture for this tier to update Reserve button state
+        const item = deckCanvases.get(tier);
+        if (item) {
+          drawDeckTexture(item.ctx, tier, item.texture);
+          item.texture.needsUpdate = true;
+        }
+
         const materials = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
         const mesh = new THREE.Mesh(geometry, materials);
 
@@ -725,6 +858,15 @@
           const geometry = new THREE.BoxGeometry(CARD_W, height, CARD_D);
 
           const cardTexture = getCachedDynamicCardTexture(card, tier);
+          
+          // Force redraw card metadata texture to update button active/disabled states
+          const item = cardCanvases.get(card.id);
+          if (item && item.img.complete) {
+            item.ctx.drawImage(item.img, 0, 0, 512, 716);
+            drawCardMetadata(item.ctx, card, cardTexture);
+            cardTexture.needsUpdate = true;
+          }
+
           const frontMat = new THREE.MeshStandardMaterial({
             map: cardTexture,
             roughness: 0.3,
@@ -894,69 +1036,8 @@
       }
     });
 
-    // 3. Update the card overlays positions
-    updateCardOverlays();
-
     controls.update();
     renderer.render(scene, camera);
-  }
-
-  function updateCardOverlays() {
-    if (!camera || !canvasEl || !scene) {
-      cardOverlays = [];
-      return;
-    }
-
-    const tempOverlays: typeof cardOverlays = [];
-    const tempPos = new THREE.Vector3();
-
-    interactiveGroup.children.forEach((obj) => {
-      if (obj.userData.type === 'card') {
-        const card = obj.userData.card;
-        
-        // In local coordinates, card is centered at 0, 0, 0
-        // Width is CARD_W along X, Depth is CARD_D along Z
-        // Project bottom-right corner of card: (CARD_W / 2, 0, CARD_D / 2)
-        // We inset it slightly to stay within card visual boundary
-        tempPos.set(CARD_W / 2 - 0.12, 0, CARD_D / 2 - 0.12);
-        obj.localToWorld(tempPos);
-        tempPos.project(camera);
-
-        const x = (tempPos.x * 0.5 + 0.5) * width;
-        const y = (-(tempPos.y * 0.5) + 0.5) * height;
-
-        tempOverlays.push({
-          id: card.id,
-          type: 'card',
-          card: card,
-          buyMove: findBuyMove(card.id, 'board'),
-          reserveMove: findReserveMove(card.id),
-          x,
-          y,
-        });
-      } else if (obj.userData.type === 'deck') {
-        const tier = obj.userData.tier as Tier;
-        
-        // Project bottom-right corner of deck
-        tempPos.set(CARD_W / 2 - 0.12, 0, CARD_D / 2 - 0.12);
-        obj.localToWorld(tempPos);
-        tempPos.project(camera);
-
-        const x = (tempPos.x * 0.5 + 0.5) * width;
-        const y = (-(tempPos.y * 0.5) + 0.5) * height;
-
-        tempOverlays.push({
-          id: `deck-${tier}`,
-          type: 'deck',
-          tier: tier,
-          reserveMove: findReserveDeckMove(tier),
-          x,
-          y,
-        });
-      }
-    });
-
-    cardOverlays = tempOverlays;
   }
 
   // Pointer Interaction Handlers
@@ -968,30 +1049,57 @@
     raycaster.setFromCamera(mouse, camera);
     const intersects = raycaster.intersectObjects(interactiveGroup.children, true);
 
+    let hovered: THREE.Object3D | null = null;
+    let isOverButton = false;
+
     if (intersects.length > 0) {
-      // Find top-level parent inside interactiveGroup
       let rootObj = intersects[0].object;
       while (rootObj.parent && rootObj.parent !== interactiveGroup) {
         rootObj = rootObj.parent;
       }
 
-      if (
-        rootObj.userData.type === 'card' ||
-        rootObj.userData.type === 'deck' ||
-        rootObj.userData.type === 'noble'
-      ) {
-        hoveredObject = rootObj;
-        canvasEl.style.cursor = 'pointer';
-        return;
-      } else if (rootObj.userData.type === 'gem') {
-        hoveredObject = null;
-        canvasEl.style.cursor = 'pointer';
-        return;
+      const ud = rootObj.userData;
+      if (ud.type === 'card' || ud.type === 'deck' || ud.type === 'noble') {
+        hovered = rootObj;
+      }
+
+      if (ud.type === 'card' && intersects[0].uv && intersects[0].face && intersects[0].face.materialIndex === 2) {
+        const uv = intersects[0].uv;
+        const clickX = uv.x * 512;
+        const clickY = (1 - uv.y) * 716;
+
+        if (clickX >= 332 && clickX <= 476 && clickY >= 556 && clickY <= 616) {
+          const buyMove = findBuyMove(ud.card.id, 'board');
+          if (buyMove && humanCanAct) {
+            isOverButton = true;
+          }
+        }
+        if (clickX >= 332 && clickX <= 476 && clickY >= 636 && clickY <= 696) {
+          const reserveMove = findReserveMove(ud.card.id);
+          if (reserveMove && humanCanAct) {
+            isOverButton = true;
+          }
+        }
+      } else if (ud.type === 'deck' && intersects[0].uv && intersects[0].face && intersects[0].face.materialIndex === 2) {
+        const uv = intersects[0].uv;
+        const clickX = uv.x * 256;
+        const clickY = (1 - uv.y) * 358;
+
+        if (clickX >= 166 && clickX <= 238 && clickY >= 312 && clickY <= 344) {
+          const reserveMove = findReserveDeckMove(ud.tier);
+          if (reserveMove && humanCanAct) {
+            isOverButton = true;
+          }
+        }
+      } else if (ud.type === 'gem') {
+        if (humanCanAct && ud.gem !== 'gold') {
+          isOverButton = true;
+        }
       }
     }
 
-    hoveredObject = null;
-    canvasEl.style.cursor = 'default';
+    hoveredObject = hovered;
+    canvasEl.style.cursor = isOverButton ? 'pointer' : 'default';
   }
 
   function onPointerDown(event: MouseEvent) {
@@ -1013,8 +1121,42 @@
 
       const ud = rootObj.userData;
 
-      if (ud.type === 'card' || ud.type === 'deck') {
-        // Clicks on the card or deck itself are handled by the direct overlay HTML buttons
+      if (ud.type === 'card' && intersects[0].uv && intersects[0].face && intersects[0].face.materialIndex === 2) {
+        const uv = intersects[0].uv;
+        const clickX = uv.x * 512;
+        const clickY = (1 - uv.y) * 716;
+
+        // Check if click was on "Buy" button region
+        if (clickX >= 332 && clickX <= 476 && clickY >= 556 && clickY <= 616) {
+          const buyMove = findBuyMove(ud.card.id, 'board');
+          if (buyMove && humanCanAct) {
+            onBeginMove(buyMove);
+          }
+          return;
+        }
+
+        // Check if click was on "Reserve" button region
+        if (clickX >= 332 && clickX <= 476 && clickY >= 636 && clickY <= 696) {
+          const reserveMove = findReserveMove(ud.card.id);
+          if (reserveMove && humanCanAct) {
+            onBeginMove(reserveMove);
+          }
+          return;
+        }
+        return;
+      } else if (ud.type === 'deck' && intersects[0].uv && intersects[0].face && intersects[0].face.materialIndex === 2) {
+        const uv = intersects[0].uv;
+        const clickX = uv.x * 256;
+        const clickY = (1 - uv.y) * 358;
+
+        // Check if click was on "Reserve" button region on deck
+        if (clickX >= 166 && clickX <= 238 && clickY >= 312 && clickY <= 344) {
+          const reserveMove = findReserveDeckMove(ud.tier);
+          if (reserveMove && humanCanAct) {
+            onBeginMove(reserveMove);
+          }
+          return;
+        }
         return;
       } else if (ud.type === 'gem') {
         if (!humanCanAct) return;
@@ -1165,6 +1307,8 @@
       // Clean up preloaded textures in cache
       textureCache.forEach((tex) => tex.dispose());
       textureCache.clear();
+      cardCanvases.clear();
+      deckCanvases.clear();
     }
   });
 </script>
@@ -1183,51 +1327,5 @@
     <span class="font-medium text-neutral-200">Controls:</span> Left-Click + Drag to rotate • Right-Click + Drag to pan • Scroll to zoom
   </div>
 
-  <!-- Floating Action Buttons Over Cards and Decks in 3D Mode -->
-  {#if humanCanAct}
-    {#each cardOverlays as overlay (overlay.id)}
-      <div
-        class="absolute pointer-events-auto z-40 flex flex-col gap-1"
-        style={`left: ${overlay.x}px; top: ${overlay.y}px; transform: translate(-100%, -100%) translate(-4px, -4px);`}
-        on:mousedown|stopPropagation
-        on:mouseup|stopPropagation
-        on:click|stopPropagation
-      >
-        {#if overlay.type === 'card'}
-          <button
-            class="cursor-pointer rounded bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
-            type="button"
-            disabled={!overlay.buyMove}
-            on:click|stopPropagation={() => {
-              if (overlay.buyMove) onBeginMove(overlay.buyMove);
-            }}
-          >
-            Buy
-          </button>
-          
-          <button
-            class="cursor-pointer rounded border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
-            type="button"
-            disabled={!overlay.reserveMove}
-            on:click|stopPropagation={() => {
-              if (overlay.reserveMove) onBeginMove(overlay.reserveMove);
-            }}
-          >
-            Reserve
-          </button>
-        {:else if overlay.type === 'deck'}
-          <button
-            class="cursor-pointer rounded border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
-            type="button"
-            disabled={!overlay.reserveMove}
-            on:click|stopPropagation={() => {
-              if (overlay.reserveMove) onBeginMove(overlay.reserveMove);
-            }}
-          >
-            Reserve
-          </button>
-        {/if}
-      </div>
-    {/each}
-  {/if}
+  <!-- Direct canvas buttons require no Svelte overlay DOM element structures -->
 </div>
