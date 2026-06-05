@@ -12,6 +12,7 @@ export interface GameMeta {
   minPlayers: number;
   maxPlayers: number;
   hiddenInformation: boolean;
+  hasLocalBots?: boolean;
   estimatedAITurnTokens: number;
   docPath: string;
   videoPath?: string;

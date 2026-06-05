@@ -20,7 +20,8 @@
     game.id === 'secret-hitler' ||
     game.id === 'jungle-chess' ||
     game.id === 'chinese-chess' ||
-    game.id === 'chess';
+    game.id === 'chess' ||
+    game.id === 'exploding-kittens';
   $: playable = implemented;
 </script>
 
@@ -34,15 +35,26 @@
       </h2>
       <p class="mt-1 text-sm text-neutral-400">{playerCount}</p>
     </div>
-    <span
-      class={`rounded-full border px-2.5 py-1 text-xs ${
-        game.hiddenInformation
-          ? 'border-sky-400/40 bg-sky-400/10 text-sky-200'
-          : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
-      }`}
-    >
-      {game.hiddenInformation ? 'Hidden info' : 'Open info'}
-    </span>
+    <div class="flex flex-col items-end gap-2">
+      {#if game.hasLocalBots}
+        <span class="rounded-full border border-purple-400/40 bg-purple-400/10 px-2.5 py-1 text-xs text-purple-200">
+          Local Bots Available
+        </span>
+      {:else}
+        <span class="rounded-full border border-red-400/40 bg-red-400/10 px-2.5 py-1 text-xs text-red-200">
+          API Key Required
+        </span>
+      {/if}
+      <span
+        class={`rounded-full border px-2.5 py-1 text-xs ${
+          game.hiddenInformation
+            ? 'border-sky-400/40 bg-sky-400/10 text-sky-200'
+            : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
+        }`}
+      >
+        {game.hiddenInformation ? 'Hidden info' : 'Open info'}
+      </span>
+    </div>
   </div>
 
   <p class="mt-5 flex-1 text-sm leading-6 text-neutral-300">
