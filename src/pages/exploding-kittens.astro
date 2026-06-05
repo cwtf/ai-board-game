@@ -1,12 +1,13 @@
 ---
 import Header from '@/components/shell/Header.svelte';
+import ExplodingKittensGame from '@/components/games/exploding-kittens/ExplodingKittensGame.svelte';
 import SEO from '@/components/shell/SEO.astro';
 import { absoluteSiteUrl, siteUrl } from '@/lib/site';
 import '../styles/global.css';
 
 const baseUrl = siteUrl();
 const pageDescription =
-  'Preview the upcoming Exploding Kittens route for the local-first AI Board Game Platform.';
+  'Play Exploding Kittens against configurable AI opponents in a browser-based local-first board game table.';
 const explodingKittensJsonLd = {
   '@type': 'VideoGame',
   '@id': `${absoluteSiteUrl('/exploding-kittens', baseUrl)}#game`,
@@ -21,6 +22,11 @@ const explodingKittensJsonLd = {
     minValue: 2,
     maxValue: 5,
   },
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
 };
 ---
 
@@ -30,32 +36,15 @@ const explodingKittensJsonLd = {
       title="Exploding Kittens AI Game | AI Board Game Platform"
       description={pageDescription}
       path="/exploding-kittens"
-      image="/screenshots/secret-hitler.png"
-      imageAlt="AI Board Games browser table screenshot"
+      image="/screenshots/exploding-kittens.png"
+      imageAlt="Exploding Kittens AI game table screenshot"
       jsonLd={explodingKittensJsonLd}
     />
   </head>
-  <body class="min-h-screen bg-neutral-950 text-neutral-100">
-    <Header client:load />
-    <main class="mx-auto max-w-4xl px-6 py-16">
-      <p class="text-sm font-medium uppercase tracking-wide text-emerald-300">
-        Coming in Phase 8
-      </p>
-      <h1 class="mt-4 text-4xl font-semibold tracking-normal">
-        Exploding Kittens
-      </h1>
-      <p class="mt-4 max-w-2xl text-neutral-300">
-        The game route is ready. The hidden-information engine and table UI will
-        land in the upcoming engine and UI phases.
-      </p>
-      <a
-        class="mt-6 inline-flex rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:border-neutral-500"
-        href="/docs/games/exploding-kittens.md"
-        target="_blank"
-        rel="noreferrer"
-      >
-        View rules
-      </a>
+  <body class="flex h-screen flex-col overflow-hidden bg-neutral-950 text-neutral-100">
+    <Header client:load backHref="/" />
+    <main class="min-h-0 flex-1 overflow-hidden">
+      <ExplodingKittensGame client:load />
     </main>
   </body>
 </html>
