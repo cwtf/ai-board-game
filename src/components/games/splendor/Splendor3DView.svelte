@@ -82,8 +82,8 @@
   ) {
     ctx.save();
     
-    // Draw rounded rect
-    const r = 12; // corner radius
+    // Draw rounded rect with slight rounded corners (r = 6 for a rectangular look matching the 2D version)
+    const r = 6;
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
@@ -95,27 +95,24 @@
     if (type === 'buy') {
       if (isActive) {
         ctx.fillStyle = '#10b981'; // active green
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 4;
       } else {
         ctx.fillStyle = '#374151'; // disabled gray
-        ctx.strokeStyle = '#4b5563';
-        ctx.lineWidth = 4;
       }
+      ctx.fill();
+      // No border stroke for Buy button, matching the 2D version
     } else { // reserve
       if (isActive) {
-        ctx.fillStyle = 'rgba(10, 10, 10, 0.9)';
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.95)';
         ctx.strokeStyle = '#fbbf24'; // gold border
-        ctx.lineWidth = 4;
+        ctx.lineWidth = 2; // thin border
       } else {
-        ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
-        ctx.strokeStyle = '#374151';
-        ctx.lineWidth = 4;
+        ctx.fillStyle = 'rgba(10, 10, 10, 0.4)';
+        ctx.strokeStyle = '#4b5563'; // disabled border
+        ctx.lineWidth = 2;
       }
+      ctx.fill();
+      ctx.stroke();
     }
-
-    ctx.fill();
-    ctx.stroke();
 
     // Draw text
     if (type === 'buy') {
@@ -124,7 +121,7 @@
       ctx.fillStyle = isActive ? '#fef3c7' : '#6b7280';
     }
     
-    ctx.font = 'bold 28px sans-serif';
+    ctx.font = 'bold 24px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x + w / 2, y + h / 2);
@@ -670,8 +667,8 @@
   ) {
     ctx.save();
     
-    // Draw rounded rect
-    const r = 6; // corner radius
+    // Draw rounded rect with slight rounded corners (r = 3 for rectangular look)
+    const r = 3;
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
@@ -681,13 +678,13 @@
     ctx.closePath();
 
     if (isActive) {
-      ctx.fillStyle = 'rgba(10, 10, 10, 0.9)';
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.95)';
       ctx.strokeStyle = '#fbbf24'; // gold border
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
     } else {
-      ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
-      ctx.strokeStyle = '#374151';
-      ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.4)';
+      ctx.strokeStyle = '#4b5563'; // disabled border
+      ctx.lineWidth = 1;
     }
 
     ctx.fill();
@@ -695,7 +692,7 @@
 
     // Draw text
     ctx.fillStyle = isActive ? '#fef3c7' : '#6b7280';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x + w / 2, y + h / 2);
