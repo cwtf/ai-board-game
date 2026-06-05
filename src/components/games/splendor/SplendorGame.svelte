@@ -4,6 +4,7 @@
   import SplendorCardArt from '@/components/games/splendor/SplendorCardArt.svelte';
   import SplendorGemBadge from '@/components/games/splendor/SplendorGemBadge.svelte';
   import SplendorNobleArt from '@/components/games/splendor/SplendorNobleArt.svelte';
+  import Splendor3DView from '@/components/games/splendor/Splendor3DView.svelte';
   import { getProvider } from '@/lib/ai';
   import type { ProviderId, TokenUsage } from '@/lib/ai';
   import {
@@ -127,6 +128,7 @@
   let message = '';
   let aiController: ReturnType<typeof createAbortController> | undefined;
   let viewportEl: globalThis.HTMLElement;
+  let viewMode = '3d';
   let tableWidth = MIN_TABLE_WIDTH;
   let tableScale = 1;
   let tableOffsetX = 0;
@@ -212,6 +214,9 @@
 
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
+  $: if (typeof window !== 'undefined' && (viewMode === 'stock' || viewMode === '3d')) {
+    localStorage.setItem('splendor-view-mode', viewMode);
+  }
   $: humanCanAct =
     currentPlayer === HUMAN_PLAYER_INDEX &&
     playerProfileSelections[HUMAN_PLAYER_INDEX] === HUMAN_SEAT_ID &&
@@ -1318,6 +1323,12 @@
 
   onMount(() => {
     refreshKeys();
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('splendor-view-mode');
+      if (stored === 'stock' || stored === '3d') {
+        viewMode = stored;
+      }
+    }
     window.addEventListener('storage', refreshKeys);
     window.addEventListener('byok-keys-changed', refreshKeys);
     window.addEventListener('resize', resizeTable);
@@ -1354,168 +1365,230 @@
       <div
         class="grid min-h-0 flex-1 grid-cols-[1120px_416px_minmax(560px,1fr)] gap-3"
       >
-        <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
-          <section class="flex min-h-0 flex-col gap-2">
-            <div
-              class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
-            >
-              <h1 class="text-2xl font-semibold tracking-normal text-white">
-                Splendor
-              </h1>
-              <p class="text-xs text-neutral-400">
+        {#if viewMode === '3d'}
+          <div class="relative h-full w-[1120px] rounded-md border border-neutral-800 bg-neutral-950 overflow-hidden">
+            <Splendor3DView
+              {state}
+              {legalMoves}
+              {humanCanAct}
+              {selectedGems}
+              onSelectGem={selectGem}
+              onBeginMove={beginMove}
+            />
+            
+            <div class="absolute left-3 top-3 z-40 flex flex-col gap-2 rounded-lg border border-neutral-800 bg-neutral-950/85 p-3 shadow-lg backdrop-blur-sm ring-1 ring-white/5 w-60">
+              <div class="flex items-center justify-between">
+                <h1 class="text-xl font-bold tracking-tight text-white">Splendor</h1>
+                <span class="rounded bg-neutral-800 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-400">3D</span>
+              </div>
+              <p class="text-[11px] text-neutral-400">
                 Turn {state.turn + 1}, player {currentPlayer + 1}
                 {state.finalRoundTriggered ? ' - final round' : ''}
               </p>
-              <div class="mt-2">
+              
+              <div class="mt-1">
                 <TokenUsageBadge
                   lastUsage={lastUsage as TokenUsage | undefined}
                   totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
                 />
               </div>
+
+              <div class="mt-2 flex flex-col gap-1.5 border-t border-neutral-800/60 pt-2">
+                <label class="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">View Mode</label>
+                <select
+                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-100 outline-none focus:border-neutral-500"
+                  bind:value={viewMode}
+                >
+                  <option value="3d">3D Rendered</option>
+                  <option value="stock">2D Stock UI</option>
+                </select>
+              </div>
+
               <button
-                class="mt-2 w-full rounded-md border border-neutral-700 px-2 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
+                class="mt-1 w-full rounded border border-neutral-700 bg-neutral-900/40 px-2 py-1 text-xs font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
                 type="button"
                 on:click={openMoveLog}
               >
                 Move log ({snapshot?.log.length ?? 0})
               </button>
             </div>
-
-            <section
-              class="min-h-0 flex-1 rounded-md border border-neutral-800 bg-neutral-950 p-2"
-            >
-              <div class="mb-1 flex items-center justify-between">
-                <h2 class="text-sm font-semibold tracking-normal">Nobles</h2>
-                <span class="text-xs text-neutral-500"
-                  >{state.noblesInPlay.length} available</span
-                >
-              </div>
-              <div class="flex flex-col gap-2 overflow-hidden">
-                {#each state.noblesInPlay as noble (noble.id)}
-                  <article
-                    class="rounded-md border border-amber-300/40 bg-neutral-900 p-1"
-                    use:registerNoble={noble.id}
+          </div>
+        {:else}
+          <div class="grid min-h-0 grid-cols-[180px_1fr] gap-2">
+            <section class="flex min-h-0 flex-col gap-2">
+              <div
+                class="rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <h1 class="text-2xl font-semibold tracking-normal text-white">
+                  Splendor
+                </h1>
+                <p class="text-xs text-neutral-400">
+                  Turn {state.turn + 1}, player {currentPlayer + 1}
+                  {state.finalRoundTriggered ? ' - final round' : ''}
+                </p>
+                <div class="mt-2">
+                  <TokenUsageBadge
+                    lastUsage={lastUsage as TokenUsage | undefined}
+                    totalUsage={snapshot?.totalUsage ?? { input: 0, output: 0 }}
+                  />
+                </div>
+                
+                <div class="mt-2 flex flex-col gap-1">
+                  <label class="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">View Mode</label>
+                  <select
+                    class="w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-100 outline-none focus:border-neutral-500"
+                    bind:value={viewMode}
                   >
-                    <SplendorNobleArt {noble} />
-                  </article>
-                {/each}
+                    <option value="3d">3D Rendered</option>
+                    <option value="stock">2D Stock UI</option>
+                  </select>
+                </div>
+
+                <button
+                  class="mt-2 w-full rounded-md border border-neutral-700 px-2 py-1.5 text-xs font-medium text-neutral-200 hover:border-neutral-500 hover:text-white"
+                  type="button"
+                  on:click={openMoveLog}
+                >
+                  Move log ({snapshot?.log.length ?? 0})
+                </button>
               </div>
+
+              <section
+                class="min-h-0 flex-1 rounded-md border border-neutral-800 bg-neutral-950 p-2"
+              >
+                <div class="mb-1 flex items-center justify-between">
+                  <h2 class="text-sm font-semibold tracking-normal">Nobles</h2>
+                  <span class="text-xs text-neutral-500"
+                    >{state.noblesInPlay.length} available</span
+                  >
+                </div>
+                <div class="flex flex-col gap-2 overflow-hidden">
+                  {#each state.noblesInPlay as noble (noble.id)}
+                    <article
+                      class="rounded-md border border-amber-300/40 bg-neutral-900 p-1"
+                      use:registerNoble={noble.id}
+                    >
+                      <SplendorNobleArt {noble} />
+                    </article>
+                  {/each}
+                </div>
+              </section>
             </section>
-          </section>
 
-          <div class="flex min-h-0 flex-col gap-2">
-            <section
-              class="grid min-h-0 flex-1 grid-rows-[repeat(3,minmax(0,1fr))] gap-2"
-            >
-              {#each [3, 2, 1] as tier (tier)}
-                <div
-                  class="min-h-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-2"
-                >
+            <div class="flex min-h-0 flex-col gap-2">
+              <section
+                class="grid min-h-0 flex-1 grid-rows-[repeat(3,minmax(0,1fr))] gap-2"
+              >
+                {#each [3, 2, 1] as tier (tier)}
                   <div
-                    class="mb-1.5 flex h-8 items-center justify-between gap-2"
+                    class="min-h-0 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 p-2"
                   >
-                    <h2 class="text-sm font-semibold tracking-normal">
-                      Tier {tier}
-                    </h2>
-                    <span class="text-xs text-neutral-500"
-                      >{state.decks[deckKey(tier as Tier)].length} in deck</span
+                    <div
+                      class="mb-1.5 flex h-8 items-center justify-between gap-2"
                     >
-                  </div>
-                  <div
-                    class="grid h-[calc(100%-2.375rem)] grid-cols-[repeat(5,10.5rem)] items-start justify-center gap-x-1 gap-y-2 overflow-hidden"
-                  >
-                    <button
-                      class="group relative aspect-[5/7] w-[10.5rem] overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(
-                        tier as Tier,
-                      )
-                        ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10'
-                        : 'border-neutral-800 opacity-60'}"
-                      type="button"
-                      use:registerDeck={tier as Tier}
-                      aria-label={`Reserve a face-down tier ${tier} card`}
-                      disabled={!legalReserveDeck(tier as Tier) || !humanCanAct}
-                      on:click={() => {
-                        const move = legalReserveDeck(tier as Tier);
-                        if (move) beginMove(move);
-                      }}
+                      <h2 class="text-sm font-semibold tracking-normal">
+                        Tier {tier}
+                      </h2>
+                      <span class="text-xs text-neutral-500"
+                        >{state.decks[deckKey(tier as Tier)].length} in deck</span
+                      >
+                    </div>
+                    <div
+                      class="grid h-[calc(100%-2.375rem)] grid-cols-[repeat(5,10.5rem)] items-start justify-center gap-x-1 gap-y-2 overflow-hidden"
                     >
-                      <div
-                        class="absolute inset-1 rounded-md border border-amber-300/30 bg-[radial-gradient(circle_at_50%_35%,rgba(251,191,36,0.16),transparent_36%),linear-gradient(135deg,rgba(23,23,23,1),rgba(3,7,18,1))]"
-                      ></div>
-                      <div
-                        class="absolute inset-4 rounded-md border border-amber-200/20"
-                      ></div>
-                      <div
-                        class="absolute left-2 right-2 top-2 flex items-center justify-between gap-2 rounded-md bg-neutral-950/75 px-2 py-1 text-[10px] text-amber-100/90 ring-1 ring-amber-200/15"
+                      <button
+                        class="group relative aspect-[5/7] w-[10.5rem] overflow-hidden rounded-md border bg-neutral-950 p-1 text-left shadow disabled:cursor-not-allowed {legalReserveDeck(
+                          tier as Tier,
+                        )
+                          ? 'border-amber-300/60 hover:border-amber-200 hover:bg-amber-300/10'
+                          : 'border-neutral-800 opacity-60'}"
+                        type="button"
+                        use:registerDeck={tier as Tier}
+                        aria-label={`Reserve a face-down tier ${tier} card`}
+                        disabled={!legalReserveDeck(tier as Tier) || !humanCanAct}
+                        on:click={() => {
+                          const move = legalReserveDeck(tier as Tier);
+                          if (move) beginMove(move);
+                        }}
                       >
-                        <span>Deck</span>
-                        <span>{state.decks[deckKey(tier as Tier)].length}</span>
-                      </div>
-                      <div
-                        class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center"
-                      >
-                        <span
-                          class="grid size-10 rotate-45 place-items-center border border-amber-200/45 bg-neutral-950/80 shadow-inner"
+                        <div
+                          class="absolute inset-1 rounded-md border border-amber-300/30 bg-[radial-gradient(circle_at_50%_35%,rgba(251,191,36,0.16),transparent_36%),linear-gradient(135deg,rgba(23,23,23,1),rgba(3,7,18,1))]"
+                        ></div>
+                        <div
+                          class="absolute inset-4 rounded-md border border-amber-200/20"
+                        ></div>
+                        <div
+                          class="absolute left-2 right-2 top-2 flex items-center justify-between gap-2 rounded-md bg-neutral-950/75 px-2 py-1 text-[10px] text-amber-100/90 ring-1 ring-amber-200/15"
+                        >
+                          <span>Deck</span>
+                          <span>{state.decks[deckKey(tier as Tier)].length}</span>
+                        </div>
+                        <div
+                          class="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center"
                         >
                           <span
-                            class="-rotate-45 text-sm font-semibold text-amber-100"
-                            >{tier}</span
+                            class="grid size-10 rotate-45 place-items-center border border-amber-200/45 bg-neutral-950/80 shadow-inner"
                           >
-                        </span>
-                      </div>
-                    </button>
-                    {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
-                      {#if card}
-                        <article
-                          class="relative w-[10.5rem] rounded-md border bg-neutral-900 p-1 {legalBuy(
-                            card,
-                            'board',
-                          ) || legalReserve(card)
-                            ? 'border-emerald-400/50'
-                            : 'border-neutral-800'}"
-                          use:registerBoardCard={card.id}
-                        >
-                          <SplendorCardArt {card} board />
+                            <span
+                              class="-rotate-45 text-sm font-semibold text-amber-100"
+                              >{tier}</span
+                            >
+                          </span>
+                        </div>
+                      </button>
+                      {#each state.board[boardKey(tier as Tier)] as card, cardIndex (card?.id ?? `${tier}-${cardIndex}`)}
+                        {#if card}
+                          <article
+                            class="relative w-[10.5rem] rounded-md border bg-neutral-900 p-1 {legalBuy(
+                              card,
+                              'board',
+                            ) || legalReserve(card)
+                              ? 'border-emerald-400/50'
+                              : 'border-neutral-800'}"
+                            use:registerBoardCard={card.id}
+                          >
+                            <SplendorCardArt {card} board />
+                            <div
+                              class="absolute bottom-1.5 right-1.5 flex flex-col gap-1"
+                            >
+                              <button
+                                class="rounded-md bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
+                                type="button"
+                                disabled={!legalBuy(card, 'board') ||
+                                  !humanCanAct}
+                                on:click={() => {
+                                  const move = legalBuy(card, 'board');
+                                  if (move) beginMove(move);
+                                }}
+                              >
+                                Buy
+                              </button>
+                              <button
+                                class="rounded-md border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
+                                type="button"
+                                disabled={!legalReserve(card) || !humanCanAct}
+                                on:click={() => {
+                                  const move = legalReserve(card);
+                                  if (move) beginMove(move);
+                                }}
+                              >
+                                Reserve
+                              </button>
+                            </div>
+                          </article>
+                        {:else}
                           <div
-                            class="absolute bottom-1.5 right-1.5 flex flex-col gap-1"
-                          >
-                            <button
-                              class="rounded-md bg-emerald-500/95 px-2 py-0.5 text-[10px] font-medium text-neutral-950 shadow disabled:cursor-not-allowed disabled:bg-neutral-800/90 disabled:text-neutral-600"
-                              type="button"
-                              disabled={!legalBuy(card, 'board') ||
-                                !humanCanAct}
-                              on:click={() => {
-                                const move = legalBuy(card, 'board');
-                                if (move) beginMove(move);
-                              }}
-                            >
-                              Buy
-                            </button>
-                            <button
-                              class="rounded-md border border-amber-300/70 bg-neutral-950/90 px-2 py-0.5 text-[10px] text-amber-100 shadow disabled:cursor-not-allowed disabled:border-neutral-800 disabled:text-neutral-600"
-                              type="button"
-                              disabled={!legalReserve(card) || !humanCanAct}
-                              on:click={() => {
-                                const move = legalReserve(card);
-                                if (move) beginMove(move);
-                              }}
-                            >
-                              Reserve
-                            </button>
-                          </div>
-                        </article>
-                      {:else}
-                        <div
-                          class="aspect-[5/7] w-[10.5rem] rounded-md border border-dashed border-neutral-800 bg-neutral-950"
-                        ></div>
-                      {/if}
-                    {/each}
+                            class="aspect-[5/7] w-[10.5rem] rounded-md border border-dashed border-neutral-800 bg-neutral-950"
+                          ></div>
+                        {/if}
+                      {/each}
+                    </div>
                   </div>
-                </div>
-              {/each}
-            </section>
+                {/each}
+              </section>
+            </div>
           </div>
-        </div>
+        {/if}
 
         <aside class="flex min-h-0 flex-col gap-2">
           <section
