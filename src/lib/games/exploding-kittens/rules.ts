@@ -253,9 +253,8 @@ export function applyMove(state: EKState, move: EKMove): EKState {
     s.discard = ['nope', ...s.discard];
     s.pendingNope!.nopeCount++;
     s.pendingNope!.lastNoper = player;
-    // Let everyone else counter-Nope, except the original actor and the just-noper
-    const byPlayer = s.pendingNope!.byPlayer;
-    const counters = nopeWaiters(s, player).filter((p) => p !== byPlayer);
+    // Let everyone else (except the just-noper) counter-Nope
+    const counters = nopeWaiters(s, player);
     if (counters.length === 0) {
       const { action, byPlayer, nopeCount } = s.pendingNope!;
       s.pendingNope = null;

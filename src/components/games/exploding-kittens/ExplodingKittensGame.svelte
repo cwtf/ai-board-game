@@ -47,6 +47,7 @@
     | 'defuse'
     | 'give_favor'
     | 'favor_target'
+    | 'combo_pick'
     | 'cat_pair_select'
     | 'three_kind'
     | 'five_diff_pick'
@@ -462,6 +463,13 @@
     if (cardKind === 'favor' && favorMoves.length > 0) {
       selectedCardForPlay = { kind: cardKind, handIndex };
       activeModal = 'favor_target';
+      return;
+    }
+
+    if (catPairMoves.length > 0 && threeKindMoves.length > 0) {
+      selectedCardForPlay = { kind: cardKind, handIndex };
+      selectedCatKind = cardKind;
+      activeModal = 'combo_pick';
       return;
     }
 
@@ -1019,6 +1027,38 @@
   </div>
 {/if}
 
+<!-- Combo pick: cat pair vs 3-of-a-kind -->
+{#if activeModal === 'combo_pick' && selectedCatKind}
+  <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+    <div class="w-72 rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl">
+      <div class="mb-2 text-lg font-bold text-pink-400">🐱 {CARD_LABELS[selectedCatKind]}</div>
+      <div class="mb-4 text-sm text-neutral-300">How do you want to play these?</div>
+      <div class="flex flex-col gap-2">
+        <button
+          class="rounded bg-neutral-800 px-3 py-3 text-left text-sm text-neutral-200 hover:bg-neutral-700"
+          on:click={() => { activeModal = 'cat_pair_select'; }}
+        >
+          <span class="font-semibold text-pink-400">Cat Pair</span>
+          <span class="ml-2 text-neutral-400 text-xs">2 cards — steal a random card</span>
+        </button>
+        <button
+          class="rounded bg-neutral-800 px-3 py-3 text-left text-sm text-neutral-200 hover:bg-neutral-700"
+          on:click={() => { threeKindTarget = null; threeKindCard = null; activeModal = 'three_kind'; }}
+        >
+          <span class="font-semibold text-yellow-400">3-of-a-Kind</span>
+          <span class="ml-2 text-neutral-400 text-xs">3 cards — name the card you want</span>
+        </button>
+      </div>
+      <button
+        class="mt-3 w-full rounded bg-neutral-800 py-1 text-xs text-neutral-500 hover:text-neutral-300"
+        on:click={() => (activeModal = null)}
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+{/if}
+
 <!-- Cat pair: pick target -->
 {#if activeModal === 'cat_pair_select' && state}
   <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
@@ -1192,14 +1232,18 @@
   {@const pending = state.pendingNope}
   {@const byName = `P${pending.byPlayer + 1}`}
   {@const action = pending.action}
-  {@const baseDesc = (() => {
-    if (action.kind === 'play_single') return `${byName} played ${CARD_LABELS[action.card]}`;
-    if (action.kind === 'play_favor') return `${byName} played Favor targeting P${action.targetIndex + 1}`;
-    if (action.kind === 'play_cat_pair') return `${byName} played a Cat Pair targeting P${action.targetIndex + 1}`;
-    if (action.kind === 'play_three_kind') return `${byName} played 3-of-a-Kind, naming ${CARD_LABELS[action.namedCard]}`;
-    if (action.kind === 'play_five_diff') return `${byName} played 5-Card Combo`;
-    return `${byName} played a card`;
+  {@const isOwnAction = pending.byPlayer === HUMAN_PLAYER_INDEX}
+  {@const actionLabel = (() => {
+    if (action.kind === 'play_single') return CARD_LABELS[action.card];
+    if (action.kind === 'play_favor') return `Favor → P${action.targetIndex + 1}`;
+    if (action.kind === 'play_cat_pair') return `Cat Pair → P${action.targetIndex + 1}`;
+    if (action.kind === 'play_three_kind') return `3-of-a-Kind (${CARD_LABELS[action.namedCard]})`;
+    if (action.kind === 'play_five_diff') return '5-Card Combo';
+    return 'card';
   })()}
+  {@const baseDesc = isOwnAction
+    ? `Your ${actionLabel} was Noped — counter-Nope to restore it`
+    : `${byName} played ${actionLabel}`}
   {@const goingThrough = pending.nopeCount % 2 === 0}
   {@const hasNope = legalMoves.some((m) => m.kind === 'nope')}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
