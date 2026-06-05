@@ -90,7 +90,7 @@
   let fiveDiffSelectedCards: CardKind[] = [];
 
   // Flying card animation overlay
-  let view3D: { getScreenPositions(): { deck: { x: number; y: number }; discard: { x: number; y: number } } };
+  let view3D: { getScreenPositions(): { deck: { x: number; y: number }; discard: { x: number; y: number }; players: Record<number, { x: number; y: number }> } };
   interface FlyingCard { id: number; kind: CardKind | null; sx: number; sy: number; ex: number; ey: number; }
   let flyingCards: FlyingCard[] = [];
   let flyCardCounter = 0;
@@ -132,6 +132,34 @@
     if (!el) return null;
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  // Watch log for AI moves and trigger flying card animations
+  let lastLogLength = 0;
+  $: if (snapshot?.log && snapshot.log.length > lastLogLength) {
+    const newEntries = snapshot.log.slice(lastLogLength);
+    lastLogLength = snapshot.log.length;
+    for (const entry of newEntries) {
+      if (entry.player === HUMAN_PLAYER_INDEX) continue;
+      const pos = view3D?.getScreenPositions();
+      if (!pos) continue;
+      const zone = pos.players[entry.player];
+      if (!zone) continue;
+      const move = entry.move as EKMove;
+      if (move.kind === 'draw') {
+        spawnFlyCard(null, pos.deck.x, pos.deck.y, zone.x, zone.y);
+      } else if (move.kind === 'nope') {
+        spawnFlyCard('nope', zone.x, zone.y, pos.discard.x, pos.discard.y);
+      } else if (move.kind === 'give_favor') {
+        // Card goes from AI zone toward human hand strip (bottom center)
+        const handY = typeof window !== 'undefined' ? window.innerHeight - 130 : zone.y;
+        const handX = typeof window !== 'undefined' ? window.innerWidth / 2 : zone.x;
+        spawnFlyCard(move.card, zone.x, zone.y, handX, handY);
+      } else {
+        const playedKind = getPlayedCardKind(move);
+        if (playedKind) spawnFlyCard(playedKind, zone.x, zone.y, pos.discard.x, pos.discard.y);
+      }
+    }
   }
   let aiController: AbortController | undefined;
   let aiPaused = false;
@@ -328,10 +356,9 @@
     unsubscribe?.();
     aiController?.abort();
     seed =
-      seed.trim() ||
-      (typeof crypto !== 'undefined' && crypto.randomUUID
+      typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
-        : Date.now().toString(36));
+        : Date.now().toString(36);
     syncSeedHash(seed);
     selectedCardForPlay = null;
     activeModal = null;
@@ -339,6 +366,8 @@
     gameOverDismissed = false;
     moveLogOpen = false;
     seeFutureAcknowledged = false;
+    lastLogLength = 0;
+    flyingCards = [];
     normalizePlayerProfileSelections(playerCount, defaultProfileId);
     aiPaused = playerProfileSelections[HUMAN_PLAYER_INDEX] !== HUMAN_SEAT_ID;
 

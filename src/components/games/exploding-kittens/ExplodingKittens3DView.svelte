@@ -593,8 +593,10 @@
   export function getScreenPositions(): {
     deck: { x: number; y: number };
     discard: { x: number; y: number };
+    players: Record<number, { x: number; y: number }>;
   } {
-    if (!canvasEl || !camera) return { deck: { x: 0, y: 0 }, discard: { x: 0, y: 0 } };
+    const fallback = { deck: { x: 0, y: 0 }, discard: { x: 0, y: 0 }, players: {} };
+    if (!canvasEl || !camera || !state) return fallback;
     const rect = canvasEl.getBoundingClientRect();
     function project(wx: number, wy: number, wz: number) {
       const ndc = new THREE.Vector3(wx, wy, wz).project(camera);
@@ -603,9 +605,18 @@
         y: (-ndc.y * 0.5 + 0.5) * rect.height + rect.top,
       };
     }
+    const playerPositions: Record<number, { x: number; y: number }> = {};
+    const zonePositions = aiPositions(state.players.length);
+    let slot = 0;
+    for (let pi = 0; pi < state.players.length; pi++) {
+      if (pi === humanPlayerIndex) continue;
+      const pos = zonePositions[slot++];
+      if (pos) playerPositions[pi] = project(pos.x, 0.5, pos.z);
+    }
     return {
       deck: project(-1.6, 0.4, -0.8),
       discard: project(1.6, 0.1, -0.8),
+      players: playerPositions,
     };
   }
 </script>
