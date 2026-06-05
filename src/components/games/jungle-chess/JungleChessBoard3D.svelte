@@ -337,12 +337,14 @@
 
   function createBoardTexture(): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
-    const size = 128;
-    canvas.width = BOARD_WIDTH * size;
-    canvas.height = BOARD_HEIGHT * size;
+    const size = 128; // pixels per unit
+    const padding = 0.2; // 0.2 units padding
+    
+    canvas.width = (BOARD_WIDTH + padding * 2) * size;
+    canvas.height = (BOARD_HEIGHT + padding * 2) * size;
     const ctx = canvas.getContext('2d')!;
 
-    // Base board background (gap lines)
+    // Base board background (gap lines and padding)
     ctx.fillStyle = '#111713';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -363,8 +365,8 @@
           borderColor = 'rgba(253, 164, 175, 0.4)';
         }
 
-        const px = x * size;
-        const py = y * size; 
+        const px = (x + padding) * size;
+        const py = (y + padding) * size; 
 
         const gap = 3;
         ctx.fillStyle = bgColor;
@@ -728,36 +730,50 @@
     if (!renderer || !scene || !camera) return;
 
     const now = performance.now();
-    const elapsed = now - startedAt;
+    const elapsed = (now - startedAt) / 1000;
 
     if (pieceLayer) {
       for (const model of pieceLayer.children) {
-        const { startX, startZ, targetX, targetZ, moveStartedAt, moveDuration, baseY, moving } = model.userData;
-
-        const isSelected = model.userData.selected;
-        const targetY = isSelected ? baseY + 0.35 : baseY;
-        model.position.y = THREE.MathUtils.lerp(model.position.y, targetY, 0.15);
-
-        if (moving) {
-          const t = Math.min((now - moveStartedAt) / moveDuration, 1);
-          if (t < 1) {
-            const eased = easeOutCubic(t);
-            model.position.x = THREE.MathUtils.lerp(startX, targetX, eased);
-            model.position.z = THREE.MathUtils.lerp(startZ, targetZ, eased);
-            
-            const jumpHeight = Math.sin(eased * Math.PI) * 1.5;
-            model.position.y += jumpHeight;
-          } else {
-            model.position.x = targetX;
-            model.position.z = targetZ;
-            model.userData.moving = false;
+        const selected = Boolean(model.userData.selected);
+        const duration = Number(model.userData.moveDuration ?? 0);
+        
+        if (duration > 0) {
+          const rawProgress = Math.min(
+            1,
+            (now - Number(model.userData.moveStartedAt ?? now)) / duration,
+          );
+          const progress = easeOutCubic(rawProgress);
+          model.position.x = THREE.MathUtils.lerp(
+            Number(model.userData.startX),
+            Number(model.userData.targetX),
+            progress,
+          );
+          model.position.z = THREE.MathUtils.lerp(
+            Number(model.userData.startZ),
+            Number(model.userData.targetZ),
+            progress,
+          );
+          model.userData.moving = rawProgress < 1;
+          if (rawProgress >= 1) {
+            model.userData.moveDuration = 0;
           }
         }
 
-        if (isSelected) {
-          const bounce = Math.sin(elapsed * 0.006) * 0.08;
-          model.position.y += bounce;
-        }
+        const movingLift = model.userData.moving
+          ? Math.sin(
+              Math.min(
+                1,
+                (now - Number(model.userData.moveStartedAt ?? now)) /
+                  Math.max(1, duration),
+              ) * Math.PI,
+            ) * 0.4
+          : 0;
+
+        model.position.y =
+          model.userData.baseY +
+          movingLift +
+          (selected ? 0.25 : 0) +
+          Math.sin(elapsed * 2 + model.position.x) * 0.02;
       }
     }
 

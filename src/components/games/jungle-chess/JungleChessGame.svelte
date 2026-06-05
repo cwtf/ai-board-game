@@ -21,7 +21,10 @@
   import { hashWithSeed, seedFromHash } from '@/lib/games/shared/seed-url';
   import type { AIPlayerConfig, MoveRecord } from '@/lib/games/shared/types';
   import { jungleChessAdapter } from '@/lib/games/jungle-chess/ai-adapter';
-  import { chooseJungleBotMove } from '@/lib/games/jungle-chess/bot';
+  import {
+    chooseJungleBotMoveAsync,
+    type JungleBotMoveOptions,
+  } from '@/lib/games/jungle-chess/bot';
   import {
     coordinateLabel,
     formatJungleMove,
@@ -208,17 +211,18 @@
       kind: 'local',
       label: 'Local bot',
       model: 'Local bot',
-      chooseMove({ state: currentState, player, legalMoves: moves, signal }) {
+      async chooseMove({ state: currentState, player, legalMoves: moves, signal }) {
         if (signal?.aborted) {
           const error = new Error('AI move aborted.');
           error.name = 'AbortError';
           throw error;
         }
 
-        return chooseJungleBotMove({
+        return await chooseJungleBotMoveAsync({
           state: currentState,
           player,
           legalMoves: moves,
+          signal,
         });
       },
     };
