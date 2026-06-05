@@ -641,7 +641,6 @@
           {legalMoves}
           {humanCanAct}
           humanPlayerIndex={HUMAN_PLAYER_INDEX}
-          onCardClick={handleCardClick}
           onDeckClick={handleDeckClick}
         />
 

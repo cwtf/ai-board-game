@@ -14,7 +14,6 @@
   export let legalMoves: EKMove[];
   export let humanCanAct: boolean;
   export let humanPlayerIndex: number;
-  export let onCardClick: (cardKind: CardKind, handIndex: number) => void;
   export let onDeckClick: () => void;
 
   let containerEl: HTMLElement;
@@ -34,18 +33,7 @@
 
   // Texture caches
   const cardTextureCache = new Map<string, THREE.CanvasTexture>();
-  const backTexture = { value: null as THREE.CanvasTexture | null };
 
-  // Clickable mesh registry
-  interface ClickTarget {
-    type: 'hand_card';
-    cardKind: CardKind;
-    handIndex: number;
-  }
-  const clickTargets = new Map<THREE.Object3D, ClickTarget>();
-
-  // Tracking which meshes need to be removed/rebuilt when state changes
-  let handGroup: THREE.Group;
   let tableGroup: THREE.Group;
 
   // Active animation state
@@ -361,8 +349,6 @@
     tableGroup = new THREE.Group();
     scene.add(tableGroup);
 
-    handGroup = new THREE.Group();
-    scene.add(handGroup);
   }
 
   function buildDeckObject(): THREE.Group {
@@ -459,84 +445,6 @@
     return group;
   }
 
-  function buildHumanHand(): void {
-    // Clear existing
-    while (handGroup.children.length > 0) {
-      const child = handGroup.children[0]!;
-      handGroup.remove(child);
-    }
-    clickTargets.forEach((_, obj) => {
-      if (obj.parent === handGroup || isInGroup(obj, handGroup)) {
-        clickTargets.delete(obj);
-      }
-    });
-
-    if (!state || !state.players[humanPlayerIndex]) return;
-    const hand = state.players[humanPlayerIndex]!.hand;
-    if (hand.length === 0) return;
-
-    const n = hand.length;
-    const maxSpan = 9.0;
-    const spacing = Math.min(maxSpan / Math.max(n - 1, 1), 1.6);
-    const totalSpan = spacing * (n - 1);
-    const startX = -totalSpan / 2;
-    const Z_POS = 4.2;
-
-    // Check which cards have legal play moves
-    const playableSingles = new Set<string>();
-    for (const move of legalMoves) {
-      if (
-        move.kind === 'play_single' ||
-        move.kind === 'play_favor' ||
-        move.kind === 'play_cat_pair' ||
-        move.kind === 'play_three_kind' ||
-        move.kind === 'play_five_diff'
-      ) {
-        const card =
-          move.kind === 'play_single'
-            ? move.card
-            : move.kind === 'play_favor'
-              ? 'favor'
-              : move.kind === 'play_cat_pair' || move.kind === 'play_three_kind'
-                ? move.cardKind
-                : null;
-        if (card) playableSingles.add(card);
-      }
-    }
-
-    for (let i = 0; i < n; i++) {
-      const kind = hand[i]!;
-      const tex = getCardTexture(kind, true);
-      const mesh = buildCardMesh(tex);
-
-      const x = startX + i * spacing;
-      mesh.position.set(x, 0.05, Z_POS);
-
-      // Tilt slightly towards camera
-      mesh.rotation.x = 0.18;
-
-      if (humanCanAct) {
-        const isPlayable = playableSingles.has(kind);
-        // Lift playable cards slightly
-        if (isPlayable) {
-          mesh.position.y = 0.12;
-        }
-        clickTargets.set(mesh, { type: 'hand_card', cardKind: kind, handIndex: i });
-      }
-
-      handGroup.add(mesh);
-    }
-  }
-
-  function isInGroup(obj: THREE.Object3D, group: THREE.Group): boolean {
-    let current: THREE.Object3D | null = obj.parent;
-    while (current) {
-      if (current === group) return true;
-      current = current.parent;
-    }
-    return false;
-  }
-
   function rebuildTableGroup() {
     while (tableGroup.children.length > 0) {
       tableGroup.remove(tableGroup.children[0]!);
@@ -575,74 +483,29 @@
     }
   }
 
+  function getDeckHits() {
+    const allObjs: THREE.Object3D[] = [];
+    tableGroup.traverse((obj) => allObjs.push(obj));
+    return raycaster.intersectObjects(allObjs, true).filter(
+      (h) => h.object.userData?.isDeck || h.object.userData?.onDeckClick,
+    );
+  }
+
   function handleMouseMove(event: MouseEvent) {
     if (!canvasEl || !renderer) return;
     const rect = canvasEl.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
     raycaster.setFromCamera(mouse, camera);
-    const clickObjs = [...clickTargets.keys()];
-    const hits = raycaster.intersectObjects(clickObjs, false);
-
-    // Reset hover
-    for (const [obj] of clickTargets) {
-      const mesh = obj as THREE.Mesh;
-      if (Array.isArray(mesh.material)) {
-        for (const m of mesh.material) {
-          if (m instanceof THREE.MeshLambertMaterial) {
-            m.emissive?.setHex(0x000000);
-          }
-        }
-      }
-    }
-
-    if (hits.length > 0) {
-      const hit = hits[0]!.object as THREE.Mesh;
-      if (Array.isArray(hit.material)) {
-        for (const m of hit.material) {
-          if (m instanceof THREE.MeshLambertMaterial) {
-            m.emissive?.setHex(0x333333);
-          }
-        }
-      }
-      canvasEl.style.cursor = 'pointer';
-    } else {
-      // Check deck hover
-      const allObjs = [];
-      tableGroup.traverse((obj) => allObjs.push(obj));
-      const deckHits = raycaster.intersectObjects(allObjs, true).filter(
-        (h) => h.object.userData?.isDeck || h.object.userData?.onDeckClick,
-      );
-      canvasEl.style.cursor = deckHits.length > 0 && humanCanAct ? 'pointer' : 'default';
-    }
+    canvasEl.style.cursor =
+      getDeckHits().length > 0 && humanCanAct ? 'pointer' : 'default';
   }
 
   function handleClick(_event: MouseEvent) {
     if (!humanCanAct) return;
-
     raycaster.setFromCamera(mouse, camera);
-    const clickObjs = [...clickTargets.keys()];
-    const hits = raycaster.intersectObjects(clickObjs, false);
-
-    if (hits.length > 0) {
-      const hit = hits[0]!.object;
-      const target = clickTargets.get(hit);
-      if (target?.type === 'hand_card') {
-        onCardClick(target.cardKind, target.handIndex);
-        return;
-      }
-    }
-
-    // Check deck click
-    const allObjs: THREE.Object3D[] = [];
-    tableGroup.traverse((obj) => allObjs.push(obj));
-    const deckHits = raycaster.intersectObjects(allObjs, true).filter(
-      (h) => h.object.userData?.isDeck || h.object.userData?.onDeckClick,
-    );
-    if (deckHits.length > 0) {
-      const hasDrawMove = legalMoves.some((m) => m.kind === 'draw');
-      if (hasDrawMove) onDeckClick();
+    if (getDeckHits().length > 0 && legalMoves.some((m) => m.kind === 'draw')) {
+      onDeckClick();
     }
   }
 
@@ -676,11 +539,6 @@
 
   $: if (state && scene) {
     rebuildTableGroup();
-    buildHumanHand();
-  }
-
-  $: if (legalMoves && scene) {
-    buildHumanHand();
   }
 
   onMount(() => {
@@ -710,7 +568,6 @@
 
     if (state) {
       rebuildTableGroup();
-      buildHumanHand();
     }
 
     canvasEl.addEventListener('mousemove', handleMouseMove);
