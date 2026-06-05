@@ -387,6 +387,7 @@ export function applyMove(
   }
 
   next.isCheck = isInCheck(next, next.current);
+  next.lastMove = legalMove;
 
   // Check if opponent is checkmated or stalemated
   const opponentMoves = legalMoves(next);

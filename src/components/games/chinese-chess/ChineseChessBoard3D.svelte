@@ -75,11 +75,17 @@
     animateMove: boolean,
   ): Coord {
     const current = { x: piece.x, y: piece.y };
-    // We don't have lastMove recorded in ChineseChessState unfortunately in this specific implementation without changing state.ts.
-    // Wait, the state doesn't track lastMove. So we can't easily animate the opponent's move automatically here without external logs.
-    // For now, pieces will just snap, or we can look up the move from external state if we had it.
-    // Wait! ChessState has `lastMove` because it was added. ChineseChessState might not. Let's check `ChineseChessState` in `state.ts`.
-    // It doesn't have `lastMove`. So we'll skip move animation from opponent for now, and it will snap. 
+    if (!animateMove || !previousState || !state.lastMove) {
+      return current;
+    }
+
+    if (
+      piece.id === state.lastMove.pieceId &&
+      squareKey(current) === squareKey(state.lastMove.to)
+    ) {
+      return state.lastMove.from;
+    }
+
     return current;
   }
 
@@ -358,14 +364,28 @@
       transparent: true,
       opacity: 0.84,
     });
+    const lastMoveMat = material({
+      color: 0xeab308,
+      emissive: 0x4a3402,
+      transparent: true,
+      opacity: 0.6,
+    });
     for (const mat of [
       targetMat,
       targetSquareMat,
       targetHaloMat,
       captureMat,
       selectedMat,
+      lastMoveMat,
     ]) {
       mat.depthWrite = false;
+    }
+
+    if (state.lastMove) {
+      for (const coord of [state.lastMove.from, state.lastMove.to]) {
+        const pos = squarePosition(coord.x, coord.y);
+        addMesh(highlightLayer, new THREE.BoxGeometry(0.9, 0.035, 0.9), lastMoveMat, [pos.x, 0.02, pos.z]);
+      }
     }
 
     const selectedPiece = state.pieces.find((piece) => piece.id === selectedPieceId);

@@ -43,6 +43,7 @@ export interface ChineseChessState {
   turn: number;
   winner: ChineseChessPlayer | null;
   isCheck: boolean;
+  lastMove?: ChineseChessMove;
 }
 
 export const pieceLabels: Record<PieceType, { en: string; zhRed: string; zhBlack: string; emoji: string }> = {
