@@ -22,7 +22,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "astro": "^6.3.1",
     "chess.js": "^1.4.0",
-    "svelte": "^5.55.5",
+    "svelte": "^5.56.2",
     "tailwindcss": "^4.3.0",
     "three": "^0.184.0",
     "typescript": "^5.9.3"
