@@ -777,6 +777,31 @@
     }
     renderer?.dispose();
   });
+
+  $: setCameraPreset(cameraView);
+
+  function setCameraPreset(preset: 'default' | 'top' | 'isometric' | 'front') {
+    if (preset === 'top') {
+      yaw = 0;
+      pitch = 85;
+      distance = 12;
+    } else if (preset === 'isometric') {
+      yaw = 45;
+      pitch = 45;
+      distance = 14;
+    } else if (preset === 'front') {
+      yaw = 0;
+      pitch = 30;
+      distance = 15;
+    } else {
+      yaw = -32;
+      pitch = 54;
+      distance = 13.8;
+    }
+    focusX = 0;
+    focusZ = 0;
+    updateCamera();
+  }
 </script>
 
 <div class="board-shell" on:wheel={handleWheel}>
