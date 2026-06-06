@@ -17,6 +17,7 @@
   export let selectedMoves: ChineseChessMove[] = [];
   export let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
   export let cameraZoom: number = 1;
+  export let boardStyle: '3d' | 'zh' = '3d';
   export let onSquare: (x: number, y: number) => void = () => {};
 
   let canvas: HTMLCanvasElement;
@@ -56,7 +57,7 @@
     .join('|');
 
   $: if (scene && state) {
-    syncDynamicScene(selectedMovesRenderKey, selectedPieceId);
+    syncDynamicScene(selectedMovesRenderKey, selectedPieceId, boardStyle);
   }
 
   function squarePosition(x: number, y: number): THREE.Vector3 {
@@ -275,39 +276,155 @@
     });
   }
 
-  function addBoard() {
-    if (!scene || !tableGroup) return;
+  function createChineseBoardTexture() {
+    const canvas = document.createElement('canvas');
+    const widthUnits = 10.4;
+    const heightUnits = 11.4;
+    const pixelsPerUnit = 128;
+    canvas.width = widthUnits * pixelsPerUnit;
+    canvas.height = heightUnits * pixelsPerUnit;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
 
-    const boardMat = material({ color: 0xdca86b, roughness: 0.78, metalness: 0.02 });
-    const edgeMat = material({ color: 0x2b2118, roughness: 0.68 });
-    const lineMat = material({ color: 0x4a2c14, roughness: 0.9, metalness: 0.0 });
+    // Background
+    ctx.fillStyle = '#1a1510';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    addMesh(tableGroup, new THREE.BoxGeometry(10.6, 0.28, 11.6), edgeMat, [0, -0.16, 0]);
-    addMesh(tableGroup, new THREE.BoxGeometry(10.4, 0.05, 11.4), boardMat, [0, -0.01, 0]);
+    // Gradients
+    const grad1 = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    grad1.addColorStop(0, 'rgba(180, 140, 80, 0.18)');
+    grad1.addColorStop(0.38, 'rgba(180, 140, 80, 0)');
+    ctx.fillStyle = grad1;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Grid lines
-    for (let x = 0; x < BOARD_WIDTH; x++) {
-      const px = x - (BOARD_WIDTH - 1) / 2;
-      // Lines break at the river for columns 1 to 7
-      if (x > 0 && x < BOARD_WIDTH - 1) {
-        addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 4), lineMat, [px, 0.02, -2.5]);
-        addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 4), lineMat, [px, 0.02, 2.5]);
+    const grad2 = ctx.createLinearGradient(canvas.width, 0, 0, canvas.height);
+    grad2.addColorStop(0, 'rgba(120, 90, 50, 0.14)');
+    grad2.addColorStop(0.60, 'rgba(120, 90, 50, 0)');
+    ctx.fillStyle = grad2;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Lines
+    ctx.strokeStyle = '#f5c67d';
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.46;
+
+    const insetX = ((widthUnits - 8) / 2) * pixelsPerUnit;
+    const insetY = ((heightUnits - 9) / 2) * pixelsPerUnit;
+    const cellW = pixelsPerUnit;
+    const cellH = pixelsPerUnit;
+
+    ctx.beginPath();
+    // Vertical lines
+    for (let i = 0; i <= 8; i++) {
+      const x = insetX + i * cellW;
+      ctx.moveTo(x, insetY);
+      if (i === 0 || i === 8) {
+        ctx.lineTo(x, canvas.height - insetY);
       } else {
-        addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 9), lineMat, [px, 0.02, 0]);
+        ctx.lineTo(x, insetY + 4 * cellH);
+        ctx.moveTo(x, insetY + 5 * cellH);
+        ctx.lineTo(x, canvas.height - insetY);
       }
     }
-
-    for (let y = 0; y < BOARD_HEIGHT; y++) {
-      const pz = y - (BOARD_HEIGHT - 1) / 2;
-      addMesh(tableGroup, new THREE.BoxGeometry(8, 0.01, 0.04), lineMat, [0, 0.02, pz]);
+    // Horizontal lines
+    for (let i = 0; i <= 9; i++) {
+      const y = insetY + i * cellH;
+      ctx.moveTo(insetX, y);
+      ctx.lineTo(canvas.width - insetX, y);
     }
 
     // Palace diagonals
-    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, -3.5], [0, Math.PI / 4, 0]);
-    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, -3.5], [0, -Math.PI / 4, 0]);
-    
-    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, 3.5], [0, Math.PI / 4, 0]);
-    addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, 3.5], [0, -Math.PI / 4, 0]);
+    // Top
+    ctx.moveTo(insetX + 3 * cellW, insetY);
+    ctx.lineTo(insetX + 5 * cellW, insetY + 2 * cellH);
+    ctx.moveTo(insetX + 5 * cellW, insetY);
+    ctx.lineTo(insetX + 3 * cellW, insetY + 2 * cellH);
+    // Bottom
+    ctx.moveTo(insetX + 3 * cellW, canvas.height - insetY);
+    ctx.lineTo(insetX + 5 * cellW, canvas.height - insetY - 2 * cellH);
+    ctx.moveTo(insetX + 5 * cellW, canvas.height - insetY);
+    ctx.lineTo(insetX + 3 * cellW, canvas.height - insetY - 2 * cellH);
+    ctx.stroke();
+
+    // River background
+    const riverY = insetY + 4 * cellH;
+    ctx.globalAlpha = 1.0;
+    const riverGrad = ctx.createLinearGradient(insetX, 0, canvas.width - insetX, 0);
+    riverGrad.addColorStop(0, 'rgba(56, 189, 248, 0.05)');
+    riverGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.12)');
+    riverGrad.addColorStop(1, 'rgba(56, 189, 248, 0.05)');
+    ctx.fillStyle = riverGrad;
+    ctx.fillRect(insetX, riverY, 8 * cellW, cellH);
+
+    // River borders
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(insetX, riverY);
+    ctx.lineTo(canvas.width - insetX, riverY);
+    ctx.moveTo(insetX, riverY + cellH);
+    ctx.lineTo(canvas.width - insetX, riverY + cellH);
+    ctx.stroke();
+
+    // River Text
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = 'bold 48px "Noto Serif SC", "Songti SC", serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const textY = riverY + cellH / 2 + 4;
+    ctx.letterSpacing = '0.15em';
+    ctx.fillText('楚 河', insetX + 2.5 * cellW, textY);
+    ctx.fillText('漢 界', insetX + 5.5 * cellW, textY);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.anisotropy = 4;
+    return texture;
+  }
+
+  function addBoard() {
+    if (!scene || !tableGroup) return;
+
+    if (boardStyle === 'zh') {
+      const tex = createChineseBoardTexture();
+      const zhBoardMat = material({ color: 0xffffff, roughness: 0.9, metalness: 0 });
+      if (tex) zhBoardMat.map = tex;
+      
+      const edgeMat = material({ color: 0x111111, roughness: 0.8 });
+      addMesh(tableGroup, new THREE.BoxGeometry(10.6, 0.28, 11.6), edgeMat, [0, -0.16, 0]);
+      addMesh(tableGroup, new THREE.BoxGeometry(10.4, 0.05, 11.4), zhBoardMat, [0, -0.01, 0]);
+    } else {
+      const boardMat = material({ color: 0xdca86b, roughness: 0.78, metalness: 0.02 });
+      const edgeMat = material({ color: 0x2b2118, roughness: 0.68 });
+      const lineMat = material({ color: 0x4a2c14, roughness: 0.9, metalness: 0.0 });
+
+      addMesh(tableGroup, new THREE.BoxGeometry(10.6, 0.28, 11.6), edgeMat, [0, -0.16, 0]);
+      addMesh(tableGroup, new THREE.BoxGeometry(10.4, 0.05, 11.4), boardMat, [0, -0.01, 0]);
+
+      // Grid lines
+      for (let x = 0; x < BOARD_WIDTH; x++) {
+        const px = x - (BOARD_WIDTH - 1) / 2;
+        // Lines break at the river for columns 1 to 7
+        if (x > 0 && x < BOARD_WIDTH - 1) {
+          addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 4), lineMat, [px, 0.02, -2.5]);
+          addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 4), lineMat, [px, 0.02, 2.5]);
+        } else {
+          addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 9), lineMat, [px, 0.02, 0]);
+        }
+      }
+
+      for (let y = 0; y < BOARD_HEIGHT; y++) {
+        const pz = y - (BOARD_HEIGHT - 1) / 2;
+        addMesh(tableGroup, new THREE.BoxGeometry(8, 0.01, 0.04), lineMat, [0, 0.02, pz]);
+      }
+
+      // Palace diagonals
+      addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, -3.5], [0, Math.PI / 4, 0]);
+      addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, -3.5], [0, -Math.PI / 4, 0]);
+      
+      addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, 3.5], [0, Math.PI / 4, 0]);
+      addMesh(tableGroup, new THREE.BoxGeometry(0.04, 0.01, 2.828), lineMat, [0, 0.02, 3.5], [0, -Math.PI / 4, 0]);
+    }
 
     // Invisible hitboxes for intersections
     const hitboxMat = material({ color: 0xff0000, transparent: true, opacity: 0 });
@@ -476,13 +593,30 @@
   function syncDynamicScene(
     nextMovesKey = selectedMovesRenderKey,
     nextSelectedPieceId = selectedPieceId,
+    nextBoardStyle = boardStyle,
   ) {
+    let boardRebuild = false;
+    if (tableGroup && tableGroup.userData.boardStyle !== nextBoardStyle) {
+      boardRebuild = true;
+    }
+
     if (
       activeState === state &&
       activeSelectedPieceId === nextSelectedPieceId &&
-      activeSelectedMovesKey === nextMovesKey
+      activeSelectedMovesKey === nextMovesKey &&
+      !boardRebuild
     ) {
       return;
+    }
+
+    if (boardRebuild) {
+      clearLayer(tableGroup);
+      interactiveObjects.splice(0, boardObjects.length);
+      boardObjects.length = 0;
+      addBoard();
+      if (tableGroup) {
+        tableGroup.userData.boardStyle = nextBoardStyle;
+      }
     }
 
     const previousState = activeState;
@@ -617,6 +751,9 @@
     scene.add(rimLight);
 
     addBoard();
+    if (tableGroup) {
+      tableGroup.userData.boardStyle = boardStyle;
+    }
     startedAt = performance.now();
     syncDynamicScene();
     resizeObserver = new ResizeObserver((entries) => {
