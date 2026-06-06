@@ -587,22 +587,10 @@
     camera.updateProjectionMatrix();
   }
 
-  function verifyCanvasPaint() {
-    if (!renderer || renderMode !== 'webgl') {
-      return;
-    }
-
-    const width = renderer.domElement.width;
-    const height = renderer.domElement.height;
-    if (width <= 1 || height <= 1) {
-      renderMode = 'fallback';
-    }
-  }
-
   function initScene() {
     renderer = new THREE.WebGLRenderer({
       canvas,
-      alpha: true,
+      alpha: false,
       antialias: true,
       powerPreference: 'high-performance',
     });
@@ -634,13 +622,22 @@
 
     addBoard();
     startedAt = performance.now();
-    resize();
-    updateCamera();
     syncDynamicScene();
-    resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(canvas);
-    animationFrame = requestAnimationFrame(animate);
-    globalThis.setTimeout(verifyCanvasPaint, 600);
+    resizeObserver = new ResizeObserver((entries) => {
+      if (!entries.length || !camera || !renderer) return;
+      const { width, height } = entries[0].contentRect;
+      if (width <= 0 || height <= 0) return;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.zoom = cameraZoom;
+      camera.updateProjectionMatrix();
+    });
+    resizeObserver.observe(canvas.parentElement!);
+    animationFrame = requestAnimationFrame(() => {
+      resize();
+      animationFrame = requestAnimationFrame(animate);
+    });
   }
 
   function squareFromPointer(event: PointerEvent): { x: number; y: number } | undefined {
