@@ -19,6 +19,7 @@
   export let cameraZoom: number = 1;
   export let boardStyle: '3d' | 'zh' = '3d';
   export let onSquare: (x: number, y: number) => void = () => {};
+  export let debugLines: string[] = [];
 
   let canvas: HTMLCanvasElement;
   let renderer: THREE.WebGLRenderer | undefined;
@@ -46,6 +47,38 @@
   let selectedMovesRenderKey = '';
   let startedAt = 0;
   let renderMode: 'webgl' | 'fallback' = 'webgl';
+
+  // ── DEBUG ──────────────────────────────────────────────────────────────────
+  let frameCount = 0;
+  let resizeFireCount = 0;
+
+  function dbg(tag: string, data: Record<string, unknown> = {}) {
+    const msg = `[${tag}] ` + Object.entries(data).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ');
+    console.log('[Chess3D]', msg);
+    debugLines = [...debugLines.slice(-39), msg];
+  }
+
+  function snap(label: string) {
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    const pe = canvas.parentElement;
+    const pr = pe?.getBoundingClientRect();
+    dbg(label, {
+      // CSS layout dimensions (what you see on screen)
+      cssW: Math.round(r.width), cssH: Math.round(r.height),
+      // WebGL draw-buffer dimensions (what three.js renders into)
+      bufW: canvas.width, bufH: canvas.height,
+      // Parent layout dimensions
+      parCssW: pr ? Math.round(pr.width) : null,
+      parCssH: pr ? Math.round(pr.height) : null,
+      // Camera
+      aspect: camera ? Number(camera.aspect.toFixed(3)) : null,
+      // Misc
+      dpr: window.devicePixelRatio,
+      frame: frameCount,
+    });
+  }
+  // ── END DEBUG ──────────────────────────────────────────────────────────────
 
   const boardObjects: THREE.Object3D[] = [];
   const interactiveObjects: THREE.Object3D[] = [];
@@ -669,6 +702,8 @@
   }
 
   function animate() {
+    frameCount += 1;
+    if (frameCount <= 3) snap(`animate:frame-${frameCount}`);
     const now = performance.now();
     const elapsed = (now - startedAt) / 1000;
     if (pieceLayer) {
@@ -718,6 +753,8 @@
   }
 
   function initScene() {
+    dbg('init:start', { canvasBound: !!canvas });
+
     renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: false,
@@ -756,15 +793,24 @@
     }
     startedAt = performance.now();
     syncDynamicScene();
+    snap('init:pre-observe');
     resizeObserver = new ResizeObserver((entries) => {
       if (!entries.length || !camera || !renderer) return;
       const { width, height } = entries[0].contentRect;
+      resizeFireCount += 1;
+      dbg('resize:fired', {
+        n: resizeFireCount,
+        rectW: Math.round(width), rectH: Math.round(height),
+        skipped: width <= 0 || height <= 0,
+        frame: frameCount,
+      });
       if (width <= 0 || height <= 0) return;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.zoom = cameraZoom;
       camera.updateProjectionMatrix();
+      snap('resize:after-setSize');
     });
     // Observe the canvas itself, not canvas.parentElement — observing the parent
     // creates a feedback loop: setSize raises the canvas height attribute, which
@@ -772,6 +818,7 @@
     // iteration until the height overflows.  The canvas has height:100% !important
     // in CSS so its layout size is stable regardless of the height attribute.
     resizeObserver.observe(canvas);
+    dbg('init:observe-called');
     animate();
   }
 

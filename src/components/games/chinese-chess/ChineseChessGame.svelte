@@ -75,6 +75,7 @@
   let pieceStyle: 'zh' | 'emoji' | '3d' | 'zh-3d' = 'zh';
   let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
   let cameraZoom: number = 1;
+  let board3dDebugLines: string[] = [];
 
   let boardRotationX = 56;
   let boardRotationZ = -4;
@@ -744,6 +745,7 @@
               {cameraZoom}
               boardStyle={pieceStyle === 'zh-3d' ? 'zh' : '3d'}
               onSquare={chooseSquare}
+              bind:debugLines={board3dDebugLines}
             />
             <div class="pointer-events-none absolute right-4 top-4 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
               <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
@@ -770,6 +772,17 @@
                 <option value={2} class="bg-neutral-900">200%</option>
               </select>
             </div>
+          </div>
+
+          <!-- DEBUG — remove before shipping -->
+          <div class="mt-2 max-h-64 overflow-y-auto rounded border border-green-900/50 bg-black/80 p-2 font-mono text-[10px] text-green-400">
+            <div class="mb-1 flex gap-2">
+              <span class="font-bold text-yellow-400">DEBUG</span>
+              <button class="rounded border border-yellow-400 px-1.5 text-yellow-400 hover:bg-yellow-400/10" type="button"
+                on:click={() => navigator.clipboard.writeText(board3dDebugLines.join('\n')).then(() => alert('Copied!'))}>Copy</button>
+            </div>
+            {#each board3dDebugLines as line}<div class="break-all leading-snug">{line}</div>{/each}
+            {#if !board3dDebugLines.length}<div class="italic text-neutral-500">waiting…</div>{/if}
           </div>
 
         {:else}
