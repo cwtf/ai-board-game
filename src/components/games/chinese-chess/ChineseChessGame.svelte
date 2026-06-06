@@ -72,7 +72,7 @@
   let aiPaused = false;
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
-  let pieceStyle: 'zh' | 'emoji' | '3d' | 'zh-3d' = 'zh';
+  let pieceStyle: 'zh' | 'emoji' | 'zh-3d' = 'zh';
   let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
   let cameraZoom: number = 1;
 
@@ -733,7 +733,7 @@
           </div>
         </aside>
 
-        {#if pieceStyle === '3d' || pieceStyle === 'zh-3d'}
+        {#if pieceStyle === 'zh-3d'}
           <div class="relative min-h-[660px] w-full overflow-hidden rounded-md border border-neutral-800 bg-neutral-950">
             <ChineseChessBoard3D
               {state}
@@ -741,7 +741,7 @@
               {selectedMoves}
               {cameraView}
               {cameraZoom}
-              boardStyle={pieceStyle === 'zh-3d' ? 'zh' : '3d'}
+              boardStyle="zh"
               onSquare={chooseSquare}
             />
             <div class="pointer-events-none absolute right-4 top-4 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
