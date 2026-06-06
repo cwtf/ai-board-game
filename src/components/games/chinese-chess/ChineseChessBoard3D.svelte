@@ -938,7 +938,7 @@
   }
 </script>
 
-<div class="board-shell" on:wheel={handleWheel}>
+<div class="board-shell" style="position:absolute;inset:0;" on:wheel={handleWheel}>
   {#if renderMode === 'fallback'}
     <div class="fallback-message">
       WebGL is required for the 3D board. Please select a different piece style or enable WebGL.
@@ -959,10 +959,8 @@
 
 <style>
   .board-shell {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    min-height: 360px;
+    /* position/size via inline style (position:absolute;inset:0) so it applies
+       before the async Svelte CSS chunk loads in production */
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
