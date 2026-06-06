@@ -48,7 +48,7 @@
   let renderMode: 'webgl' | 'fallback' = 'webgl';
 
   // ── DEBUG INSTRUMENTATION ────────────────────────────────────────────────
-  let debugLines: string[] = [];
+  export let debugLines: string[] = [];
   let frameCount = 0;
   const DEBUG_LOG_FRAMES = 5; // capture state on the first N frames
 
@@ -1027,22 +1027,6 @@
     >Interactive 3D Chinese chess board</canvas>
   {/if}
 
-  <!-- DEBUG OVERLAY — remove before shipping -->
-  <div class="debug-overlay" role="log" aria-label="Debug log">
-    <div class="debug-title">
-      DEBUG
-      <button
-        class="debug-copy"
-        on:click={() => navigator.clipboard.writeText(debugLines.join('\n')).then(() => alert('Copied!'))}
-      >Copy</button>
-    </div>
-    {#each debugLines as line}
-      <div class="debug-line">{line}</div>
-    {/each}
-    {#if debugLines.length === 0}
-      <div class="debug-line debug-waiting">waiting for logs…</div>
-    {/if}
-  </div>
 </div>
 
 <style>
@@ -1075,53 +1059,4 @@
     color: #ef4444;
   }
 
-  /* DEBUG OVERLAY — remove with the overlay markup before shipping */
-  .debug-overlay {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    max-width: 480px;
-    max-height: 80%;
-    overflow-y: auto;
-    background: rgba(0, 0, 0, 0.82);
-    color: #86efac;
-    font: 10px/1.45 monospace;
-    padding: 6px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(134, 239, 172, 0.3);
-    pointer-events: auto;
-    z-index: 9999;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-
-  .debug-title {
-    font-size: 11px;
-    font-weight: bold;
-    color: #fbbf24;
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .debug-copy {
-    font: 10px monospace;
-    background: #1f2937;
-    color: #fbbf24;
-    border: 1px solid #fbbf24;
-    border-radius: 3px;
-    padding: 1px 6px;
-    cursor: pointer;
-  }
-
-  .debug-line {
-    opacity: 0.92;
-    margin-bottom: 1px;
-  }
-
-  .debug-waiting {
-    color: #6b7280;
-    font-style: italic;
-  }
 </style>

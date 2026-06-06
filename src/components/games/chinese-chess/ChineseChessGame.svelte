@@ -75,6 +75,7 @@
   let pieceStyle: 'zh' | 'emoji' | '3d' | 'zh-3d' = 'zh';
   let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
   let cameraZoom: number = 1;
+  let board3dDebugLines: string[] = [];
 
   let boardRotationX = 56;
   let boardRotationZ = -4;
@@ -744,6 +745,7 @@
               {cameraZoom}
               boardStyle={pieceStyle === 'zh-3d' ? 'zh' : '3d'}
               onSquare={chooseSquare}
+              bind:debugLines={board3dDebugLines}
             />
             <div class="pointer-events-none absolute right-4 top-4 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
               <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
@@ -770,6 +772,25 @@
                 <option value={2} class="bg-neutral-900">200%</option>
               </select>
             </div>
+          </div>
+
+          <!-- DEBUG PANEL — remove before shipping -->
+          <div class="mt-3 rounded-md border border-green-900/60 bg-neutral-950 p-3 font-mono text-[10px] text-green-400">
+            <div class="mb-2 flex items-center gap-3">
+              <span class="font-bold text-amber-400">DEBUG</span>
+              <button
+                class="rounded border border-amber-400 px-2 py-0.5 text-amber-400 hover:bg-amber-400/10"
+                type="button"
+                on:click={() => navigator.clipboard.writeText(board3dDebugLines.join('\n')).then(() => alert('Copied!'))}
+              >Copy</button>
+            </div>
+            {#if board3dDebugLines.length === 0}
+              <p class="italic text-neutral-500">waiting for logs…</p>
+            {:else}
+              {#each board3dDebugLines as line}
+                <div class="mb-0.5 break-all leading-relaxed opacity-90">{line}</div>
+              {/each}
+            {/if}
           </div>
         {:else}
           <!-- svelte-ignore a11y-no-static-element-interactions -->
