@@ -592,31 +592,9 @@
       return;
     }
 
-    try {
-      updateCamera();
-      const gl = renderer.getContext();
-      const width = renderer.domElement.width;
-      const height = renderer.domElement.height;
-      if (width <= 1 || height <= 1) {
-        renderMode = 'fallback';
-        return;
-      }
-
-      const pixel = new Uint8Array(4);
-      gl.readPixels(
-        Math.floor(width / 2),
-        Math.floor(height / 2),
-        1,
-        1,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        pixel,
-      );
-      if (pixel[3] === 0) {
-        renderMode = 'fallback';
-      }
-    } catch (error) {
-      console.warn('Falling back after canvas paint check failed.', error);
+    const width = renderer.domElement.width;
+    const height = renderer.domElement.height;
+    if (width <= 1 || height <= 1) {
       renderMode = 'fallback';
     }
   }
