@@ -634,10 +634,7 @@
       camera.updateProjectionMatrix();
     });
     resizeObserver.observe(canvas.parentElement!);
-    animationFrame = requestAnimationFrame(() => {
-      resize();
-      animationFrame = requestAnimationFrame(animate);
-    });
+    animate();
   }
 
   function squareFromPointer(event: PointerEvent): { x: number; y: number } | undefined {
