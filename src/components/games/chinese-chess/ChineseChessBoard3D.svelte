@@ -717,15 +717,30 @@
     animationFrame = requestAnimationFrame(animate);
   }
 
+  function applySize(width: number, height: number) {
+    if (!camera || !renderer) return;
+    // Set canvas CSS dimensions explicitly in pixels. The Svelte scoped
+    // stylesheet may load after JS runs in production (CSS is a separate async
+    // chunk), so `canvas { width:100%; height:100% }` isn't applied yet when
+    // initScene fires. Without explicit inline px values the canvas lays out at
+    // its WebGL buffer attribute size, causing a resize feedback loop or a
+    // tiny/misplaced render.  `inset:0` alone is also insufficient when the
+    // containing block has `height:auto` — it falls back to the intrinsic size.
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.zoom = cameraZoom;
+    camera.updateProjectionMatrix();
+  }
+
   function initScene() {
-    // Svelte's scoped CSS doesn't reach the canvas element in some production
-    // builds, leaving it as an inline-level element whose layout size equals its
-    // WebGL buffer dimensions — causing a ResizeObserver feedback loop (each
-    // setSize call inflates the buffer, which inflates the canvas layout, which
-    // triggers another callback, ×DPR each iteration). Apply inline styles to
-    // guarantee position:absolute regardless of CSS delivery.
+    // Keep canvas out of normal flow so it never inflates its parent's
+    // contentRect (which would cause a ResizeObserver feedback loop).
     canvas.style.position = 'absolute';
-    canvas.style.inset = '0';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
 
     renderer = new THREE.WebGLRenderer({
       canvas,
@@ -765,19 +780,22 @@
     }
     startedAt = performance.now();
     syncDynamicScene();
+
+    // Size the canvas once synchronously so the first animate() frame renders
+    // at the correct dimensions before the ResizeObserver fires asynchronously.
+    const parent = canvas.parentElement!;
+    const initW = Math.max(1, parent.clientWidth);
+    const initH = Math.max(1, parent.clientHeight);
+    applySize(initW, initH);
+
     resizeObserver = new ResizeObserver((entries) => {
       if (!entries.length || !camera || !renderer) return;
       const { width, height } = entries[0].contentRect;
       if (width <= 0 || height <= 0) return;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
-      camera.zoom = cameraZoom;
-      camera.updateProjectionMatrix();
+      applySize(width, height);
     });
-    // Observe the parent (board-shell), not the canvas. The canvas is
-    // position:absolute (set inline above), so it is out of normal flow and
-    // cannot inflate the parent's contentRect — no feedback loop.
+    // Observe the parent (board-shell). The canvas is position:absolute so it
+    // is out of normal flow and cannot inflate the parent's contentRect.
     resizeObserver.observe(canvas.parentElement!);
     animate();
   }
