@@ -1365,10 +1365,10 @@
       style={`width: ${tableWidth}px; height: ${TABLE_HEIGHT}px; transform: translate(${tableOffsetX}px, ${tableOffsetY}px) scale(${tableScale});`}
     >
       <div
-        class="grid min-h-0 flex-1 grid-cols-[1120px_416px_minmax(560px,1fr)] gap-3"
+        class="grid min-h-0 flex-1 gap-3 {viewMode === '3d' ? 'grid-cols-[1260px_416px_minmax(420px,1fr)]' : 'grid-cols-[1120px_416px_minmax(560px,1fr)]'}"
       >
         {#if viewMode === '3d'}
-          <div class="relative h-full w-[1120px] rounded-md border border-neutral-800 bg-neutral-950 overflow-hidden">
+          <div class="relative h-full w-[1260px] rounded-md border border-neutral-800 bg-neutral-950 overflow-hidden">
             <Splendor3DView
               state={snapshot?.state}
               {legalMoves}
