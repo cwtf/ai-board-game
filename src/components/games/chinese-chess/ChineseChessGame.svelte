@@ -669,7 +669,7 @@
             >
               <option value="zh">Chinese Characters</option>
               <option value="emoji">Emoji</option>
-              <option value="zh-3d">Chinese Board with 3D Pieces</option>
+              <option value="zh-3d">3D Pieces</option>
             </select>
           </div>
 
