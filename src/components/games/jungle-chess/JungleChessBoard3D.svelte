@@ -14,9 +14,11 @@
   import { terrainAt } from '@/lib/games/jungle-chess/rules';
   import { coordinateLabel } from '@/lib/games/jungle-chess/move-format';
 
-  export let state: JungleState;
+  export let state: JungleState | undefined = undefined;
   export let selectedPieceId = '';
   export let selectedMoves: JungleMove[] = [];
+  export let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
+  export let cameraZoom: number = 1;
   export let onSquare: (x: number, y: number) => void = () => {};
 
   let canvas: HTMLCanvasElement;
@@ -683,6 +685,7 @@
         if (!entries.length || !camera || !renderer) return;
         const { width, height } = entries[0].contentRect;
         camera.aspect = width / height;
+        camera.zoom = cameraZoom;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height, false);
       });
@@ -850,7 +853,8 @@
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
-    distance = THREE.MathUtils.clamp(distance + e.deltaY * 0.02, 6, 25);
+    const delta = e.deltaY > 0 ? -0.25 : 0.25;
+    cameraZoom = Math.max(0.25, Math.min(2, cameraZoom + delta));
   }
 
   function pickObject(clientX: number, clientY: number): boolean {
@@ -874,20 +878,52 @@
     }
     return false;
   }
+
+  $: setCameraPreset(cameraView);
+
+  function setCameraPreset(preset: 'default' | 'top' | 'isometric' | 'front') {
+    if (preset === 'top') {
+      yaw = 0;
+      pitch = 85;
+      distance = 13;
+    } else if (preset === 'isometric') {
+      yaw = 45;
+      pitch = 45;
+      distance = 15;
+    } else if (preset === 'front') {
+      yaw = 0;
+      pitch = 30;
+      distance = 15;
+    } else {
+      yaw = -32;
+      pitch = 54;
+      distance = 14.8;
+    }
+    focusX = 0;
+    focusZ = 0;
+    updateCamera();
+  }
+
+  $: if (camera) {
+    camera.zoom = cameraZoom;
+    camera.updateProjectionMatrix();
+  }
 </script>
 
 {#if renderMode === 'webgl'}
-  <canvas
-    bind:this={canvas}
-    class="block h-full w-full touch-none"
-    on:pointerdown={handlePointerDown}
-    on:pointermove={handlePointerMove}
-    on:pointerup={handlePointerUp}
-    on:pointercancel={handlePointerUp}
-    on:wheel={handleWheel}
-    on:contextmenu|preventDefault
-    style="cursor: grab;"
-  ></canvas>
+  <div class="relative w-full h-full">
+    <canvas
+      bind:this={canvas}
+      class="block h-full w-full touch-none"
+      on:pointerdown={handlePointerDown}
+      on:pointermove={handlePointerMove}
+      on:pointerup={handlePointerUp}
+      on:pointercancel={handlePointerUp}
+      on:wheel={handleWheel}
+      on:contextmenu|preventDefault
+      style="cursor: grab;"
+    ></canvas>
+  </div>
 {:else}
   <div class="flex h-full w-full items-center justify-center text-sm text-neutral-400">
     3D visualization unavailable

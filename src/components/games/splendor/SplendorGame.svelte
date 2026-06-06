@@ -128,7 +128,9 @@
   let message = '';
   let aiController: ReturnType<typeof createAbortController> | undefined;
   let viewportEl: globalThis.HTMLElement;
-  let viewMode = '3d';
+  let viewMode: '3d' | 'stock' = '3d';
+  let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
+  let cameraZoom: number = 1;
   let tableWidth = MIN_TABLE_WIDTH;
   let tableScale = 1;
   let tableOffsetX = 0;
@@ -1368,10 +1370,12 @@
         {#if viewMode === '3d'}
           <div class="relative h-full w-[1120px] rounded-md border border-neutral-800 bg-neutral-950 overflow-hidden">
             <Splendor3DView
-              {state}
+              state={snapshot?.state}
               {legalMoves}
               {humanCanAct}
               {selectedGems}
+              {cameraView}
+              bind:cameraZoom
               onSelectGem={selectGem}
               onBeginMove={beginMove}
             />
@@ -1402,6 +1406,8 @@
                   <option value="3d">3D Rendered</option>
                   <option value="stock">2D Stock UI</option>
                 </select>
+
+
               </div>
 
               <button
@@ -1411,6 +1417,28 @@
               >
                 Move log ({snapshot?.log.length ?? 0})
               </button>
+            </div>
+            <div class="absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-md border border-neutral-700/50 bg-neutral-900/80 px-2 py-1.5 shadow-xl backdrop-blur-sm pointer-events-auto">
+              <label class="text-xs font-medium text-neutral-300" for="camera-view-3d">View:</label>
+              <select id="camera-view-3d" class="bg-transparent text-xs text-neutral-100 outline-none cursor-pointer" bind:value={cameraView}>
+                <option value="default" class="bg-neutral-900">Default</option>
+                <option value="top" class="bg-neutral-900">Top</option>
+                <option value="isometric" class="bg-neutral-900">Isometric</option>
+                <option value="front" class="bg-neutral-900">Front</option>
+              </select>
+            </div>
+            <div class="absolute bottom-4 right-4 z-10 flex items-center gap-2 rounded-md border border-neutral-700/50 bg-neutral-900/80 px-2 py-1.5 shadow-xl backdrop-blur-sm pointer-events-auto">
+              <label class="text-xs font-medium text-neutral-300" for="camera-zoom-3d">Zoom:</label>
+              <select id="camera-zoom-3d" class="bg-transparent text-xs text-neutral-100 outline-none cursor-pointer" bind:value={cameraZoom}>
+                <option value={0.25} class="bg-neutral-900">25%</option>
+                <option value={0.5} class="bg-neutral-900">50%</option>
+                <option value={0.75} class="bg-neutral-900">75%</option>
+                <option value={1} class="bg-neutral-900">100%</option>
+                <option value={1.25} class="bg-neutral-900">125%</option>
+                <option value={1.5} class="bg-neutral-900">150%</option>
+                <option value={1.75} class="bg-neutral-900">175%</option>
+                <option value={2} class="bg-neutral-900">200%</option>
+              </select>
             </div>
           </div>
         {:else}
@@ -1442,6 +1470,8 @@
                     <option value="3d">3D Rendered</option>
                     <option value="stock">2D Stock UI</option>
                   </select>
+
+
                 </div>
 
                 <button

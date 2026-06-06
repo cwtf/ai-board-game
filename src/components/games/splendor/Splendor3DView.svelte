@@ -19,6 +19,8 @@
   export let selectedGems: Gem[];
   export let onSelectGem: (gem: Gem) => void;
   export let onBeginMove: (move: SplendorMove) => void;
+  export let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
+  export let cameraZoom: number = 1;
 
   let containerEl: HTMLElement;
   let canvasEl: HTMLCanvasElement;
@@ -82,6 +84,26 @@
 
   $: if (selectedGems && meshMap.size > 0) {
     updateCoinAnimations();
+  }
+
+  $: setCameraPreset(cameraView);
+
+  function setCameraPreset(preset: 'default' | 'top' | 'isometric' | 'front') {
+    if (!camera || !controls) return;
+    if (preset === 'top') {
+      camera.position.set(0, 14, 0);
+      controls.target.set(0, 0, 0);
+    } else if (preset === 'isometric') {
+      camera.position.set(-8, 10, 8);
+      controls.target.set(0, -0.4, 0.2);
+    } else if (preset === 'front') {
+      camera.position.set(0, 6, 12);
+      controls.target.set(0, -0.4, 0.2);
+    } else {
+      camera.position.set(0, 9.0, 7.8);
+      controls.target.set(0, -0.4, 0.2);
+    }
+    controls.update();
   }
 
   function getCachedTexture(url: string): THREE.Texture {
@@ -1467,6 +1489,7 @@
       height = entry.contentRect.height || containerEl.clientHeight;
 
       camera.aspect = width / height;
+      camera.zoom = cameraZoom;
       camera.updateProjectionMatrix();
 
       renderer.setSize(width, height);
@@ -1518,6 +1541,11 @@
       deckCanvases.clear();
     }
   });
+
+  $: if (camera) {
+    camera.zoom = cameraZoom;
+    camera.updateProjectionMatrix();
+  }
 </script>
 
 <div class="relative h-full w-full overflow-hidden" bind:this={containerEl}>

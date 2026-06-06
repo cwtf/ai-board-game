@@ -79,6 +79,8 @@
   let aiController: globalThis.AbortController | undefined;
   let gameOverDismissed = false;
   let pieceStyle: 'zh' | 'emoji' | '3d' = 'zh';
+  let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
+  let cameraZoom: number = 1;
 
   let boardRotationX = 56;
   let boardRotationZ = -4;
@@ -94,6 +96,25 @@
   let initialPanX = 0;
   let initialPanY = 0;
 
+  $: boardScale = cameraZoom;
+
+  function applyCameraView(view: typeof cameraView) {
+    if (view === 'top') {
+      boardRotationX = 0;
+      boardRotationZ = 0;
+    } else if (view === 'isometric') {
+      boardRotationX = 60;
+      boardRotationZ = 45;
+    } else if (view === 'front') {
+      boardRotationX = 75;
+      boardRotationZ = 0;
+    } else {
+      boardRotationX = 56;
+      boardRotationZ = -4;
+    }
+  }
+
+  $: applyCameraView(cameraView);
   $: state = snapshot?.state;
   $: currentPlayer = snapshot?.currentPlayer ?? 0;
   $: selectedProfile = selectedProfileFor(keys);
@@ -522,8 +543,8 @@
   }
 
   function handleBoardWheel(e: WheelEvent) {
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    boardScale = Math.max(0.4, Math.min(3, boardScale + delta));
+    const delta = e.deltaY > 0 ? -0.25 : 0.25;
+    cameraZoom = Math.max(0.25, Math.min(2, cameraZoom + delta));
   }
 
   function buildLogEntries(
@@ -737,10 +758,34 @@
               {state}
               {selectedPieceId}
               {selectedMoves}
+              {cameraView}
+              bind:cameraZoom
               onSquare={chooseSquare}
             />
             <div class="pointer-events-none absolute right-4 top-4 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
               <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
+            </div>
+            <div class="absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-md border border-neutral-700/50 bg-neutral-900/80 px-2 py-1.5 shadow-xl backdrop-blur-sm pointer-events-auto">
+              <label class="text-xs font-medium text-neutral-300" for="camera-view-3d">View:</label>
+              <select id="camera-view-3d" class="bg-transparent text-xs text-neutral-100 outline-none cursor-pointer" bind:value={cameraView}>
+                <option value="default" class="bg-neutral-900">Default</option>
+                <option value="top" class="bg-neutral-900">Top</option>
+                <option value="isometric" class="bg-neutral-900">Isometric</option>
+                <option value="front" class="bg-neutral-900">Front</option>
+              </select>
+            </div>
+            <div class="absolute bottom-4 right-4 z-10 flex items-center gap-2 rounded-md border border-neutral-700/50 bg-neutral-900/80 px-2 py-1.5 shadow-xl backdrop-blur-sm pointer-events-auto">
+              <label class="text-xs font-medium text-neutral-300" for="camera-zoom-3d">Zoom:</label>
+              <select id="camera-zoom-3d" class="bg-transparent text-xs text-neutral-100 outline-none cursor-pointer" bind:value={cameraZoom}>
+                <option value={0.25} class="bg-neutral-900">25%</option>
+                <option value={0.5} class="bg-neutral-900">50%</option>
+                <option value={0.75} class="bg-neutral-900">75%</option>
+                <option value={1} class="bg-neutral-900">100%</option>
+                <option value={1.25} class="bg-neutral-900">125%</option>
+                <option value={1.5} class="bg-neutral-900">150%</option>
+                <option value={1.75} class="bg-neutral-900">175%</option>
+                <option value={2} class="bg-neutral-900">200%</option>
+              </select>
             </div>
           </div>
         {:else}
@@ -824,6 +869,28 @@
           </div>
           <div class="pointer-events-none absolute right-4 top-4 rounded-full border border-neutral-700/50 bg-neutral-900/80 px-4 py-2 text-xs text-neutral-300 shadow-xl backdrop-blur-sm">
             <span class="font-semibold text-neutral-100">Controls:</span> Left-Click + Drag to rotate &bull; Right-Click + Drag to pan &bull; Scroll to zoom
+          </div>
+          <div class="absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-md border border-neutral-700/50 bg-neutral-900/80 px-2 py-1.5 shadow-xl backdrop-blur-sm pointer-events-auto">
+            <label class="text-xs font-medium text-neutral-300" for="camera-view-2d">View:</label>
+            <select id="camera-view-2d" class="bg-transparent text-xs text-neutral-100 outline-none cursor-pointer" bind:value={cameraView}>
+              <option value="default" class="bg-neutral-900">Default</option>
+              <option value="top" class="bg-neutral-900">Top</option>
+              <option value="isometric" class="bg-neutral-900">Isometric</option>
+              <option value="front" class="bg-neutral-900">Front</option>
+            </select>
+          </div>
+          <div class="absolute bottom-4 right-4 z-10 flex items-center gap-2 rounded-md border border-neutral-700/50 bg-neutral-900/80 px-2 py-1.5 shadow-xl backdrop-blur-sm pointer-events-auto">
+            <label class="text-xs font-medium text-neutral-300" for="camera-zoom-2d">Zoom:</label>
+            <select id="camera-zoom-2d" class="bg-transparent text-xs text-neutral-100 outline-none cursor-pointer" bind:value={cameraZoom}>
+              <option value={0.25} class="bg-neutral-900">25%</option>
+              <option value={0.5} class="bg-neutral-900">50%</option>
+              <option value={0.75} class="bg-neutral-900">75%</option>
+              <option value={1} class="bg-neutral-900">100%</option>
+              <option value={1.25} class="bg-neutral-900">125%</option>
+              <option value={1.5} class="bg-neutral-900">150%</option>
+              <option value={1.75} class="bg-neutral-900">175%</option>
+              <option value={2} class="bg-neutral-900">200%</option>
+            </select>
           </div>
         </div>
         {/if}

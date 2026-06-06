@@ -12,9 +12,11 @@
   } from '@/lib/games/chinese-chess/state';
   import { coordinateLabel } from '@/lib/games/chinese-chess/move-format';
 
-  export let state: ChineseChessState;
+  export let state: ChineseChessState | undefined = undefined;
   export let selectedPieceId = '';
   export let selectedMoves: ChineseChessMove[] = [];
+  export let cameraView: 'default' | 'top' | 'isometric' | 'front' = 'default';
+  export let cameraZoom: number = 1;
   export let onSquare: (x: number, y: number) => void = () => {};
 
   let canvas: HTMLCanvasElement;
@@ -528,6 +530,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
+    camera.zoom = cameraZoom;
     camera.updateProjectionMatrix();
   }
 
@@ -738,8 +741,8 @@
 
   function handleWheel(event: WheelEvent) {
     event.preventDefault();
-    distance = Math.max(6.4, Math.min(22, distance + (event.deltaY > 0 ? 0.55 : -0.55)));
-    updateCamera();
+    const delta = event.deltaY > 0 ? -0.25 : 0.25;
+    cameraZoom = Math.max(0.25, Math.min(2, cameraZoom + delta));
   }
 
   onMount(() => {
@@ -763,6 +766,36 @@
     }
     renderer?.dispose();
   });
+
+  $: setCameraPreset(cameraView);
+
+  function setCameraPreset(preset: 'default' | 'top' | 'isometric' | 'front') {
+    if (preset === 'top') {
+      yaw = 0;
+      pitch = 85;
+      distance = 13;
+    } else if (preset === 'isometric') {
+      yaw = 45;
+      pitch = 45;
+      distance = 16;
+    } else if (preset === 'front') {
+      yaw = 0;
+      pitch = 30;
+      distance = 16;
+    } else {
+      yaw = -32;
+      pitch = 54;
+      distance = 14.8;
+    }
+    focusX = 0;
+    focusZ = 0;
+    updateCamera();
+  }
+
+  $: if (camera) {
+    camera.zoom = cameraZoom;
+    camera.updateProjectionMatrix();
+  }
 </script>
 
 <div class="board-shell" on:wheel={handleWheel}>
