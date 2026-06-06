@@ -47,6 +47,36 @@
   let startedAt = 0;
   let renderMode: 'webgl' | 'fallback' = 'webgl';
 
+  // ── DEBUG INSTRUMENTATION ────────────────────────────────────────────────
+  let debugLines: string[] = [];
+  let frameCount = 0;
+  const DEBUG_LOG_FRAMES = 5; // capture state on the first N frames
+
+  function dbg(tag: string, data: Record<string, unknown> = {}) {
+    const line = `[${tag}] ${Object.entries(data).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ')}`;
+    console.log('[ChessBoard3D]', line);
+    debugLines = [...debugLines.slice(-29), line]; // keep last 30 lines in overlay
+  }
+
+  function canvasDims(label: string) {
+    if (!canvas) { dbg(label, { error: 'canvas not bound' }); return; }
+    const rect = canvas.getBoundingClientRect();
+    dbg(label, {
+      clientW: canvas.clientWidth,
+      clientH: canvas.clientHeight,
+      offsetW: canvas.offsetWidth,
+      offsetH: canvas.offsetHeight,
+      rectW: Math.round(rect.width),
+      rectH: Math.round(rect.height),
+      drawW: canvas.width,       // WebGL internal pixel width
+      drawH: canvas.height,      // WebGL internal pixel height
+      parentW: canvas.parentElement?.clientWidth,
+      parentH: canvas.parentElement?.clientHeight,
+      dpr: window.devicePixelRatio,
+    });
+  }
+  // ── END DEBUG INSTRUMENTATION ────────────────────────────────────────────
+
   const boardObjects: THREE.Object3D[] = [];
   const interactiveObjects: THREE.Object3D[] = [];
   const MOVE_ANIMATION_MS = 420;
@@ -669,6 +699,22 @@
   }
 
   function animate() {
+    frameCount += 1;
+    if (frameCount <= DEBUG_LOG_FRAMES) {
+      canvasDims(`animate:frame-${frameCount}`);
+      if (renderer && camera) {
+        dbg(`animate:camera-frame-${frameCount}`, {
+          aspect: Number(camera.aspect.toFixed(3)),
+          zoom: camera.zoom,
+          camX: Number(camera.position.x.toFixed(2)),
+          camY: Number(camera.position.y.toFixed(2)),
+          camZ: Number(camera.position.z.toFixed(2)),
+          drawW: canvas.width,
+          drawH: canvas.height,
+          renderInfo: renderer.info.render,
+        });
+      }
+    }
     const now = performance.now();
     const elapsed = (now - startedAt) / 1000;
     if (pieceLayer) {
@@ -718,6 +764,26 @@
   }
 
   function initScene() {
+    dbg('initScene:start');
+    canvasDims('initScene:pre-renderer');
+
+    let glCtx: WebGLRenderingContext | WebGL2RenderingContext | null = null;
+    try {
+      glCtx = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+    } catch (e) {
+      dbg('initScene:getContext-error', { error: String(e) });
+    }
+    dbg('initScene:webgl-probe', {
+      hasWebGL2: !!canvas.getContext('webgl2'),
+      hasWebGL: !!glCtx,
+      renderer: glCtx
+        ? (glCtx as WebGLRenderingContext).getParameter((glCtx as WebGLRenderingContext).RENDERER)
+        : null,
+      vendor: glCtx
+        ? (glCtx as WebGLRenderingContext).getParameter((glCtx as WebGLRenderingContext).VENDOR)
+        : null,
+    });
+
     renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: false,
@@ -727,6 +793,19 @@
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    dbg('initScene:renderer-created', {
+      threeRevision: (THREE as unknown as Record<string, unknown>).REVISION,
+      colorSpace: renderer.outputColorSpace,
+    });
+
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      dbg('webglcontextlost', { frameCount });
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      dbg('webglcontextrestored', { frameCount });
+    });
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0a0a);
@@ -756,18 +835,34 @@
     }
     startedAt = performance.now();
     syncDynamicScene();
+    dbg('initScene:pre-resizeObserver', {
+      parentTag: canvas.parentElement?.tagName,
+      parentW: canvas.parentElement?.clientWidth,
+      parentH: canvas.parentElement?.clientHeight,
+    });
     resizeObserver = new ResizeObserver((entries) => {
       if (!entries.length || !camera || !renderer) return;
       const { width, height } = entries[0].contentRect;
-      if (width <= 0 || height <= 0) return;
+      dbg('resizeObserver:fired', { width: Math.round(width), height: Math.round(height), frameCount });
+      if (width <= 0 || height <= 0) {
+        dbg('resizeObserver:skipped-zero-size', { width, height });
+        return;
+      }
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.zoom = cameraZoom;
       camera.updateProjectionMatrix();
+      dbg('resizeObserver:applied', {
+        drawW: canvas.width,
+        drawH: canvas.height,
+        aspect: Number(camera.aspect.toFixed(3)),
+      });
     });
     resizeObserver.observe(canvas.parentElement!);
+    canvasDims('initScene:post-observe');
     animate();
+    dbg('initScene:complete');
   }
 
   function squareFromPointer(event: PointerEvent): { x: number; y: number } | undefined {
@@ -856,9 +951,16 @@
   }
 
   onMount(() => {
+    dbg('onMount:start', {
+      ua: navigator.userAgent,
+      memory: (performance as unknown as Record<string, unknown>).memory
+        ? JSON.stringify((performance as unknown as Record<string, unknown>).memory)
+        : 'n/a',
+    });
     try {
       initScene();
     } catch (error) {
+      dbg('onMount:caught-error', { error: String(error) });
       console.warn('Falling back to CSS chess board.', error);
       renderMode = 'fallback';
     }
@@ -924,6 +1026,23 @@
       on:contextmenu|preventDefault
     >Interactive 3D Chinese chess board</canvas>
   {/if}
+
+  <!-- DEBUG OVERLAY — remove before shipping -->
+  <div class="debug-overlay" role="log" aria-label="Debug log">
+    <div class="debug-title">
+      DEBUG
+      <button
+        class="debug-copy"
+        on:click={() => navigator.clipboard.writeText(debugLines.join('\n')).then(() => alert('Copied!'))}
+      >Copy</button>
+    </div>
+    {#each debugLines as line}
+      <div class="debug-line">{line}</div>
+    {/each}
+    {#if debugLines.length === 0}
+      <div class="debug-line debug-waiting">waiting for logs…</div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -954,5 +1073,55 @@
     padding: 2rem;
     text-align: center;
     color: #ef4444;
+  }
+
+  /* DEBUG OVERLAY — remove with the overlay markup before shipping */
+  .debug-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    max-width: 480px;
+    max-height: 80%;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.82);
+    color: #86efac;
+    font: 10px/1.45 monospace;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(134, 239, 172, 0.3);
+    pointer-events: auto;
+    z-index: 9999;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .debug-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #fbbf24;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .debug-copy {
+    font: 10px monospace;
+    background: #1f2937;
+    color: #fbbf24;
+    border: 1px solid #fbbf24;
+    border-radius: 3px;
+    padding: 1px 6px;
+    cursor: pointer;
+  }
+
+  .debug-line {
+    opacity: 0.92;
+    margin-bottom: 1px;
+  }
+
+  .debug-waiting {
+    color: #6b7280;
+    font-style: italic;
   }
 </style>
