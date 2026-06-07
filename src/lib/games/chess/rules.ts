@@ -170,9 +170,7 @@ export function activePieces(
   state: ChessState,
   player?: ChessPlayer,
 ): ChessPiece[] {
-  return hydrateState(state).pieces.filter(
-    (piece) => player === undefined || piece.owner === player,
-  );
+  return player === undefined ? state.pieces : state.pieces.filter(p => p.owner === player);
 }
 
 export function pieceAt(
@@ -214,6 +212,34 @@ export function legalMovesForSquare(
 
 export function currentPlayer(state: ChessState): number {
   return hydrateState(state).current;
+}
+
+// Fast variants for bot search: reconstruct position from FEN (O(1)) instead of replaying
+// move history (O(n)). Threefold-repetition detection is skipped; all other terminal
+// conditions are correct because they depend only on the current position.
+export function legalMovesFast(state: ChessState): ChessMove[] {
+  if (state.winner !== null || state.status !== 'active') {
+    return [];
+  }
+  return new Chess(state.fen).moves({ verbose: true }).map(appMoveFromChessMove);
+}
+
+export function applyMoveFast(state: ChessState, move: ChessMove): ChessState {
+  const chess = new Chess(state.fen);
+  const applied = chess.move({
+    from: move.fromSquare,
+    to: move.toSquare,
+    promotion: promotionSymbolForType(move.promotion),
+  });
+  if (!applied) {
+    throw new Error('applyMoveFast: move rejected by chess.js');
+  }
+  return stateFromChess({
+    seed: state.seed,
+    chess,
+    moveHistory: [...state.moveHistory, moveInput(move)],
+    lastMove: appMoveFromChessMove(applied),
+  });
 }
 
 export function isTerminal(state: ChessState): boolean {

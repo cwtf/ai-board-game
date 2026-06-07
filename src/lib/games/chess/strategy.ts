@@ -1,4 +1,4 @@
-import { activePieces, applyMove, legalMoves } from './rules';
+import { activePieces, applyMove, applyMoveFast, legalMoves, legalMovesFast } from './rules';
 import {
   opponentOf,
   pieceLabels,
@@ -29,13 +29,6 @@ const pieceValues: Record<ChessPiece['type'], number> = {
 
 function pieceValue(piece: Pick<ChessPiece, 'type'>): number {
   return pieceValues[piece.type];
-}
-
-function materialFor(state: ChessState, player: ChessPlayer): number {
-  return activePieces(state, player).reduce(
-    (sum, piece) => sum + pieceValue(piece),
-    0,
-  );
 }
 
 function centerControl(piece: ChessPiece): number {
@@ -85,11 +78,14 @@ function staticEvaluation(state: ChessState, player: ChessPlayer): number {
   }
 
   const opponent = opponentOf(player);
+  let score = 0;
+  for (const piece of state.pieces) {
+    const val =
+      pieceValue(piece) + centerControl(piece) + advancement(piece) + kingSafety(piece, state);
+    score += piece.owner === player ? val : -val;
+  }
   return (
-    materialFor(state, player) -
-    materialFor(state, opponent) +
-    positionalFor(state, player) -
-    positionalFor(state, opponent) +
+    score +
     (state.isCheck && state.current === opponent ? 45 : 0) -
     (state.isCheck && state.current === player ? 55 : 0)
   );
@@ -108,17 +104,16 @@ function capturedValue(state: ChessState, move: ChessMove): number {
 }
 
 function orderMoves(state: ChessState, moves: ChessMove[]): ChessMove[] {
-  return [...moves].sort((left, right) => {
-    const rightScore =
-      capturedValue(state, right) +
-      (right.isPromotion ? 800 : 0) +
-      (right.isCheckmate ? INF : right.isCheck ? 120 : 0);
-    const leftScore =
-      capturedValue(state, left) +
-      (left.isPromotion ? 800 : 0) +
-      (left.isCheckmate ? INF : left.isCheck ? 120 : 0);
-    return rightScore - leftScore || left.id.localeCompare(right.id);
-  });
+  const scored = moves.map(move => ({
+    move,
+    score:
+      capturedValue(state, move) +
+      (move.isPromotion ? 800 : 0) +
+      (move.isCheckmate ? INF : move.isCheck ? 120 : 0),
+  }));
+  return scored
+    .sort((a, b) => b.score - a.score || a.move.id.localeCompare(b.move.id))
+    .map(s => s.move);
 }
 
 // Extends search past depth 0 for captures/promotions until the position is quiet,
@@ -128,7 +123,7 @@ function quiesce(
   alpha: number,
   beta: number,
   rootPlayer: ChessPlayer,
-  qdepth = 6,
+  qdepth = 3,
 ): number {
   if (state.winner !== null) {
     return state.winner === rootPlayer ? INF : -INF;
@@ -151,13 +146,13 @@ function quiesce(
 
   const captures = orderMoves(
     state,
-    legalMoves(state, state.current).filter((m) => m.captured || m.isPromotion),
+    legalMovesFast(state).filter((m) => m.captured || m.isPromotion),
   );
 
   let best = standPat;
   if (state.current === rootPlayer) {
     for (const move of captures) {
-      const score = quiesce(applyMove(state, move), alpha, beta, rootPlayer, qdepth - 1);
+      const score = quiesce(applyMoveFast(state, move), alpha, beta, rootPlayer, qdepth - 1);
       if (score > best) {
         best = score;
         alpha = Math.max(alpha, best);
@@ -166,7 +161,7 @@ function quiesce(
     }
   } else {
     for (const move of captures) {
-      const score = quiesce(applyMove(state, move), alpha, beta, rootPlayer, qdepth - 1);
+      const score = quiesce(applyMoveFast(state, move), alpha, beta, rootPlayer, qdepth - 1);
       if (score < best) {
         best = score;
         beta = Math.min(beta, best);
@@ -195,7 +190,7 @@ function alphaBeta(
     return quiesce(state, alpha, beta, rootPlayer);
   }
 
-  const moves = orderMoves(state, legalMoves(state, state.current));
+  const moves = orderMoves(state, legalMovesFast(state));
   if (moves.length === 0) {
     return staticEvaluation(state, rootPlayer);
   }
@@ -205,7 +200,7 @@ function alphaBeta(
     for (const move of moves) {
       best = Math.max(
         best,
-        alphaBeta(applyMove(state, move), depth - 1, alpha, beta, rootPlayer),
+        alphaBeta(applyMoveFast(state, move), depth - 1, alpha, beta, rootPlayer),
       );
       alpha = Math.max(alpha, best);
       if (alpha >= beta) {
@@ -219,7 +214,7 @@ function alphaBeta(
   for (const move of moves) {
     best = Math.min(
       best,
-      alphaBeta(applyMove(state, move), depth - 1, alpha, beta, rootPlayer),
+      alphaBeta(applyMoveFast(state, move), depth - 1, alpha, beta, rootPlayer),
     );
     beta = Math.min(beta, best);
     if (alpha >= beta) {
@@ -325,7 +320,7 @@ export function chooseStrategicChessMove(opts: {
 
   for (const move of ordered) {
     const score = alphaBeta(
-      applyMove(opts.state, move),
+      applyMoveFast(opts.state, move),
       SEARCH_DEPTH - 1,
       alpha,
       INF,
