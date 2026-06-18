@@ -17,6 +17,7 @@ interface OpenAICompatibleOptions {
   requiresEndpointUrl?: boolean;
   endpointLabel?: string;
   defaultEndpointUrl?: string;
+  freeApi?: boolean;
   extraHeaders?: Record<string, string>;
   listModels?: boolean | ((params?: ListModelsParams) => Promise<string[]>);
 }
@@ -233,6 +234,7 @@ export function createOpenAICompatibleProvider(
     requiresEndpointUrl: options.requiresEndpointUrl,
     endpointLabel: options.endpointLabel,
     defaultEndpointUrl: options.defaultEndpointUrl,
+    freeApi: options.freeApi,
     listModels:
       typeof options.listModels === 'function'
         ? options.listModels

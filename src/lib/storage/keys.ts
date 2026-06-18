@@ -13,6 +13,7 @@ export interface ProviderModelProfile {
 export type StoredKeys = Partial<Record<ProviderId, string>> & {
   llamaUrl?: string;
   ollamaUrl?: string;
+  providerUrls?: Partial<Record<ProviderId, string>>;
   selectedProvider?: ProviderId;
   selectedModel?: Partial<Record<ProviderId, string>>;
   selectedProfileId?: string;
@@ -50,6 +51,15 @@ function sanitize(value: unknown): StoredKeys {
 
   if (typeof raw.ollamaUrl === 'string') {
     stored.ollamaUrl = raw.ollamaUrl;
+  }
+
+  if (raw.providerUrls && typeof raw.providerUrls === 'object') {
+    stored.providerUrls = {};
+    for (const [provider, url] of Object.entries(raw.providerUrls as Record<string, unknown>)) {
+      if (providerIds.has(provider as ProviderId) && typeof url === 'string') {
+        stored.providerUrls[provider as ProviderId] = url;
+      }
+    }
   }
 
   if (
@@ -180,6 +190,10 @@ export function clearProviderCredentials(provider: ProviderId): StoredKeys {
     if (provider === 'ollama') {
       delete next.ollamaUrl;
     }
+    if (next.providerUrls?.[provider]) {
+      next.providerUrls = { ...next.providerUrls };
+      delete next.providerUrls[provider];
+    }
     next.deletedProviders = Array.from(
       new Set([...(next.deletedProviders ?? []), provider]),
     );
@@ -219,7 +233,7 @@ export function providerEndpointFor(
   if (provider === 'ollama') {
     return keys.ollamaUrl;
   }
-  return undefined;
+  return keys.providerUrls?.[provider];
 }
 
 export function hasProviderCredentials(

@@ -11,7 +11,11 @@ export type ProviderId =
   | 'qwen'
   | 'llama'
   | 'openrouter'
-  | 'ollama';
+  | 'ollama'
+  | 'gemini'
+  | 'cerebras'
+  | 'cloudflare'
+  | 'huggingface';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -57,6 +61,7 @@ export interface AIProvider {
   requiresEndpointUrl?: boolean;
   endpointLabel?: string;
   defaultEndpointUrl?: string;
+  freeApi?: boolean;
   listModels?(params?: ListModelsParams): Promise<string[]>;
   complete(params: CompleteParams): Promise<CompleteResult>;
 }

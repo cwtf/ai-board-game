@@ -36,6 +36,7 @@ export default createOpenAICompatibleProvider({
     'anthropic/claude-sonnet-4',
     'google/gemini-2.5-flash',
   ],
+  freeApi: true,
   async listModels(params = {}): Promise<string[]> {
     const fetchModels = async (useApiKey: boolean) =>
       fetch(MODELS_URL, {

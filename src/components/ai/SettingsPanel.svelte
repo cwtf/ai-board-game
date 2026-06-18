@@ -33,11 +33,20 @@
   let modelSearch = '';
   let modelPickerOpen = false;
   let successfulTestSignatures: Partial<Record<ProviderId, string>> = {};
+  let freeFilter = false;
+
+  $: filteredProviders = freeFilter
+    ? providers.filter((p) => p.freeApi)
+    : providers;
 
   $: selectedProviderId = keys.selectedProvider ?? providers[0].id;
   $: activeProvider =
     providers.find((provider) => provider.id === selectedProviderId) ??
     providers[0];
+  $: if (freeFilter && !activeProvider.freeApi) {
+    const firstFree = providers.find((p) => p.freeApi);
+    if (firstFree) setSelectedProvider(firstFree.id);
+  }
   $: activeModels = modelsFor(activeProvider, providerModels, keys);
   $: activeModel = selectedModelFor(activeProvider.id, keys);
   $: visibleModels = filterModels(activeModels, modelSearch, activeModel);
@@ -94,6 +103,10 @@
     const provider = getProvider(providerId);
     const selectedModel =
       selectedModelFor(providerId, keys) || provider.defaultModel;
+    const usesProviderUrls =
+      provider.requiresEndpointUrl &&
+      providerId !== 'llama' &&
+      providerId !== 'ollama';
 
     return {
       ...keys,
@@ -102,6 +115,9 @@
         providerId === 'llama' ? draftUrls.llama?.trim() : keys.llamaUrl,
       ollamaUrl:
         providerId === 'ollama' ? draftUrls.ollama?.trim() : keys.ollamaUrl,
+      providerUrls: usesProviderUrls
+        ? { ...keys.providerUrls, [providerId]: draftUrls[providerId]?.trim() || undefined }
+        : keys.providerUrls,
       deletedProviders: keys.deletedProviders?.filter(
         (deletedProvider) => deletedProvider !== providerId,
       ),
@@ -121,10 +137,9 @@
       apiKey: provider.requiresApiKey
         ? draftKeys[providerId]?.trim() ?? ''
         : '',
-      endpoint:
-        providerId === 'llama' || providerId === 'ollama'
-          ? draftUrls[providerId]?.trim() || provider.defaultEndpointUrl || ''
-          : providerEndpointFor(providerId, keys) ?? '',
+      endpoint: provider.requiresEndpointUrl
+        ? draftUrls[providerId]?.trim() || provider.defaultEndpointUrl || ''
+        : providerEndpointFor(providerId, keys) ?? '',
     });
   }
 
@@ -136,6 +151,14 @@
     draftUrls = {
       llama: keys.llamaUrl ?? '',
       ollama: keys.ollamaUrl ?? 'http://localhost:11434',
+      ...Object.fromEntries(
+        providers
+          .filter((p) => p.requiresEndpointUrl && p.id !== 'llama' && p.id !== 'ollama')
+          .map((p) => [
+            p.id,
+            keys.providerUrls?.[p.id] ?? p.defaultEndpointUrl ?? '',
+          ]),
+      ),
     };
   }
 
@@ -146,7 +169,7 @@
 
   function endpointFor(providerId: ProviderId): string | undefined {
     const provider = getProvider(providerId);
-    return providerId === 'llama' || providerId === 'ollama'
+    return provider.requiresEndpointUrl
       ? draftUrls[providerId]?.trim() || provider.defaultEndpointUrl
       : providerEndpointFor(providerId, keys);
   }
@@ -394,10 +417,7 @@
     try {
       const result = await provider.complete({
         apiKey: draftKeys[providerId]?.trim(),
-        endpointUrl:
-          providerId === 'llama' || providerId === 'ollama'
-            ? draftUrls[providerId]?.trim() || provider.defaultEndpointUrl
-            : providerEndpointFor(providerId, keys),
+        endpointUrl: endpointFor(providerId),
         model: draftModel,
         system: 'You are a connection test. Reply only with valid JSON.',
         messages: [{ role: 'user', content: 'Reply with {"ok":true}' }],
@@ -511,14 +531,24 @@
 
     <div class="mt-5 grid gap-4 lg:grid-cols-2">
       <label class="grid gap-2 text-sm">
-        <span class="text-neutral-300">Provider</span>
+        <span class="flex items-center gap-3 text-neutral-300">
+          Provider
+          <label class="flex cursor-pointer items-center gap-1.5 font-normal text-neutral-400">
+            <input
+              class="accent-emerald-400"
+              type="checkbox"
+              bind:checked={freeFilter}
+            />
+            Free only
+          </label>
+        </span>
         <select
           class="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none focus:border-emerald-400"
           value={activeProvider.id}
           on:change={(event) =>
             setSelectedProvider(event.currentTarget.value as ProviderId)}
         >
-          {#each providers as provider (provider.id)}
+          {#each filteredProviders as provider (provider.id)}
             <option value={provider.id}>{provider.label}</option>
           {/each}
         </select>
@@ -637,7 +667,7 @@
         </div>
       {/if}
 
-      {#if activeProvider.id === 'llama' || activeProvider.id === 'ollama'}
+      {#if activeProvider.requiresEndpointUrl}
         <label class="grid gap-2 text-sm">
           <span class="text-neutral-300">
             {activeProvider.endpointLabel ?? 'Endpoint URL'}

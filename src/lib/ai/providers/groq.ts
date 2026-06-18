@@ -12,5 +12,6 @@ export default createOpenAICompatibleProvider({
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
   ],
+  freeApi: true,
   listModels: true,
 });

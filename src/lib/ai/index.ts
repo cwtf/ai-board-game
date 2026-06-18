@@ -1,8 +1,12 @@
 import anthropic from './providers/anthropic';
+import cerebras from './providers/cerebras';
+import cloudflare from './providers/cloudflare';
 import deepseek from './providers/deepseek';
+import gemini from './providers/gemini';
 import glm from './providers/glm';
 import google from './providers/google';
 import groq from './providers/groq';
+import huggingface from './providers/huggingface';
 import kimi from './providers/kimi';
 import llama from './providers/llama';
 import mistral from './providers/mistral';
@@ -17,8 +21,11 @@ const providers = [
   openai,
   anthropic,
   google,
+  gemini,
   deepseek,
   groq,
+  cerebras,
+  huggingface,
   mistral,
   together,
   kimi,
@@ -27,6 +34,7 @@ const providers = [
   llama,
   openrouter,
   ollama,
+  cloudflare,
 ] satisfies AIProvider[];
 
 const providerMap = new Map<ProviderId, AIProvider>(
