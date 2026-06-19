@@ -108,3 +108,21 @@ const structuredData = JSON.stringify({
 <meta name="twitter:image" content={imageUrl} />
 <meta name="twitter:image:alt" content={imageAlt} />
 <script is:inline type="application/ld+json" set:html={structuredData} />
+
+<!-- Google Analytics -->
+<script async is:inline src="https://www.googletagmanager.com/gtag/js?id=G-7XZC68QSB0"></script>
+<script is:inline>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-7XZC68QSB0');
+</script>
+
+<!-- Microsoft Clarity -->
+<script is:inline>
+  (function(c,l,a,r,i,t,y){
+    c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+    t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+    y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+  })(window,document,"clarity","script","x9eoa88ueo");
+</script>
