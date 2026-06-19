@@ -7,6 +7,8 @@ export function GET() {
     [
       'User-agent: *',
       'Allow: /',
+      'Allow: /llms.txt',
+      'Allow: /llms-full.txt',
       'Disallow: /settings',
       '',
       `Sitemap: ${sitemapUrl}`,

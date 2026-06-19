@@ -1,11 +1,42 @@
 import { absoluteSiteUrl, siteUrl } from '@/lib/site';
 
 export const SITE_NAME = 'AI Board Games';
+export const SITE_AUTHOR = 'cwtf';
+export const SITE_AUTHOR_URL = 'https://iconlearning.com.my';
 export const DEFAULT_SEO_IMAGE = '/screenshots/secret-hitler.png';
 export const DEFAULT_SEO_IMAGE_ALT =
   'AI Board Games browser tabletop game screenshot';
 export const HOME_DESCRIPTION =
   'Play local-first board games against configurable AI opponents with bring-your-own-key provider settings.';
+export const SITE_FACTS = [
+  'AI Board Games is a free browser-based board game table.',
+  'The app uses local-first game engines and stores provider settings in the user browser.',
+  'Players can assign configured AI model profiles to supported seats.',
+  'API keys are bring-your-own-key and are not required for local bot games.',
+  'The project is built with Astro, Svelte, TypeScript, and Tailwind CSS.',
+];
+export const GEO_FAQS = [
+  {
+    question: 'What is AI Board Games?',
+    answer:
+      'AI Board Games is a browser-based board game table for playing local-first tabletop games against local bots or configurable AI model profiles.',
+  },
+  {
+    question: 'Does AI Board Games store API keys on a server?',
+    answer:
+      'No. Provider credentials are stored in browser storage on the user machine for the bring-your-own-key workflow.',
+  },
+  {
+    question: 'Which games are available in AI Board Games?',
+    answer:
+      'Playable games include Splendor, Secret Hitler, Chess, Xiangqi, Jungle Chess, and Exploding Kittens.',
+  },
+  {
+    question: 'Who is AI Board Games for?',
+    answer:
+      'It is for people who want to play board games in the browser, compare AI models inside tabletop game states, or prototype AI-driven game agents.',
+  },
+];
 
 export interface PageSeo {
   title: string;
@@ -200,10 +231,27 @@ export function createGameJsonLd(game: GameSeo, base = siteUrl()) {
     description: game.description,
     image: absoluteSiteUrl(image, base),
     genre: game.genre,
+    keywords: game.keywords?.join(', '),
     gamePlatform: 'Web browser',
     applicationCategory: 'GameApplication',
     operatingSystem: 'Web',
     playMode: 'SinglePlayer',
+    featureList: [
+      'Browser-based gameplay',
+      'Local-first game state',
+      'Configurable AI model profiles',
+      'Bring-your-own-key AI provider settings',
+    ],
+    creator: {
+      '@type': 'Person',
+      name: SITE_AUTHOR,
+      url: SITE_AUTHOR_URL,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: SITE_NAME,
+      url: base,
+    },
     numberOfPlayers: {
       '@type': 'QuantitativeValue',
       minValue: game.minPlayers,
@@ -229,6 +277,20 @@ export function createHomeJsonLd(base = siteUrl()) {
       url: base,
       description: homeSeo.description,
       inLanguage: 'en',
+      publisher: {
+        '@id': `${base}/#organization`,
+      },
+    },
+    {
+      '@type': 'Organization',
+      '@id': `${base}/#organization`,
+      name: SITE_NAME,
+      url: base,
+      founder: {
+        '@type': 'Person',
+        name: SITE_AUTHOR,
+        url: SITE_AUTHOR_URL,
+      },
     },
     {
       '@type': 'SoftwareApplication',
@@ -239,6 +301,12 @@ export function createHomeJsonLd(base = siteUrl()) {
       url: base,
       description: homeSeo.description,
       image: absoluteSiteUrl(image, base),
+      featureList: SITE_FACTS,
+      creator: {
+        '@type': 'Person',
+        name: SITE_AUTHOR,
+        url: SITE_AUTHOR_URL,
+      },
       isAccessibleForFree: true,
       offers: {
         '@type': 'Offer',
@@ -246,21 +314,79 @@ export function createHomeJsonLd(base = siteUrl()) {
         priceCurrency: 'USD',
       },
     },
+    {
+      '@type': 'ItemList',
+      '@id': `${base}/#games`,
+      name: 'Playable AI board games',
+      itemListElement: Object.values(gameSeoById).map((game, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        item: {
+          '@type': 'VideoGame',
+          '@id': `${absoluteSiteUrl(game.path, base)}#game`,
+          name: game.gameName,
+          url: absoluteSiteUrl(game.path, base),
+          description: game.description,
+        },
+      })),
+    },
+    createFaqJsonLd(GEO_FAQS, `${base}/#faq`, base),
   ];
 }
 
 export function createAboutJsonLd(base = siteUrl()) {
-  return {
-    '@type': 'AboutPage',
-    '@id': `${absoluteSiteUrl(aboutSeo.path, base)}#about`,
-    name: 'About AI Board Games',
-    url: absoluteSiteUrl(aboutSeo.path, base),
-    mainEntity: {
-      '@type': 'SoftwareApplication',
-      '@id': `${base}/#app`,
-      name: SITE_NAME,
-      applicationCategory: 'GameApplication',
-      operatingSystem: 'Web',
+  return [
+    {
+      '@type': 'AboutPage',
+      '@id': `${absoluteSiteUrl(aboutSeo.path, base)}#about`,
+      name: 'About AI Board Games',
+      url: absoluteSiteUrl(aboutSeo.path, base),
+      mainEntity: {
+        '@type': 'SoftwareApplication',
+        '@id': `${base}/#app`,
+        name: SITE_NAME,
+        applicationCategory: 'GameApplication',
+        operatingSystem: 'Web',
+        featureList: SITE_FACTS,
+      },
     },
+    {
+      '@type': 'Person',
+      '@id': `${base}/#creator`,
+      name: SITE_AUTHOR,
+      url: SITE_AUTHOR_URL,
+      sameAs: ['https://github.com/cwtf', 'https://www.linkedin.com/in/cwtf'],
+      knowsAbout: [
+        'AI training',
+        'AI workshops',
+        'software engineering',
+        'browser games',
+      ],
+    },
+    createFaqJsonLd(
+      GEO_FAQS,
+      `${absoluteSiteUrl(aboutSeo.path, base)}#faq`,
+      base,
+    ),
+  ];
+}
+
+export function createFaqJsonLd(
+  faqs: typeof GEO_FAQS,
+  id: string,
+  base = siteUrl(),
+) {
+  return {
+    '@type': 'FAQPage',
+    '@id': id,
+    url: id.split('#')[0] || base,
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer,
+      },
+    })),
   };
 }

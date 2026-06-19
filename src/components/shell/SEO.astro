@@ -15,6 +15,7 @@ import { absoluteSiteUrl, siteUrl as getSiteUrl } from '@/lib/site';
 import {
   DEFAULT_SEO_IMAGE,
   DEFAULT_SEO_IMAGE_ALT,
+  SITE_AUTHOR,
   SITE_NAME,
   imageSizeFor,
 } from '@/lib/seo';
@@ -36,7 +37,7 @@ const imageUrl = absoluteSiteUrl(image, siteUrl);
 const imageSize = imageSizeFor(image);
 const robots = noindex
   ? 'noindex, nofollow'
-  : 'index, follow, max-image-preview:large';
+  : 'index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1';
 const baseJsonLd = {
   '@type': 'WebPage',
   '@id': `${canonicalUrl}#webpage`,
@@ -45,6 +46,12 @@ const baseJsonLd = {
   description,
   inLanguage: 'en',
   image: imageUrl,
+  about: [
+    { '@type': 'Thing', name: 'AI board games' },
+    { '@type': 'Thing', name: 'local-first software' },
+    { '@type': 'Thing', name: 'browser tabletop games' },
+    { '@type': 'Thing', name: 'AI model evaluation' },
+  ],
   primaryImageOfPage: {
     '@type': 'ImageObject',
     url: imageUrl,
@@ -85,7 +92,20 @@ const structuredData = JSON.stringify({
   ) : null
 }
 <link rel="canonical" href={canonicalUrl} />
+<link
+  rel="alternate"
+  type="text/plain"
+  title="LLMs.txt"
+  href={absoluteSiteUrl('/llms.txt', siteUrl)}
+/>
+<link
+  rel="alternate"
+  type="text/plain"
+  title="Full LLMs.txt"
+  href={absoluteSiteUrl('/llms-full.txt', siteUrl)}
+/>
 <meta name="robots" content={robots} />
+<meta name="author" content={SITE_AUTHOR} />
 <meta property="og:site_name" content={SITE_NAME} />
 <meta property="og:locale" content="en_US" />
 <meta property="og:type" content={type} />
