@@ -13,6 +13,8 @@ export interface GameMeta {
   maxPlayers: number;
   hiddenInformation: boolean;
   hasLocalBots?: boolean;
+  /** Hex color used as the game's visual accent on cards and hovers. */
+  accent?: string;
   estimatedAITurnTokens: number;
   docPath: string;
   videoPath?: string;

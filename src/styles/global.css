@@ -1,1 +1,18 @@
 @import 'tailwindcss';
+
+/* Layered site background: deep slate base, emerald glow behind the hero,
+   and a faint dot grid for texture. Game pages keep their flat bg. */
+.site-bg {
+  background-color: #0a0f1a;
+  background-image:
+    radial-gradient(
+      70rem 32rem at 50% -6rem,
+      rgba(16, 185, 129, 0.14),
+      transparent 70%
+    ),
+    radial-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    26px 26px;
+  background-repeat: no-repeat, repeat;
+}
